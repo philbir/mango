@@ -1,10 +1,26 @@
-node_modules
-dist
+# Node
+node_modules/
+dist/
 .yarn/cache
 .yarn/install-state.gz
 .pnp.*
+
+# Build output
+server/public/
+*.tsbuildinfo
+
+# Env / secrets
 .env
 .env.local
+.mango/
+
+# Tauri / Rust
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/bin/
+
+# OS / editor
 .DS_Store
-server/public
 *.log
+.vscode/
+.idea/
