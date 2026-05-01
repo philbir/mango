@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mango",
+  "version": "0.1.0",
+  "identifier": "dev.mango.app",
+  "build": {
+    "beforeDevCommand": "yarn --cwd ../../ui dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "yarn --cwd ../../ui build",
+    "frontendDist": "../../server/public"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Mango",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "MongoDB workbench",
+    "longDescription": "Mango — a friendly MongoDB workbench. Browse, edit, query, and shell into any MongoDB.",
+    "externalBin": [
+      "../bin/mango-server"
+    ]
+  }
+}

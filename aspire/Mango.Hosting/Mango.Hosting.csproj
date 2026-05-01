@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <PackageId>Mango.Hosting</PackageId>
+    <Title>Mango.Hosting</Title>
+    <Description>Aspire integration for Mango — a friendly MongoDB workbench. Adds the Mango UI to a MongoDB resource via WithMango().</Description>
+    <Authors>Mango contributors</Authors>
+    <PackageTags>aspire;mongodb;mongo;workbench;ui;mango</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/philbir/mango</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" Version="13.2.3" />
+    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.2.3" />
+    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.2.3" />
+  </ItemGroup>
+
+</Project>

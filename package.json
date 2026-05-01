@@ -1,0 +1,20 @@
+{
+  "name": "mango",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mango — a friendly MongoDB workbench. Browser, editor, AI query assistant, and shell. Runs as Aspire extension, Docker container, or desktop app.",
+  "workspaces": [
+    "server",
+    "ui"
+  ],
+  "scripts": {
+    "dev:server": "yarn workspace @mango/server dev",
+    "dev:ui": "yarn workspace @mango/ui dev",
+    "build": "yarn workspace @mango/ui build && yarn workspace @mango/server build",
+    "start": "yarn workspace @mango/server start",
+    "test": "yarn workspace @mango/server test",
+    "aspire": "yarn install && yarn workspace @mango/ui build && yarn workspace @mango/server dev",
+    "compile-server": "yarn workspace @mango/server compile"
+  },
+  "packageManager": "yarn@4.5.0"
+}

@@ -1,0 +1,12 @@
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.csproj.AssemblyReference.cache
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.GeneratedMSBuildEditorConfig.editorconfig
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.AssemblyInfoInputs.cache
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.AssemblyInfo.cs
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.csproj.CoreCompileInputs.cache
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/bin/Debug/net10.0/Mango.Hosting.deps.json
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/bin/Debug/net10.0/Mango.Hosting.dll
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/bin/Debug/net10.0/Mango.Hosting.pdb
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.dll
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/refint/Mango.Hosting.dll
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/Mango.Hosting.pdb
+/Users/p7e/code/philbir/mango/aspire/Mango.Hosting/obj/Debug/net10.0/ref/Mango.Hosting.dll
