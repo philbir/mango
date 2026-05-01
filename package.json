@@ -9,6 +9,7 @@
     "desktop"
   ],
   "scripts": {
+    "dev": "concurrently --names \"server,ui\" --prefix-colors \"blue,magenta\" --kill-others-on-fail \"yarn dev:server\" \"yarn dev:ui\"",
     "dev:server": "yarn workspace @mango/server dev",
     "dev:ui": "yarn workspace @mango/ui dev",
     "build": "yarn workspace @mango/ui build && yarn workspace @mango/server build",
@@ -19,6 +20,9 @@
     "tauri:dev": "yarn workspace @mango/desktop dev",
     "tauri:build": "yarn workspace @mango/desktop build",
     "compile-server": "yarn workspace @mango/desktop compile-server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   },
   "packageManager": "yarn@4.5.0"
 }
