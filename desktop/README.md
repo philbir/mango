@@ -21,34 +21,72 @@ Tauri 2 wrapper that runs Mango as a native desktop app. Bundles the server as a
 
 The sidecar is a single self-contained binary built with `bun build --compile`. No Node, npm, or yarn required on the user's machine.
 
-## Building locally (macOS arm64 example)
+## One-time prerequisites
 
 ```bash
-# 1. Compile server to a single binary for the current platform.
-cd ../server
-bun build --compile --target=darwin-arm64 src/index.ts \
-  --outfile ../desktop/bin/mango-server-aarch64-apple-darwin
+# Rust toolchain (Tauri itself)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# 2. Build the UI into server/public (the sidecar serves it statically).
-cd ../ui
+# Bun (sidecar compiler)
+curl -fsSL https://bun.sh/install | bash
+
+# Tauri CLI is pulled in by `yarn install` in this workspace
+yarn install
+```
+
+## Dev workflow
+
+There are two dev modes — pick one:
+
+### Browser mode — fastest UI iteration
+
+You don't need Tauri running at all if you're working on the UI:
+
+```bash
+# terminal 1 — server
+yarn dev:server
+
+# terminal 2 — Vite with HMR
+yarn dev:ui
+# → open http://localhost:5173
+```
+
+Vite proxies `/api` to the server on `:5180`. UI hot-reloads, server auto-restarts via `tsx watch`. Connection manager, AI, everything works.
+
+### Native desktop mode — for testing the actual app
+
+```bash
+# 1. Build the sidecar binary for your machine (one-time per server change).
+yarn compile-server
+
+# 2. Build the UI assets the sidecar will serve.
+yarn build         # from repo root — runs UI + server tsc
+
+# 3. Launch the desktop app.
+yarn tauri:dev
+```
+
+For each iteration on the server, re-run `yarn compile-server`. For each iteration on the UI, re-run `yarn workspace @mango/ui build` (the sidecar serves from `server/public`).
+
+## Production builds
+
+```bash
+# build sidecar for your platform
+yarn compile-server
+
+# build UI
 yarn build
 
-# 3. Run Tauri in dev (live-reloads from Vite if you want; or static).
-cd ../desktop
-yarn tauri dev
+# package
+yarn tauri:build
+# → src-tauri/target/release/bundle/{dmg,msi,deb,AppImage}/...
 ```
 
-For a release artifact:
-
-```bash
-cd ../desktop
-yarn tauri build
-# → src-tauri/target/release/bundle/dmg/Mango_0.1.0_aarch64.dmg
-```
+For cross-platform releases, run the same commands on each target's CI runner — the GitHub Actions matrix is sketched in `.github/workflows/desktop-release.yml` (Phase 2 — not yet checked in).
 
 ## Sidecar binary naming
 
-Tauri's `externalBin` mechanism resolves `mango-server` to a per-platform binary at runtime, looking for one of:
+Tauri's `externalBin` in `src-tauri/tauri.conf.json` references `../bin/mango-server`. At build time Tauri appends the Rust target triple per-platform, looking for one of:
 
 ```
 desktop/bin/mango-server-aarch64-apple-darwin
@@ -57,7 +95,7 @@ desktop/bin/mango-server-x86_64-pc-windows-msvc.exe
 desktop/bin/mango-server-x86_64-unknown-linux-gnu
 ```
 
-Each CI runner builds the matching binary before invoking `tauri build`.
+`yarn compile-server` produces the file named for **your** host triple (auto-detected from `rustc -vV`). To build for a non-host triple, pass it: `yarn compile-server x86_64-pc-windows-msvc`.
 
 ## Auth mode
 
@@ -83,4 +121,13 @@ On first run, if `MANGO_MASTER_KEY` is unset, the server logs a warning and uses
 2. Store it in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service on Linux) via `tauri-plugin-stronghold` or platform-native APIs.
 3. Inject it as `MANGO_MASTER_KEY` when spawning the sidecar.
 
-This is **not yet implemented** — see [ROADMAP.md](../docs/ROADMAP.md) for tracking.
+This is **not yet implemented** — see [../docs/ROADMAP.md](../docs/ROADMAP.md) Phase 2.
+
+## App icons
+
+```bash
+yarn icons path/to/source-1024.png
+# generates the full set in src-tauri/icons/
+```
+
+The repo doesn't ship icons yet — Tauri will use a placeholder.

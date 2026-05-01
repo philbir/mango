@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Aspire integration for Mango — a friendly MongoDB workbench. Adds the Mango UI to" +
     " a MongoDB resource via WithMango()."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ba546915573496d1c366889e3f6d62392ccf36a2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Mango.Hosting")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Mango.Hosting")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
