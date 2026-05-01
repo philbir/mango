@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "dev.mango.app",
   "build": {
-    "beforeDevCommand": "yarn --cwd ../../ui dev",
+    "beforeDevCommand": "yarn --cwd ../ui dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "yarn --cwd ../../ui build",
-    "frontendDist": "../../server/public"
+    "beforeBuildCommand": "yarn --cwd ../ui build",
+    "frontendDist": "../server/public"
   },
   "app": {
     "windows": [
