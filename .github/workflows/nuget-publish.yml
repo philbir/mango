@@ -1,8 +1,8 @@
 name: Publish NuGet package
 
 on:
-  push:
-    tags: ["v*"]
+  # Manual-only until NUGET_API_KEY is set in repo secrets — re-enable the
+  # tag trigger once the key is in place.
   workflow_dispatch:
     inputs:
       version:
