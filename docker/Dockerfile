@@ -23,6 +23,7 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5180
+ENV HOST=0.0.0.0
 ENV STATIC_DIR=/app/public
 ENV MANGO_DATA_DIR=/data
 COPY --from=build-server /app/server/dist ./dist

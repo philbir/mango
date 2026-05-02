@@ -3,6 +3,7 @@ import { MongoClient } from "mongodb";
 import { z } from "zod";
 import { closeMongoClient, getMongoClientFor } from "../config.js";
 import { resolveServerConfig } from "../mode.js";
+import { redactErrorMessage, validateMongoUri } from "../security.js";
 import {
   createConnection,
   deleteConnection,
@@ -38,6 +39,8 @@ connectionsRoute.post("/", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
+  const uriError = validateMongoUri(parsed.data.uri);
+  if (uriError) return c.json({ error: uriError }, 400);
   const created = createConnection(parsed.data);
   return c.json(created, 201);
 });
@@ -55,6 +58,10 @@ connectionsRoute.patch("/:id", async (c) => {
   const parsed = updateBody.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
+  }
+  if (parsed.data.uri !== undefined) {
+    const uriError = validateMongoUri(parsed.data.uri);
+    if (uriError) return c.json({ error: uriError }, 400);
   }
   const updated = updateConnection(id, parsed.data);
   if (!updated) return c.json({ error: "Connection not found" }, 404);
@@ -82,10 +89,7 @@ connectionsRoute.post("/:id/test", async (c) => {
     const result = await client.db(dbName).command({ ping: 1 });
     return c.json({ ok: true, ping: result });
   } catch (e) {
-    return c.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      400,
-    );
+    return c.json({ ok: false, error: redactErrorMessage(e) }, 400);
   }
 });
 
@@ -99,6 +103,8 @@ connectionsRoute.post("/test-uri", async (c) => {
   if (!body.success) {
     return c.json({ error: body.error.issues[0]?.message ?? "Bad input" }, 400);
   }
+  const uriError = validateMongoUri(body.data.uri);
+  if (uriError) return c.json({ error: uriError }, 400);
   const client = new MongoClient(body.data.uri, {
     serverSelectionTimeoutMS: 5_000,
   });
@@ -107,10 +113,7 @@ connectionsRoute.post("/test-uri", async (c) => {
     const result = await client.db("admin").command({ ping: 1 });
     return c.json({ ok: true, ping: result });
   } catch (e) {
-    return c.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      400,
-    );
+    return c.json({ ok: false, error: redactErrorMessage(e) }, 400);
   } finally {
     await client.close().catch(() => {});
   }

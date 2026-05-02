@@ -2,7 +2,7 @@ import { Binary, ObjectId, UUID } from "bson";
 import { Hono } from "hono";
 import type { Sort } from "mongodb";
 import { z } from "zod";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import {
   FilterParseError,
   parseEJSON,
@@ -58,13 +58,13 @@ documentsRoute.post("/:name/find", async (c) => {
   const collection = db.collection(name);
 
   const cursor = collection
-    .find(filter, { projection })
+    .find(filter, { projection, maxTimeMS: config.mongoMaxTimeMS })
     .sort(sort as Sort)
     .skip(skip)
     .limit(limit);
   const [docs, total] = await Promise.all([
     cursor.toArray(),
-    collection.countDocuments(filter),
+    collection.countDocuments(filter, { maxTimeMS: config.mongoMaxTimeMS }),
   ]);
 
   return c.body(

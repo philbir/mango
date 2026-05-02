@@ -43,6 +43,7 @@ pub fn run() {
                 .sidecar("mango-server")
                 .expect("mango-server sidecar not found — bundle binaries at desktop/bin/")
                 .env("PORT", port.to_string())
+                .env("HOST", "127.0.0.1")
                 .env("MANGO_DATA_DIR", data_dir.clone())
                 .env("STATIC_DIR", static_dir)
                 .env("AUTH_MODE", "none");

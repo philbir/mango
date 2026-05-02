@@ -18,6 +18,9 @@
 
 ## Run modes
 
+> [!IMPORTANT]
+> Mango is a privileged database management tool and currently has no built-in user authentication. Run it only on your local machine or inside a trusted private network. Do not expose Mango directly to the public internet; if you need remote access, put it behind an authenticating reverse proxy, TLS, and network allowlisting.
+
 | | When to use |
 |---|---|
 | **Aspire** | You're building on .NET Aspire. One line in your AppHost wires Mango to your Mongo container. |
@@ -50,7 +53,7 @@ dotnet add package Mango.Hosting
 ### Docker
 
 ```bash
-docker run --rm -p 5180:5180 \
+docker run --rm -p 127.0.0.1:5180:5180 \
   -e MONGO_URL="mongodb://host.docker.internal:27017/mydb" \
   -e MANGO_MODE=standalone \
   -v mango-data:/data \
@@ -70,7 +73,7 @@ services:
   mango:
     image: ghcr.io/philbir/mango:latest
     depends_on: [mongo]
-    ports: ["5180:5180"]
+    ports: ["127.0.0.1:5180:5180"]
     environment:
       MONGO_URL: mongodb://mongo:27017/mydb
       MANGO_MODE: standalone
@@ -105,6 +108,10 @@ All modes read the same env vars:
 | `MANGO_DATA_DIR` | Where SQLite + saved settings live. Defaults: `./.mango/` (dev), `/data` (Docker), OS app-data (desktop). |
 | `MANGO_MASTER_KEY` | 32-byte AES-256-GCM key (base64 or hex) for encrypting saved connection URIs. Auto-generated per-process if unset. **Set this in production** so saved state survives restarts. |
 | `PORT` | Server port. Default `5180`. |
+| `HOST` / `MANGO_HOST` | Server bind host. Default `127.0.0.1`; set explicitly only for trusted private-network access. |
+| `MANGO_CORS_ORIGINS` | Comma-separated extra browser origins allowed to call the API. Defaults include the Vite dev origin. |
+| `MANGO_MONGO_MAX_TIME_MS` | MongoDB query/command timeout in milliseconds for supported operations. Default `10000`. |
+| `MANGO_DISABLE_JS_CONSOLE` | Set to `true` to disable the JavaScript console route. |
 
 ### AI assistant
 
@@ -135,10 +142,10 @@ See [CLAUDE.md](CLAUDE.md) for the architecture overview.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines:
 
-- Phase 1 — Connection manager, AES-GCM encryption, AI assistant, Aspire integration ✅
-- Phase 2 — Tauri desktop release with auto-update + OS-keychain master key
-- Phase 3 — OIDC auth (server mode), per-user state, audit log
-- Phase 4 — Insert/delete/bulk, index manager, aggregation builder, sharing
+- Phase 1 — Connection manager, AES-GCM encryption, AI assistant, Aspire integration, standalone mode ✅
+- Phase 2 — Distribution: Docker / NuGet / Tauri desktop builds ✅ · code signing + auto-update next
+- Phase 3 — Mongo auth: OIDC (`MONGODB-OIDC`), X.509, AWS IAM
+- Phase 4 — Index manager, import/export (JSONL/CSV), saved commands (SQLite + Git provider sync), aggregation builder
 
 ## License
 

@@ -1,9 +1,11 @@
 import { Binary, Decimal128, ObjectId, UUID } from "bson";
 import { Hono } from "hono";
 import type { Collection, Db } from "mongodb";
+import vm from "node:vm";
 import { z } from "zod";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { stringifyEJSON } from "../ejson.js";
+import { redactErrorMessage } from "../security.js";
 
 export const consoleRoute = new Hono();
 
@@ -126,9 +128,9 @@ interface EvalResult {
  * apply server-side skip/limit paging so we never load huge collections into
  * memory.
  *
- * NB: This is a local development tool. The Function constructor isolates the
- * caller's lexical scope, but globalThis is reachable. Suitable for trusted
- * developer use, not multi-tenant exposure.
+ * NB: This is a local development tool. The vm context keeps Node globals such
+ * as process and dynamic import out of the console, but it is still not a
+ * multi-tenant security boundary.
  */
 const evalCommand = async (
   db: Db,
@@ -143,38 +145,38 @@ const evalCommand = async (
   const BinData = (subType: number, b64: string) =>
     new Binary(Buffer.from(b64, "base64"), subType);
 
+  const sandbox = vm.createContext(
+    {
+      db: dbProxy,
+      ObjectId,
+      UUID,
+      ISODate,
+      NumberDecimal,
+      BinData,
+    },
+    {
+      name: "mango-console",
+      codeGeneration: { strings: false, wasm: false },
+    },
+  );
+
   // Try as expression first; fall back to block (user can use return-style code).
-  let fn: (...args: unknown[]) => unknown;
+  let result: unknown;
   try {
-    fn = new Function(
-      "db",
-      "ObjectId",
-      "UUID",
-      "ISODate",
-      "NumberDecimal",
-      "BinData",
-      `"use strict"; return (async () => (${code}))();`,
-    ) as (...args: unknown[]) => unknown;
+    const script = new vm.Script(`"use strict"; (async () => (${code}))();`);
+    result = script.runInContext(sandbox, {
+      timeout: config.consoleTimeoutMS,
+      breakOnSigint: true,
+    });
   } catch {
-    fn = new Function(
-      "db",
-      "ObjectId",
-      "UUID",
-      "ISODate",
-      "NumberDecimal",
-      "BinData",
-      `"use strict"; return (async () => { ${code} })();`,
-    ) as (...args: unknown[]) => unknown;
+    const script = new vm.Script(`"use strict"; (async () => { ${code} })();`);
+    result = script.runInContext(sandbox, {
+      timeout: config.consoleTimeoutMS,
+      breakOnSigint: true,
+    });
   }
 
-  let result = await fn(
-    dbProxy,
-    ObjectId,
-    UUID,
-    ISODate,
-    NumberDecimal,
-    BinData,
-  );
+  result = await result;
 
   if (isCursor(result)) {
     // Apply skip+limit on the cursor when we can. FindCursor has chainable
@@ -227,6 +229,10 @@ const evalCommand = async (
 };
 
 consoleRoute.post("/", async (c) => {
+  if (!config.jsConsoleEnabled) {
+    return c.json({ error: "JavaScript console is disabled." }, 403);
+  }
+
   const cid = c.req.param("cid")!;
   const parsed = body.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -264,7 +270,7 @@ consoleRoute.post("/", async (c) => {
         hasMore: false,
         paged: false,
         elapsedMs: performance.now() - start,
-        error: e instanceof Error ? e.message : String(e),
+        error: redactErrorMessage(e),
       },
       400,
     );

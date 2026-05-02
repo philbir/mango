@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { FilterParseError, parseEJSON, stringifyEJSON } from "../ejson.js";
+import { redactErrorMessage } from "../security.js";
 
 export const shellRoute = new Hono();
 
@@ -24,7 +25,14 @@ shellRoute.post("/", async (c) => {
   const db = client.db(dbName);
 
   try {
-    const result = await db.command(parsed as Record<string, unknown>);
+    const command = parsed as Record<string, unknown>;
+    const boundedCommand =
+      "maxTimeMS" in command
+        ? command
+        : { ...command, maxTimeMS: config.mongoMaxTimeMS };
+    const result = await db.command(boundedCommand, {
+      timeoutMS: config.mongoMaxTimeMS + 1_000,
+    });
     return c.body(stringifyEJSON({ ok: true, result }), 200, {
       "content-type": "application/json; charset=utf-8",
     });
@@ -32,7 +40,7 @@ shellRoute.post("/", async (c) => {
     return c.json(
       {
         ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        error: redactErrorMessage(e),
       },
       400,
     );

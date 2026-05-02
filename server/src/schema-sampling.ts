@@ -43,8 +43,12 @@ export const sampleCollectionSchema = async (
   db: Db,
   name: string,
   size = 50,
+  opts: { maxTimeMS?: number } = {},
 ): Promise<{ docs: number; fields: FieldInfo[] }> => {
-  const docs = await db.collection(name).aggregate([{ $sample: { size } }]).toArray();
+  const docs = await db
+    .collection(name)
+    .aggregate([{ $sample: { size } }], { maxTimeMS: opts.maxTimeMS })
+    .toArray();
   const fieldMap = new Map<string, FieldInfo>();
   for (const doc of docs) {
     for (const [key, value] of Object.entries(doc)) {
@@ -94,7 +98,7 @@ export const renderSchemaForPrompt = (fields: FieldInfo[]): string => {
  */
 export const sampleDatabaseSchema = async (
   db: Db,
-  opts: { maxCollections?: number; docsPerCollection?: number } = {},
+  opts: { maxCollections?: number; docsPerCollection?: number; maxTimeMS?: number } = {},
 ): Promise<string> => {
   const maxCollections = opts.maxCollections ?? 25;
   const docsPerCollection = opts.docsPerCollection ?? 10;
@@ -109,7 +113,9 @@ export const sampleDatabaseSchema = async (
   const sections = await Promise.all(
     names.map(async (name) => {
       try {
-        const schema = await sampleCollectionSchema(db, name, docsPerCollection);
+        const schema = await sampleCollectionSchema(db, name, docsPerCollection, {
+          maxTimeMS: opts.maxTimeMS,
+        });
         const fieldsLines = schema.fields
           .slice(0, 20)
           .map((f) => `    - ${f.path}: ${f.types.join(" | ")}`)

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { sampleCollectionSchema } from "../schema-sampling.js";
 
 export const schemaRoute = new Hono();
@@ -16,7 +16,9 @@ schemaRoute.get("/:name/schema", async (c) => {
   const { client } = await getMongoClientFor(cid);
   const dbName = databaseNameFor(cid, c.req.query("database"));
   const db = client.db(dbName);
-  const { docs, fields } = await sampleCollectionSchema(db, name, sample);
+  const { docs, fields } = await sampleCollectionSchema(db, name, sample, {
+    maxTimeMS: config.mongoMaxTimeMS,
+  });
 
   return c.json({ collection: name, sampleSize: docs, fields });
 });

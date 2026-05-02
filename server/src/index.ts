@@ -1,7 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -15,6 +14,7 @@ import { consoleRoute } from "./routes/console.js";
 import { documentsRoute } from "./routes/documents.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
+import { isAllowedOrigin } from "./security.js";
 import {
   seedFromEnvIfEmpty,
   upsertStandaloneConnection,
@@ -40,7 +40,27 @@ if (serverConfig.mode === "standalone" && serverConfig.standaloneConnectionId) {
 const app = new Hono();
 
 app.use("*", logger());
-app.use("/api/*", cors());
+app.use("/api/*", async (c, next) => {
+  const origin = c.req.header("origin");
+  const fetchSite = c.req.header("sec-fetch-site");
+
+  if (fetchSite === "cross-site") {
+    return c.json({ error: "Cross-site API requests are not allowed." }, 403);
+  }
+
+  if (origin) {
+    if (!isAllowedOrigin(origin, c.req.url)) {
+      return c.json({ error: "Origin is not allowed." }, 403);
+    }
+    c.header("access-control-allow-origin", origin);
+    c.header("vary", "Origin");
+    c.header("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    c.header("access-control-allow-headers", "content-type");
+  }
+
+  if (c.req.method === "OPTIONS") return c.body(null, 204);
+  await next();
+});
 
 app.get("/api/health", (c) => {
   return c.json({ ok: true });
@@ -87,9 +107,16 @@ if (existsSync(staticDirAbs)) {
   );
 }
 
-const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`[mango] listening on http://localhost:${info.port}`);
-});
+const server = serve(
+  { fetch: app.fetch, port: config.port, hostname: config.host },
+  (info) => {
+    const address =
+      typeof info === "object" && "address" in info && info.address
+        ? String(info.address)
+        : config.host;
+    console.log(`[mango] listening on http://${address}:${config.port}`);
+  },
+);
 
 const shutdown = async (signal: string) => {
   console.log(`[mango] received ${signal}, shutting down…`);

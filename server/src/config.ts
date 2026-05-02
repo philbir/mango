@@ -3,7 +3,11 @@ import { getConnection, touchConnection } from "./store/connections.js";
 
 export const config = {
   port: Number(process.env.PORT ?? 5180),
+  host: process.env.HOST ?? process.env.MANGO_HOST ?? "127.0.0.1",
   staticDir: process.env.STATIC_DIR ?? "./public",
+  mongoMaxTimeMS: Number(process.env.MANGO_MONGO_MAX_TIME_MS ?? 10_000),
+  consoleTimeoutMS: Number(process.env.MANGO_CONSOLE_TIMEOUT_MS ?? 1_000),
+  jsConsoleEnabled: process.env.MANGO_DISABLE_JS_CONSOLE !== "true",
 };
 
 interface CachedClient {

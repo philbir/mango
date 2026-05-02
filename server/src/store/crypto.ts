@@ -82,10 +82,23 @@ export const decryptString = (encoded: string): string => {
  */
 export const redactUri = (uri: string): string => {
   try {
-    const m = uri.match(/^(mongodb(?:\+srv)?:\/\/)([^:@/]+):([^@/]+)@(.*)$/);
-    if (!m) return uri;
-    return `${m[1]}${m[2]}:•••@${m[4]}`;
+    const scheme = uri.match(/^mongodb(\+srv)?:\/\//i)?.[0];
+    if (!scheme) return uri;
+    const rest = uri.slice(scheme.length);
+    const slashIndex = rest.search(/[/?#]/);
+    const authority = slashIndex === -1 ? rest : rest.slice(0, slashIndex);
+    const suffix = slashIndex === -1 ? "" : rest.slice(slashIndex);
+    const at = authority.lastIndexOf("@");
+    if (at === -1) return uri;
+    const userInfo = authority.slice(0, at);
+    const hostInfo = authority.slice(at + 1);
+    const colon = userInfo.indexOf(":");
+    if (colon === -1) return uri;
+    return `${scheme}${userInfo.slice(0, colon)}:***@${hostInfo}${suffix}`;
   } catch {
-    return uri;
+    return uri.replace(
+      /^(mongodb(?:\+srv)?:\/\/)([^:@/\s]+):([^@/\s]+)@/i,
+      "$1$2:***@",
+    );
   }
 };

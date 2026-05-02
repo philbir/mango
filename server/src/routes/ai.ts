@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { getProvider, invalidateProvider } from "../providers/index.js";
+import { redactErrorMessage, validateAiBaseUrl } from "../security.js";
 import {
   enrichWithDistinctValues,
   renderSchemaForPrompt,
@@ -67,6 +68,8 @@ aiRoute.put("/config", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
+  const baseUrlError = validateAiBaseUrl(parsed.data.baseUrl);
+  if (baseUrlError) return c.json({ error: baseUrlError }, 400);
   const existing = readAiSettings();
   const apiKey =
     parsed.data.apiKey === undefined
@@ -116,7 +119,7 @@ aiRoute.get("/models", async (c) => {
         provider: provider.name,
         default: provider.model,
         models: [],
-        error: e instanceof Error ? e.message : String(e),
+        error: redactErrorMessage(e),
       },
       200,
     );
@@ -143,7 +146,9 @@ aiRoute.post("/query", async (c) => {
 
   let schemaText = "";
   try {
-    const schema = await sampleCollectionSchema(db, parsed.data.collection, 30);
+    const schema = await sampleCollectionSchema(db, parsed.data.collection, 30, {
+      maxTimeMS: config.mongoMaxTimeMS,
+    });
     const settings = readAiSettings();
     if (settings?.allowDataSampling) {
       await enrichWithDistinctValues(db, parsed.data.collection, schema.fields);
@@ -152,7 +157,7 @@ aiRoute.post("/query", async (c) => {
   } catch (e) {
     return c.json(
       {
-        error: `Could not sample schema: ${e instanceof Error ? e.message : String(e)}`,
+        error: `Could not sample schema: ${redactErrorMessage(e)}`,
       },
       400,
     );
@@ -168,7 +173,7 @@ aiRoute.post("/query", async (c) => {
     return c.json({ ...result, provider: provider.name });
   } catch (e) {
     return c.json(
-      { error: `AI request failed: ${e instanceof Error ? e.message : String(e)}` },
+      { error: `AI request failed: ${redactErrorMessage(e)}` },
       502,
     );
   }
@@ -194,11 +199,11 @@ aiRoute.post("/command", async (c) => {
 
   let schemaText = "";
   try {
-    schemaText = await sampleDatabaseSchema(db);
+    schemaText = await sampleDatabaseSchema(db, { maxTimeMS: config.mongoMaxTimeMS });
   } catch (e) {
     return c.json(
       {
-        error: `Could not sample database schema: ${e instanceof Error ? e.message : String(e)}`,
+        error: `Could not sample database schema: ${redactErrorMessage(e)}`,
       },
       400,
     );
@@ -213,7 +218,7 @@ aiRoute.post("/command", async (c) => {
     return c.json({ ...result, provider: provider.name });
   } catch (e) {
     return c.json(
-      { error: `AI request failed: ${e instanceof Error ? e.message : String(e)}` },
+      { error: `AI request failed: ${redactErrorMessage(e)}` },
       502,
     );
   }
