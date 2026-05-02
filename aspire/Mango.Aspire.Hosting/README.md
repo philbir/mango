@@ -1,6 +1,10 @@
-# Mango.Hosting
+# Mango.Aspire.Hosting
 
 Aspire integration for [Mango](https://github.com/philbir/mango) — a friendly MongoDB workbench. Adds the Mango UI alongside your MongoDB resource.
+
+```bash
+dotnet add package Mango.Aspire.Hosting
+```
 
 ## Usage
 

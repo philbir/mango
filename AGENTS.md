@@ -54,7 +54,7 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 
 ### Aspire integration
 
-`aspire/Mango.Hosting/MangoExtensions.cs` is a standalone .NET class library exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It registers Mango as an `AddJavaScriptApp` resource pointing at this repo (default `../../../mango`), invokes `yarn run aspire`, wires a `WithReference` to the Mongo container so the connection string is exposed as `MONGO_URL`, and forwards `Mango:Ai:*` / `Mango:MasterKey` / `Mango:DataDir` config keys as env vars. Because the `aspire` script handles its own `yarn install` + UI build, the extension passes `WithYarn(install: false)` to avoid duplicating that work.
+`aspire/Mango.Aspire.Hosting/MangoExtensions.cs` is a standalone .NET class library (NuGet ID `Mango.Aspire.Hosting`) exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It adds an `AddContainer` resource for the published Mango image (default `ghcr.io/philbir/mango:latest`) and points it at the wired-up Mongo container by setting `MONGO_URL` from the Mongo resource's `ConnectionStringExpression`. Defaults to standalone mode (`MANGO_MODE=standalone`); pass `standalone: false` to opt out. SQLite persists in a named volume mounted at `/data`. AI / master-key / data-dir config keys (`Mango:Ai:*`, `Mango:MasterKey`) are forwarded as env vars.
 
 ## Conventions
 

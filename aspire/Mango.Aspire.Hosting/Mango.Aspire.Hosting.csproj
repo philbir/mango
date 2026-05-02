@@ -6,11 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
 
-    <PackageId>Mango.Hosting</PackageId>
-    <Title>Mango.Hosting</Title>
+    <PackageId>Mango.Aspire.Hosting</PackageId>
+    <Title>Mango.Aspire.Hosting</Title>
     <Description>Aspire integration for Mango — a friendly MongoDB workbench. Adds the Mango UI to a MongoDB resource via WithMango().</Description>
     <Authors>Mango contributors</Authors>
-    <PackageTags>aspire;mongodb;mongo;workbench;ui;mango</PackageTags>
+    <PackageTags>aspire;integration;hosting;mongodb;mongo;workbench;ui;mango</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/philbir/mango</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

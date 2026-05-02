@@ -6,7 +6,7 @@
 - [x] Multi-connection routing (`/api/connections/:cid/...`)
 - [x] Backwards compat: seed Default connection from `MONGO_URL`
 - [x] AI provider abstraction (OpenAI-compat + Copilot SDK + Claude Code)
-- [x] Mango.Hosting Aspire extension as standalone .NET class library
+- [x] Mango.Aspire.Hosting extension as standalone .NET class library
 - [x] Standalone mode (`MANGO_MODE=standalone`) — single connection from env, hides connection manager
 - [x] App icon + branding
 
@@ -14,7 +14,7 @@
 
 - [x] Pre-built Docker image published to GHCR (multi-arch amd64/arm64)
 - [x] Aspire extension uses the published container (no local node toolchain required)
-- [x] NuGet package (`Mango.Hosting`) with symbols + source link
+- [x] NuGet package (`Mango.Aspire.Hosting`) with symbols + source link
 - [x] CI matrix: Tauri desktop builds for `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`
 - [ ] Code signing + notarization (macOS, Windows)
 - [ ] Tauri auto-updater wired to GitHub Releases

@@ -34,7 +34,7 @@ jobs:
           fi
 
       - name: Pack
-        working-directory: aspire/Mango.Hosting
+        working-directory: aspire/Mango.Aspire.Hosting
         run: |
           dotnet pack \
             -c Release \

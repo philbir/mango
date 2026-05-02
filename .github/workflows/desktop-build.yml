@@ -14,10 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-14, target: aarch64-apple-darwin,  bundles: "app,dmg" }
-          - { runner: macos-13, target: x86_64-apple-darwin,   bundles: "app,dmg" }
-          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundles: "appimage,deb" }
-          - { runner: windows-latest, target: x86_64-pc-windows-msvc, bundles: "msi,nsis" }
+          # macOS: arm64 only. macos-13 (Intel) runners are deprecated/scarce
+          # and Rosetta runs the arm64 binary fine on Intel Macs. Add a
+          # native x86_64 row if/when we ship a non-Rosetta build.
+          - { runner: macos-14,        target: aarch64-apple-darwin,        bundles: "app,dmg"  }
+          # Linux: deb only — AppImage bundling via linuxdeploy is fragile
+          # in CI and not our primary distribution channel.
+          - { runner: ubuntu-22.04,    target: x86_64-unknown-linux-gnu,    bundles: "deb"      }
+          - { runner: windows-latest,  target: x86_64-pc-windows-msvc,      bundles: "msi,nsis" }
 
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.target }}
@@ -40,7 +44,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Linux deps
-        if: matrix.runner == 'ubuntu-22.04'
+        if: startsWith(matrix.runner, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \

@@ -8,8 +8,9 @@
   <p><strong>A friendly MongoDB workbench.</strong> Browse, edit, query, and shell into any MongoDB — with an AI assistant that understands your schema.</p>
 
   <p>
+    <a href="https://philbir.github.io/mango/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-14945f"></a>
     <a href="https://github.com/philbir/mango/pkgs/container/mango"><img alt="Docker image" src="https://img.shields.io/badge/ghcr.io-philbir%2Fmango-blue?logo=docker"></a>
-    <a href="https://www.nuget.org/packages/Mango.Hosting"><img alt="NuGet" src="https://img.shields.io/nuget/v/Mango.Hosting?logo=nuget"></a>
+    <a href="https://www.nuget.org/packages/Mango.Aspire.Hosting"><img alt="NuGet" src="https://img.shields.io/nuget/v/Mango.Aspire.Hosting?logo=nuget"></a>
     <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
   </p>
 </div>
@@ -45,7 +46,7 @@ builder.Build().Run();
 ```
 
 ```bash
-dotnet add package Mango.Hosting
+dotnet add package Mango.Aspire.Hosting
 ```
 
 `WithMango()` defaults to **standalone mode**: the Mongo container's connection string is wired in as the only connection and the connection-manager UI is hidden. Pass `standalone: false` to expose the full multi-connection workbench. Override the image with `image:` / `tag:` parameters.
@@ -132,6 +133,8 @@ yarn install
 yarn dev                # server (5180) + Vite (5173) concurrently
 yarn test               # vitest (server)
 yarn workspace @mango/ui typecheck
+yarn docs:dev           # landing page + docs site
+yarn docs:build         # static GitHub Pages build
 ```
 
 The server is ESM Node 22 + [Hono](https://hono.dev) + the official `mongodb` driver, with a SQLite-backed connection store (`better-sqlite3` on Node, `bun:sqlite` in the Tauri sidecar). The UI is React 19 + Vite + Tailwind + Monaco. The desktop shell is Tauri 2.
