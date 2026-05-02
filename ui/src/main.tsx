@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { App } from "./app";
+import { TabsProvider } from "./features/tabs/TabsContext";
 import "./index.css";
 import "./monaco-setup";
 import { SettingsProvider } from "./settings";
@@ -24,9 +25,11 @@ createRoot(root).render(
   <StrictMode>
     <SettingsProvider>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <MemoryRouter>
+          <TabsProvider>
+            <App />
+          </TabsProvider>
+        </MemoryRouter>
       </QueryClientProvider>
     </SettingsProvider>
   </StrictMode>,

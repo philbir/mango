@@ -7,10 +7,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { type ConnectionPublic } from "../../api/client";
 import { useActiveConnection } from "./useActiveConnection";
+import { useServerConfig } from "./useServerConfig";
 import { ConnectionFormModal } from "./ConnectionFormModal";
 
 export const ConnectionPicker = () => {
   const { active, connections, setActiveId } = useActiveConnection();
+  const { mode } = useServerConfig();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<
     { mode: "create" } | { mode: "edit"; conn: ConnectionPublic } | null
@@ -25,6 +27,20 @@ export const ConnectionPicker = () => {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  if (mode === "standalone") {
+    return (
+      <div className="flex w-full items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+        <span
+          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+          style={{ background: active?.color ?? "#94a3b8" }}
+        />
+        <div className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">
+          {active?.name ?? "Connecting…"}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -41,9 +57,6 @@ export const ConnectionPicker = () => {
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">
               {active?.name ?? "No connection"}
-            </div>
-            <div className="truncate font-mono text-[10px] text-slate-500 dark:text-slate-500">
-              {active?.uriRedacted ?? "Add one to get started"}
             </div>
           </div>
           <IconChevronDown size={14} className="text-slate-400" />

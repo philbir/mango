@@ -4,6 +4,7 @@ import { ApiError, api } from "../../api/client";
 import { InteractiveJsonView } from "../../components/JsonView";
 import { MonacoJsonInput } from "../../components/MonacoJsonInput";
 import { useActiveConnection } from "../connections/useActiveConnection";
+import { useActiveDatabase } from "../connections/useActiveDatabase";
 
 const PRESETS: Array<{ label: string; command: string }> = [
   { label: "ping", command: '{"ping":1}' },
@@ -26,6 +27,7 @@ const PRESETS: Array<{ label: string; command: string }> = [
 
 export const ShellView = () => {
   const { activeId } = useActiveConnection();
+  const { database } = useActiveDatabase();
   const [text, setText] = useState('{"ping":1}');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<unknown | null>(null);
@@ -41,7 +43,7 @@ export const ShellView = () => {
     setRunning(true);
     setError(null);
     try {
-      const r = await api.runShell(activeId, text);
+      const r = await api.runShell(activeId, text, database ?? undefined);
       setResult(r);
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);

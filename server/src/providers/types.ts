@@ -11,6 +11,18 @@ export interface AiQueryResult {
   model: string;
 }
 
+export interface AiCommandInput {
+  prompt: string;
+  schemaText: string;
+  model?: string;
+}
+
+export interface AiCommandResult {
+  command: string;
+  explanation: string;
+  model: string;
+}
+
 export interface ModelOption {
   id: string;
   name?: string;
@@ -18,7 +30,7 @@ export interface ModelOption {
   vendor?: string;
 }
 
-export type AiProviderName = "openai" | "copilot";
+export type AiProviderName = "openai" | "copilot" | "claude-code";
 
 export interface AiProvider {
   name: AiProviderName;
@@ -27,8 +39,27 @@ export interface AiProvider {
   baseUrl?: string;
   setupHint: string;
   query(input: AiQueryInput): Promise<AiQueryResult>;
+  generateCommand(input: AiCommandInput): Promise<AiCommandResult>;
   listModels(): Promise<ModelOption[]>;
 }
+
+export const buildCommandSystemPrompt = (schemaText: string): string =>
+  `You are a MongoDB shell assistant. Convert a user's natural-language request into a single JavaScript expression using the mongo shell API.
+
+You have a schema of every collection in the active database:
+
+${schemaText}
+
+Rules:
+- Output a single JavaScript expression of the form db.<collection>.<method>(args).
+- Available collection methods: find, findOne, aggregate, countDocuments, estimatedDocumentCount, distinct, indexes, listIndexes, insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne, deleteMany.
+- For find/aggregate, you MAY chain .sort(), .skip(), .limit(). Do NOT call .toArray() — the harness handles cursors automatically.
+- Use these helpers only: ObjectId("..."), UUID("..."), ISODate("YYYY-MM-DDTHH:mm:ssZ"), NumberDecimal("...").
+- Reference only collections that appear in the schema above.
+- Prefer case-insensitive regex for free-text searches: /pattern/i
+- Be conservative with destructive operations: prefer updateOne/deleteOne over updateMany/deleteMany unless the user clearly asked for many.
+
+You MUST call the propose_command tool with the command and a one-sentence explanation. Do not reply in plain text.`;
 
 export const buildSystemPrompt = (
   collection: string,

@@ -1,0 +1,64 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## Commands
+
+Yarn 4 (Berry) workspace — always run from the repo root unless noted.
+
+```bash
+yarn install                           # bootstrap all workspaces
+yarn dev:server                        # tsx watch on server (port 5180)
+yarn dev:ui                            # vite dev on 5173, proxies /api → 5180
+yarn build                             # UI build → server/public, then server tsc
+yarn start                             # node dist/index.js (after build)
+yarn test                              # vitest run (server only)
+yarn workspace @mango/server test:watch
+yarn workspace @mango/server test -- ejson    # single test file
+yarn workspace @mango/ui typecheck     # tsc -b --noEmit (UI has no test runner)
+yarn aspire                            # what Aspire's WithMango() invokes: install + UI build + server dev
+
+# Desktop (Tauri 2)
+yarn compile-server                    # bun build --compile → desktop/bin/mango-server-<triple>
+yarn tauri:dev                         # native shell + Vite HMR (sidecar NOT used here)
+yarn tauri:build                       # full bundle (.dmg / .msi / .deb / .AppImage)
+```
+
+The UI has no separate test runner — all tests live in `server/test/` and run under vitest. There's no repo-wide linter; rely on `tsc` strict-mode (the server has `noUncheckedIndexedAccess`).
+
+## Architecture
+
+Three-tier monorepo: a **Hono API + SQLite store** (`server/`), a **React 19 + Vite SPA** (`ui/`), and a **Tauri 2 desktop shell** (`desktop/`) that bundles the server as a compiled sidecar binary. The same server binary backs all three deployment targets (Aspire, Docker, desktop) — what differs is who launches it and where `MANGO_DATA_DIR` points.
+
+### Multi-connection model
+
+Every collection-scoped API path is prefixed with a connection ID: `/api/connections/:cid/collections/...`, `/api/connections/:cid/shell`. The server caches one `MongoClient` per connection ID in `server/src/config.ts` (in-memory `Map`); connection metadata (URI, default DB, color) lives in SQLite, encrypted at rest with AES-256-GCM (`server/src/store/crypto.ts`). The master key comes from `MANGO_MASTER_KEY` (base64 or hex, 32 bytes) — without it, the server logs a warning and uses an ephemeral key, meaning saved connections become unreadable after restart.
+
+**Backwards-compat seed:** if the connections table is empty and `MONGO_URL` is set, `seedFromEnvIfEmpty()` creates a "Default" connection on boot. This is how the older single-URL Aspire/Docker users keep working without a migration step.
+
+SQLite migrations are versioned in `server/src/store/db.ts` — append to the `migrations` array, never edit existing entries. The DB file lives at `$MANGO_DATA_DIR/mango.db` (default `./.mango/`, Tauri overrides to OS app-data).
+
+### EJSON everywhere
+
+The wire format on every collection/shell/document endpoint is **MongoDB Extended JSON in canonical (non-relaxed) mode** — `{ "$oid": "..." }`, `{ "$date": "..." }`, `{ "$numberDecimal": "..." }`. Both server (`server/src/ejson.ts`) and UI (`ui/src/api/client.ts`) parse responses through `bson`'s `EJSON.parse` with `relaxed: false`. When adding a new endpoint that returns Mongo documents, use `stringifyEJSON` and set `content-type: application/json; charset=utf-8` manually — do **not** use `c.json(...)` for document payloads, since it would double-encode through the standard JSON serializer and lose type fidelity.
+
+The AI provider's filter output is also EJSON (see the system prompt in `server/src/providers/types.ts`).
+
+### AI provider abstraction
+
+Two providers behind a single `AiProvider` interface (`server/src/providers/types.ts`): `openai` (any OpenAI-compatible endpoint — OpenAI, GitHub Models, Azure, Ollama) and `copilot` (`@github/copilot-sdk`, falls back to logged-in Copilot CLI session). Switched by `AI_PROVIDER` env. Both must implement `query()` (returns a structured filter via tool-call) and `listModels()`. The `/api/ai/query` route samples 30 documents from the target collection (`schema-sampling.ts`) and renders a schema text into the system prompt before calling the provider.
+
+### Desktop sidecar
+
+`yarn compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by `tauri:build` and `tauri:dev`** — when you change server code, re-run `yarn compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
+
+### Aspire integration
+
+`aspire/Mango.Hosting/MangoExtensions.cs` is a standalone .NET class library exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It registers Mango as an `AddJavaScriptApp` resource pointing at this repo (default `../../../mango`), invokes `yarn run aspire`, wires a `WithReference` to the Mongo container so the connection string is exposed as `MONGO_URL`, and forwards `Mango:Ai:*` / `Mango:MasterKey` / `Mango:DataDir` config keys as env vars. Because the `aspire` script handles its own `yarn install` + UI build, the extension passes `WithYarn(install: false)` to avoid duplicating that work.
+
+## Conventions
+
+- **Server** is ESM (`"type": "module"`) — relative imports must include the `.js` extension even from `.ts` source. `tsconfig.json` uses `module: NodeNext`.
+- **Ports:** server 5180 (Hono default), Vite 5173 (matches Tauri's `devUrl`). Override with `PORT` and `VITE_PORT`.
+- The `desktop/` workspace has no `node_modules` of its own beyond `@tauri-apps/cli`; the actual server it ships is the compiled bun binary, not a Node install.
+- The `docker/Dockerfile` currently references the old workspace names `@antoniq/mongo-manager-{ui,server}` — they were renamed to `@mango/{ui,server}`. Fix when you next touch it.

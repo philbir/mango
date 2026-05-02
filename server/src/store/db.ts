@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { Database, type SqliteDatabase } from "./sqlite.js";
 
 const dataDir = (): string => {
   const explicit = process.env.MANGO_DATA_DIR;
@@ -10,22 +10,22 @@ const dataDir = (): string => {
   return path.resolve(process.cwd(), ".mango");
 };
 
-let cached: Database.Database | null = null;
+let cached: SqliteDatabase | null = null;
 
-export const getDb = (): Database.Database => {
+export const getDb = (): SqliteDatabase => {
   if (cached) return cached;
   const dir = dataDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "mango.db");
   const db = new Database(file);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA foreign_keys = ON");
   runMigrations(db);
   cached = db;
   return db;
 };
 
-const runMigrations = (db: Database.Database) => {
+const runMigrations = (db: SqliteDatabase) => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER NOT NULL PRIMARY KEY
@@ -51,6 +51,16 @@ const runMigrations = (db: Database.Database) => {
           last_used_at INTEGER
         );
         CREATE INDEX idx_connections_name ON connections(name);
+      `,
+    },
+    {
+      version: 2,
+      up: `
+        CREATE TABLE settings (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
       `,
     },
   ];

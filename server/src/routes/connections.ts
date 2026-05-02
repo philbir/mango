@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { MongoClient } from "mongodb";
 import { z } from "zod";
 import { closeMongoClient, getMongoClientFor } from "../config.js";
+import { resolveServerConfig } from "../mode.js";
 import {
   createConnection,
   deleteConnection,
@@ -11,6 +12,12 @@ import {
 } from "../store/connections.js";
 
 export const connectionsRoute = new Hono();
+
+const standaloneError = () => ({
+  error: "Connection management is disabled in standalone mode",
+});
+
+const isStandalone = () => resolveServerConfig().mode === "standalone";
 
 const createBody = z.object({
   name: z.string().min(1).max(100),
@@ -26,6 +33,7 @@ connectionsRoute.get("/", (c) => {
 });
 
 connectionsRoute.post("/", async (c) => {
+  if (isStandalone()) return c.json(standaloneError(), 403);
   const parsed = createBody.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
@@ -42,6 +50,7 @@ connectionsRoute.get("/:id", (c) => {
 });
 
 connectionsRoute.patch("/:id", async (c) => {
+  if (isStandalone()) return c.json(standaloneError(), 403);
   const id = c.req.param("id");
   const parsed = updateBody.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -57,6 +66,7 @@ connectionsRoute.patch("/:id", async (c) => {
 });
 
 connectionsRoute.delete("/:id", async (c) => {
+  if (isStandalone()) return c.json(standaloneError(), 403);
   const id = c.req.param("id");
   await closeMongoClient(id);
   const removed = deleteConnection(id);

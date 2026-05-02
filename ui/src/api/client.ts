@@ -28,10 +28,29 @@ export class ApiError extends Error {
   }
 }
 
+export type AiProviderId = "openai" | "copilot" | "claude-code";
+
+export interface AiConfig {
+  provider: AiProviderId | null;
+  baseUrl: string | null;
+  model: string | null;
+  apiKeySet: boolean;
+  allowDataSampling: boolean;
+  persisted: boolean;
+}
+
+export type ServerMode = "multi" | "standalone";
+
+export interface ServerConfig {
+  mode: ServerMode;
+  standaloneConnectionId: string | null;
+}
+
 export interface ConnectionPublic {
   id: string;
   name: string;
   defaultDatabase: string | null;
+  effectiveDefaultDatabase: string | null;
   color: string | null;
   uriRedacted: string;
   createdAt: number;
@@ -42,6 +61,11 @@ export interface ConnectionPublic {
 const cidPath = (cid: string) => `/api/connections/${encodeURIComponent(cid)}`;
 
 export const api = {
+  async getConfig(): Promise<ServerConfig> {
+    const res = await fetch("/api/config");
+    return handleJson(res) as Promise<ServerConfig>;
+  },
+
   // ── Connection management ───────────────────────────────────────────────────
   async listConnections(): Promise<{ connections: ConnectionPublic[] }> {
     const res = await fetch("/api/connections");
@@ -137,6 +161,7 @@ export const api = {
     name: string;
     filter?: string;
     sort?: string;
+    projection?: string;
     skip?: number;
     limit?: number;
   }): Promise<{
@@ -155,6 +180,7 @@ export const api = {
         body: JSON.stringify({
           filter: params.filter,
           sort: params.sort,
+          projection: params.projection,
           skip: params.skip,
           limit: params.limit,
         }),
@@ -180,6 +206,23 @@ export const api = {
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
     );
     return handleJson(res) as Promise<{ document: Record<string, unknown> }>;
+  },
+
+  async deleteDocument(
+    cid: string,
+    name: string,
+    id: string,
+    database?: string,
+  ): Promise<void> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
   },
 
   async putDocument(
@@ -224,6 +267,68 @@ export const api = {
     }>;
   },
 
+  async runConsole(params: {
+    cid: string;
+    command: string;
+    database?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<{
+    result: unknown;
+    skip: number;
+    limit: number;
+    hasMore: boolean;
+    paged: boolean;
+    elapsedMs: number;
+    error: string | null;
+  }> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await fetch(`${cidPath(params.cid)}/console${qs}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        command: params.command,
+        skip: params.skip,
+        limit: params.limit,
+      }),
+    });
+    return handleJson(res) as Promise<{
+      result: unknown;
+      skip: number;
+      limit: number;
+      hasMore: boolean;
+      paged: boolean;
+      elapsedMs: number;
+      error: string | null;
+    }>;
+  },
+
+  async generateAiCommand(params: {
+    connectionId: string;
+    prompt: string;
+    model?: string;
+    database?: string;
+  }): Promise<{
+    command: string;
+    explanation: string;
+    model: string;
+    provider: AiProviderId;
+  }> {
+    const res = await fetch("/api/ai/command", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    return handleJson(res) as Promise<{
+      command: string;
+      explanation: string;
+      model: string;
+      provider: AiProviderId;
+    }>;
+  },
+
   async runShell(cid: string, commandJson: string, database?: string): Promise<unknown> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
     const res = await fetch(`${cidPath(cid)}/shell${qs}`, {
@@ -236,7 +341,7 @@ export const api = {
 
   // ── AI ──────────────────────────────────────────────────────────────────────
   async getAiStatus(): Promise<{
-    provider: "openai" | "copilot";
+    provider: AiProviderId;
     configured: boolean;
     baseUrl?: string;
     model: string;
@@ -244,7 +349,7 @@ export const api = {
   }> {
     const res = await fetch("/api/ai/status");
     return handleJson(res) as Promise<{
-      provider: "openai" | "copilot";
+      provider: AiProviderId;
       configured: boolean;
       baseUrl?: string;
       model: string;
@@ -262,7 +367,7 @@ export const api = {
     filter: Record<string, unknown>;
     explanation: string;
     model: string;
-    provider: "openai" | "copilot";
+    provider: AiProviderId;
   }> {
     const res = await fetch("/api/ai/query", {
       method: "POST",
@@ -273,19 +378,47 @@ export const api = {
       filter: Record<string, unknown>;
       explanation: string;
       model: string;
-      provider: "openai" | "copilot";
+      provider: AiProviderId;
     }>;
   },
 
+  async getAiConfig(): Promise<AiConfig> {
+    const res = await fetch("/api/ai/config");
+    return handleJson(res) as Promise<AiConfig>;
+  },
+
+  async putAiConfig(input: {
+    provider: AiProviderId;
+    apiKey?: string | null;
+    baseUrl?: string | null;
+    model?: string | null;
+    allowDataSampling?: boolean;
+  }): Promise<AiConfig> {
+    const res = await fetch("/api/ai/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleJson(res) as Promise<AiConfig>;
+  },
+
+  async clearAiConfig(): Promise<void> {
+    const res = await fetch("/api/ai/config", { method: "DELETE" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
+  },
+
   async listAiModels(): Promise<{
-    provider: "openai" | "copilot";
+    provider: AiProviderId;
     default: string;
     models: Array<{ id: string; name?: string; description?: string; vendor?: string }>;
     error?: string;
   }> {
     const res = await fetch("/api/ai/models");
     return handleJson(res) as Promise<{
-      provider: "openai" | "copilot";
+      provider: AiProviderId;
       default: string;
       models: Array<{ id: string; name?: string; description?: string; vendor?: string }>;
       error?: string;

@@ -88,6 +88,9 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
         id: name,
         accessorFn: (row) => row[name],
         header: name,
+        size: name === "_id" ? 260 : 180,
+        minSize: 60,
+        maxSize: 800,
         cell: (ctx) => (
           <span className="font-mono text-[12px] text-slate-700 dark:text-slate-200">
             {formatCell(ctx.getValue(), uuidFormat)}
@@ -101,20 +104,44 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
     data: documents,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
   });
 
   return (
     <div className="h-full overflow-auto">
-      <table className="min-w-full border-separate border-spacing-0">
+      <table
+        className="border-separate border-spacing-0"
+        style={{
+          width: table.getCenterTotalSize(),
+          tableLayout: "fixed",
+        }}
+      >
         <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => (
                 <th
                   key={h.id}
-                  className="border-b border-slate-200 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400"
+                  className="group relative select-none border-b border-slate-200 px-3 py-2 text-left text-[12px] font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                  style={{ width: h.getSize() }}
                 >
-                  {flexRender(h.column.columnDef.header, h.getContext())}
+                  <span className="block truncate">
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </span>
+                  {h.column.getCanResize() && (
+                    <span
+                      onMouseDown={h.getResizeHandler()}
+                      onTouchStart={h.getResizeHandler()}
+                      onClick={(e) => e.stopPropagation()}
+                      className={[
+                        "absolute right-0 top-0 z-20 h-full w-1 cursor-col-resize touch-none",
+                        h.column.getIsResizing()
+                          ? "bg-sky-500"
+                          : "bg-transparent group-hover:bg-slate-300 dark:group-hover:bg-slate-600",
+                      ].join(" ")}
+                    />
+                  )}
                 </th>
               ))}
             </tr>
@@ -152,7 +179,8 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className="max-w-[280px] truncate border-b border-slate-200 px-3 py-1.5 dark:border-slate-800"
+                    className="truncate border-b border-slate-200 px-3 py-1.5 dark:border-slate-800"
+                    style={{ width: cell.column.getSize() }}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>

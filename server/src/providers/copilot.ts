@@ -2,10 +2,13 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  type AiCommandInput,
+  type AiCommandResult,
   type AiProvider,
   type AiQueryInput,
   type AiQueryResult,
   type ModelOption,
+  buildCommandSystemPrompt,
   buildSystemPrompt,
 } from "./types.js";
 
@@ -71,8 +74,14 @@ const extractJsonObject = (text: string): unknown | null => {
   }
 };
 
-export const buildCopilotProvider = (): AiProvider => {
-  const model = process.env.AI_MODEL ?? "claude-sonnet-4.5";
+export interface CopilotBuildOptions {
+  model?: string;
+}
+
+export const buildCopilotProvider = (
+  opts: CopilotBuildOptions = {},
+): AiProvider => {
+  const model = opts.model ?? process.env.AI_MODEL ?? "claude-sonnet-4.5";
 
   return {
     name: "copilot",
@@ -99,7 +108,7 @@ export const buildCopilotProvider = (): AiProvider => {
             name: m.name ?? m.id,
             description:
               typeof m.billing?.multiplier === "number"
-                ? `${m.billing.multiplier}× billing`
+                ? `${m.billing.multiplier}×`
                 : undefined,
           }))
           .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
@@ -173,6 +182,74 @@ export const buildCopilotProvider = (): AiProvider => {
 
       return {
         filter: obj.filter ?? {},
+        explanation: obj.explanation ?? "",
+        model: useModel,
+      };
+    },
+    async generateCommand(input: AiCommandInput): Promise<AiCommandResult> {
+      const sdk = await import("@github/copilot-sdk").catch((e) => {
+        throw new Error(
+          `Could not load @github/copilot-sdk: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+      const client = (await getClient()) as {
+        createSession: (cfg: object) => Promise<{
+          on: (event: string, handler: (e: unknown) => void) => () => void;
+          sendAndWait: (opts: { prompt: string }) => Promise<unknown>;
+          disconnect: () => Promise<void>;
+        }>;
+      };
+      const useModel = input.model ?? model;
+      const session = await client.createSession({
+        model: useModel,
+        onPermissionRequest: (sdk as { approveAll: unknown }).approveAll,
+        systemMessage: {
+          mode: "replace" as const,
+          content:
+            buildCommandSystemPrompt(input.schemaText) +
+            `
+
+You will respond in EXACTLY this format and nothing else:
+
+\`\`\`json
+{
+  "command": "<the JavaScript expression>",
+  "explanation": "<one sentence>"
+}
+\`\`\`
+
+Do not invoke any tool. Do not write any prose outside the fenced JSON block.`,
+        },
+      });
+
+      let lastMessage = "";
+      session.on("assistant.message", (event: unknown) => {
+        const data = (event as { data?: { content?: string } }).data;
+        if (data?.content) lastMessage = data.content;
+      });
+
+      try {
+        await session.sendAndWait({ prompt: input.prompt });
+      } finally {
+        await session.disconnect().catch(() => {});
+      }
+
+      const parsed = extractJsonObject(lastMessage);
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        !("command" in (parsed as Record<string, unknown>))
+      ) {
+        throw new Error(
+          `Could not extract a command from the model response. Raw: ${
+            lastMessage.slice(0, 240) || "(empty)"
+          }`,
+        );
+      }
+      const obj = parsed as { command?: string; explanation?: string };
+      return {
+        command: obj.command ?? "",
         explanation: obj.explanation ?? "",
         model: useModel,
       };

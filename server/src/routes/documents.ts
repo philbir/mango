@@ -102,6 +102,25 @@ documentsRoute.get("/:name/document/:id", async (c) => {
   });
 });
 
+documentsRoute.delete("/:name/document/:id", async (c) => {
+  const cid = c.req.param("cid")!;
+  const name = c.req.param("name");
+  const id = c.req.param("id");
+
+  const { client } = await getMongoClientFor(cid);
+  const dbName = databaseNameFor(cid, c.req.query("database"));
+  const db = client.db(dbName);
+  const collection = db.collection(name);
+
+  const idCandidates = buildIdCandidates(id);
+  const result = await collection.deleteOne({ $or: idCandidates });
+
+  if (result.deletedCount === 0) {
+    return c.json({ error: "Document not found" }, 404);
+  }
+  return c.body(null, 204);
+});
+
 documentsRoute.put("/:name/document/:id", async (c) => {
   const cid = c.req.param("cid")!;
   const name = c.req.param("name");

@@ -10,17 +10,22 @@ import {
 export type Theme = "dark" | "light";
 export type UuidFormat = "canonical" | "short" | "compact" | "raw";
 export type PageSize = 50 | 100 | 200 | 500;
+export type CollectionMode = "query" | "console";
 
 export interface Settings {
   theme: Theme;
   uuidFormat: UuidFormat;
   pageSize: PageSize;
+  tabMode: boolean;
+  defaultCollectionMode: CollectionMode;
 }
 
 const DEFAULT: Settings = {
   theme: "dark",
   uuidFormat: "canonical",
   pageSize: 50,
+  tabMode: false,
+  defaultCollectionMode: "query",
 };
 
 const STORAGE_KEY = "mongo-manager:settings:v1";
@@ -48,6 +53,8 @@ interface SettingsContextValue extends Settings {
   setTheme: (t: Theme) => void;
   setUuidFormat: (f: UuidFormat) => void;
   setPageSize: (n: PageSize) => void;
+  setTabMode: (v: boolean) => void;
+  setDefaultCollectionMode: (m: CollectionMode) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -79,10 +86,33 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     (pageSize: PageSize) => setSettings((s) => ({ ...s, pageSize })),
     [],
   );
+  const setTabMode = useCallback(
+    (tabMode: boolean) => setSettings((s) => ({ ...s, tabMode })),
+    [],
+  );
+  const setDefaultCollectionMode = useCallback(
+    (defaultCollectionMode: CollectionMode) =>
+      setSettings((s) => ({ ...s, defaultCollectionMode })),
+    [],
+  );
 
   const value = useMemo(
-    () => ({ ...settings, setTheme, setUuidFormat, setPageSize }),
-    [settings, setTheme, setUuidFormat, setPageSize],
+    () => ({
+      ...settings,
+      setTheme,
+      setUuidFormat,
+      setPageSize,
+      setTabMode,
+      setDefaultCollectionMode,
+    }),
+    [
+      settings,
+      setTheme,
+      setUuidFormat,
+      setPageSize,
+      setTabMode,
+      setDefaultCollectionMode,
+    ],
   );
 
   return (

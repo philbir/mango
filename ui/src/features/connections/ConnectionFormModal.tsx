@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { IconCheck, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconPlugConnected, IconTrash, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { ApiError, api, type ConnectionPublic } from "../../api/client";
 
@@ -124,35 +124,37 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
           >
             <input
               value={uri}
-              onChange={(e) => setUri(e.target.value)}
+              onChange={(e) => {
+                setUri(e.target.value);
+                setTestResult(null);
+              }}
               placeholder="mongodb://user:pass@host:27017/dbName?authSource=admin"
               spellCheck={false}
               className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
-            {mode === "edit" && existing && (
-              <div className="mt-1 font-mono text-[10px] text-slate-500">
-                Current: {existing.uriRedacted}
-              </div>
-            )}
+          </Field>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onTest}
               disabled={!uri.trim() || testing}
-              className="mt-2 flex items-center gap-1 rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
+              <IconPlugConnected size={14} />
               {testing ? "Testing…" : "Test connection"}
             </button>
             {testResult?.ok === true && (
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                <IconCheck size={12} /> Connected.
-              </div>
+              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                <IconCheck size={14} /> Connected
+              </span>
             )}
             {testResult?.ok === false && (
-              <div className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+              <span className="flex-1 truncate text-xs text-red-600 dark:text-red-400">
                 {testResult.error}
-              </div>
+              </span>
             )}
-          </Field>
+          </div>
 
           <Field label="Default database (optional)">
             <input

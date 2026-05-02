@@ -67,6 +67,10 @@ const r = spawnSync(
     "build",
     "--compile",
     `--target=bun-${bunTarget}`,
+    // The Node-only SQLite driver is gated behind a runtime `isBun` check —
+    // mark it external so bun doesn't bundle the native .node addon.
+    "--external",
+    "better-sqlite3",
     serverEntry,
     "--outfile",
     outFile,

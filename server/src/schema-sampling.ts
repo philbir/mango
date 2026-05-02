@@ -5,6 +5,7 @@ export interface FieldInfo {
   path: string;
   types: string[];
   examples: unknown[];
+  distinctValues?: unknown[];
 }
 
 const detectType = (value: unknown): string => {
@@ -75,7 +76,96 @@ export const renderSchemaForPrompt = (fields: FieldInfo[]): string => {
         .filter((e) => e && e.length < 80)
         .slice(0, 2)
         .join(", ");
-      return `- ${f.path}: ${types}${examples ? `   e.g. ${examples}` : ""}`;
+      const distinct = f.distinctValues
+        ?.map((v) => JSON.stringify(v))
+        .filter((v) => v && v.length < 80)
+        .join(", ");
+      const examplePart = examples ? `   e.g. ${examples}` : "";
+      const distinctPart = distinct ? `   values: [${distinct}]` : "";
+      return `- ${f.path}: ${types}${examplePart}${distinctPart}`;
     })
     .join("\n");
+};
+
+/**
+ * Sample every collection in the database and render a compact, multi-
+ * collection schema for use in AI prompts. Bounded by maxCollections and
+ * docsPerCollection so the prompt stays manageable.
+ */
+export const sampleDatabaseSchema = async (
+  db: Db,
+  opts: { maxCollections?: number; docsPerCollection?: number } = {},
+): Promise<string> => {
+  const maxCollections = opts.maxCollections ?? 25;
+  const docsPerCollection = opts.docsPerCollection ?? 10;
+  const cols = await db
+    .listCollections({}, { nameOnly: true })
+    .toArray();
+  const names = cols
+    .map((c) => c.name)
+    .filter((n) => !n.startsWith("system."))
+    .slice(0, maxCollections);
+
+  const sections = await Promise.all(
+    names.map(async (name) => {
+      try {
+        const schema = await sampleCollectionSchema(db, name, docsPerCollection);
+        const fieldsLines = schema.fields
+          .slice(0, 20)
+          .map((f) => `    - ${f.path}: ${f.types.join(" | ")}`)
+          .join("\n");
+        return `Collection "${name}":\n${fieldsLines}`;
+      } catch (e) {
+        return `Collection "${name}": (could not sample — ${
+          e instanceof Error ? e.message : String(e)
+        })`;
+      }
+    }),
+  );
+  return sections.join("\n\n");
+};
+
+/**
+ * For low-cardinality string/boolean fields, fetch the full set of distinct
+ * values and stash them on the schema. Bounded so we never run more than a
+ * handful of queries or wait too long.
+ */
+export const enrichWithDistinctValues = async (
+  db: Db,
+  collection: string,
+  fields: FieldInfo[],
+  opts: {
+    maxFields?: number;
+    maxValues?: number;
+    maxTimeMS?: number;
+  } = {},
+): Promise<void> => {
+  const maxFields = opts.maxFields ?? 8;
+  const maxValues = opts.maxValues ?? 25;
+  const maxTimeMS = opts.maxTimeMS ?? 1500;
+
+  const candidates = fields
+    .filter((f) => f.path !== "_id")
+    .filter((f) => {
+      if (f.types.length !== 1) return false;
+      const t = f.types[0];
+      return t === "string" || t === "boolean";
+    })
+    .slice(0, maxFields);
+
+  await Promise.all(
+    candidates.map(async (f) => {
+      try {
+        const values = await db
+          .collection(collection)
+          .distinct(f.path, {}, { maxTimeMS });
+        if (values.length === 0 || values.length > maxValues) return;
+        f.distinctValues = values
+          .map((v) => truncatedExample(v))
+          .slice(0, maxValues);
+      } catch {
+        /* ignore — distinct can fail on indexed/sharded paths */
+      }
+    }),
+  );
 };

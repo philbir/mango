@@ -18,6 +18,7 @@ export interface ConnectionWithUri extends Connection {
 
 export interface ConnectionPublic extends Connection {
   uriRedacted: string;
+  effectiveDefaultDatabase: string | null;
 }
 
 interface ConnectionRow {
@@ -46,10 +47,14 @@ const rowToWithUri = (row: ConnectionRow): ConnectionWithUri => ({
   uri: decryptString(row.uri_encrypted),
 });
 
-const rowToPublic = (row: ConnectionRow): ConnectionPublic => ({
-  ...rowToConnection(row),
-  uriRedacted: redactUri(decryptString(row.uri_encrypted)),
-});
+const rowToPublic = (row: ConnectionRow): ConnectionPublic => {
+  const uri = decryptString(row.uri_encrypted);
+  return {
+    ...rowToConnection(row),
+    uriRedacted: redactUri(uri),
+    effectiveDefaultDatabase: row.default_database ?? extractDbFromUri(uri),
+  };
+};
 
 export interface CreateConnectionInput {
   name: string;
@@ -84,9 +89,11 @@ export const getConnection = (id: string): ConnectionWithUri | null => {
 };
 
 export const getConnectionPublic = (id: string): ConnectionPublic | null => {
-  const c = getConnection(id);
-  if (!c) return null;
-  return { ...c, uriRedacted: redactUri(c.uri), uri: undefined as unknown as string } as unknown as ConnectionPublic;
+  const db = getDb();
+  const row = db
+    .prepare("SELECT * FROM connections WHERE id = ?")
+    .get(id) as ConnectionRow | undefined;
+  return row ? rowToPublic(row) : null;
 };
 
 export const createConnection = (input: CreateConnectionInput): ConnectionPublic => {
@@ -148,6 +155,29 @@ export const touchConnection = (id: string): void => {
     Date.now(),
     id,
   );
+};
+
+/**
+ * Upsert the standalone-mode connection (fixed ID) from env on every boot, so
+ * MONGO_URL changes win without requiring a fresh data dir.
+ */
+export const upsertStandaloneConnection = (
+  id: string,
+  uri: string,
+  defaultDatabase?: string | null,
+): void => {
+  const db = getDb();
+  const now = Date.now();
+  const resolvedDb = defaultDatabase ?? extractDbFromUri(uri) ?? null;
+  db.prepare(
+    `INSERT INTO connections
+       (id, name, uri_encrypted, default_database, color, created_at, updated_at, last_used_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+     ON CONFLICT(id) DO UPDATE SET
+       uri_encrypted = excluded.uri_encrypted,
+       default_database = excluded.default_database,
+       updated_at = excluded.updated_at`,
+  ).run(id, "Default", encryptString(uri), resolvedDb, "#38bdf8", now, now);
 };
 
 /**

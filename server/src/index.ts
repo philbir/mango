@@ -7,18 +7,35 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { closeAllClients, config } from "./config.js";
+import { resolveServerConfig } from "./mode.js";
 import { aiRoute } from "./routes/ai.js";
 import { collectionsRoute } from "./routes/collections.js";
 import { connectionsRoute } from "./routes/connections.js";
+import { consoleRoute } from "./routes/console.js";
 import { documentsRoute } from "./routes/documents.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
-import { seedFromEnvIfEmpty } from "./store/connections.js";
+import {
+  seedFromEnvIfEmpty,
+  upsertStandaloneConnection,
+} from "./store/connections.js";
 import { getDb } from "./store/db.js";
 
-// Bootstrap: open SQLite (runs migrations) + seed legacy MONGO_URL if needed.
+// Bootstrap: open SQLite (runs migrations).
 getDb();
-seedFromEnvIfEmpty();
+
+const serverConfig = resolveServerConfig();
+if (serverConfig.mode === "standalone" && serverConfig.standaloneConnectionId) {
+  upsertStandaloneConnection(
+    serverConfig.standaloneConnectionId,
+    process.env.MONGO_URL!,
+    process.env.MONGO_DB ?? null,
+  );
+  console.log("[mango] standalone mode — connection pinned from MONGO_URL");
+} else {
+  // Multi mode — keep the legacy "seed from MONGO_URL when empty" behavior.
+  seedFromEnvIfEmpty();
+}
 
 const app = new Hono();
 
@@ -29,6 +46,10 @@ app.get("/api/health", (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/api/config", (c) => {
+  return c.json(serverConfig);
+});
+
 app.route("/api/connections", connectionsRoute);
 
 // All collection-scoped routes are nested under /api/connections/:cid/...
@@ -37,6 +58,7 @@ connectionScoped.route("/collections", collectionsRoute);
 connectionScoped.route("/collections", documentsRoute);
 connectionScoped.route("/collections", schemaRoute);
 connectionScoped.route("/shell", shellRoute);
+connectionScoped.route("/console", consoleRoute);
 app.route("/api/connections/:cid", connectionScoped);
 
 app.route("/api/ai", aiRoute);

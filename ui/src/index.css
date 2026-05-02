@@ -86,6 +86,35 @@ body {
   opacity: 0.3 !important;
 }
 
+/* Thin, low-contrast scrollbar for tab overflow and similar strips. */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.6);
+}
+html.dark .thin-scrollbar {
+  scrollbar-color: rgba(71, 85, 105, 0.55) transparent;
+}
+html.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.55);
+}
+html.dark .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.7);
+}
+
 /* @uiw/react-json-view tweaks */
 .w-rjv {
   font-family: theme("fontFamily.mono") !important;

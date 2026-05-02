@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useServerConfig } from "./useServerConfig";
 
 const STORAGE_KEY = "mango:active-connection-id";
 
@@ -31,6 +32,8 @@ const writeStored = (id: string | null) => {
  *   4. null — caller should prompt the user to add one
  */
 export const useActiveConnection = () => {
+  const config = useServerConfig();
+  const isStandalone = config.mode === "standalone";
   const [activeId, setActiveIdState] = useState<string | null>(() => readStored());
 
   const list = useQuery({
@@ -40,6 +43,12 @@ export const useActiveConnection = () => {
   });
 
   useEffect(() => {
+    if (isStandalone) {
+      // Server is the source of truth; ignore localStorage entirely.
+      const pinned = config.standaloneConnectionId ?? null;
+      if (pinned !== activeId) setActiveIdState(pinned);
+      return;
+    }
     if (!list.data) return;
     const ids = list.data.connections.map((c) => c.id);
     if (ids.length === 0) {
@@ -54,9 +63,10 @@ export const useActiveConnection = () => {
     const fallback = list.data.connections[0]!.id;
     setActiveIdState(fallback);
     writeStored(fallback);
-  }, [list.data, activeId]);
+  }, [list.data, activeId, isStandalone, config.standaloneConnectionId]);
 
   const setActiveId = (id: string | null) => {
+    if (isStandalone) return;
     setActiveIdState(id);
     writeStored(id);
   };

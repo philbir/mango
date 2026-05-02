@@ -31,12 +31,20 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir).ok();
             let data_dir = app_data_dir.to_string_lossy().to_string();
 
+            // Bundled UI assets — see `bundle.resources` in tauri.conf.json.
+            let static_dir = app
+                .path()
+                .resource_dir()
+                .map(|p| p.join("ui").to_string_lossy().to_string())
+                .unwrap_or_default();
+
             let sidecar = app
                 .shell()
                 .sidecar("mango-server")
                 .expect("mango-server sidecar not found — bundle binaries at desktop/bin/")
                 .env("PORT", port.to_string())
                 .env("MANGO_DATA_DIR", data_dir.clone())
+                .env("STATIC_DIR", static_dir)
                 .env("AUTH_MODE", "none");
 
             let (mut rx, child) = sidecar

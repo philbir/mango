@@ -1,88 +1,141 @@
-# 🥭 Mango
+<div align="center">
+  <picture>
+    <source srcset="ui/public/assets/mango-empty-hero-dark.png" media="(prefers-color-scheme: dark)">
+    <img src="ui/public/assets/mango-empty-hero.png" alt="Mango" width="520">
+  </picture>
 
-A friendly MongoDB workbench. Browse, edit, query, and shell into any MongoDB — with an AI assistant that understands your schema.
+  <h1>Mango</h1>
+  <p><strong>A friendly MongoDB workbench.</strong> Browse, edit, query, and shell into any MongoDB — with an AI assistant that understands your schema.</p>
 
-Runs three ways:
+  <p>
+    <a href="https://github.com/philbir/mango/pkgs/container/mango"><img alt="Docker image" src="https://img.shields.io/badge/ghcr.io-philbir%2Fmango-blue?logo=docker"></a>
+    <a href="https://www.nuget.org/packages/Mango.Hosting"><img alt="NuGet" src="https://img.shields.io/nuget/v/Mango.Hosting?logo=nuget"></a>
+    <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+  </p>
+</div>
 
-- **Aspire integration** — drop into a .NET Aspire AppHost as a one-liner (`.WithMango()`), replacing `WithMongoExpress()`.
-- **Docker container** — single image, configure via env, mount a volume for SQLite-backed state.
-- **Desktop app** — Tauri-wrapped native app for macOS, Windows, and Linux. Runs offline, single user, no auth.
+---
 
-## Stack
+## Run modes
 
-- **Server:** Node 22 + TypeScript + [Hono](https://hono.dev) + the official `mongodb` driver. SQLite-backed connection store via `better-sqlite3` with AES-GCM encryption at rest.
-- **UI:** React 19 + Vite + Tailwind v3 + Monaco (filter / shell with mongo-aware autocomplete) + CodeMirror (document editor) + `@uiw/react-json-view` (interactive JSON) + `@tanstack/react-table`.
-- **AI:** Pluggable provider — OpenAI / GitHub Models / Azure OpenAI (any OpenAI-compatible endpoint), or `@github/copilot-sdk` for direct Copilot.
-- **Desktop:** Tauri 2 with a Bun-compiled sidecar (single self-contained binary).
-- **Aspire:** `Mango.Hosting` NuGet package — `IResourceBuilder<MongoDBServerResource>.WithMango()`.
+| | When to use |
+|---|---|
+| **Aspire** | You're building on .NET Aspire. One line in your AppHost wires Mango to your Mongo container. |
+| **Docker** | Standalone deployment: dev box, homelab, k8s. One image, env-driven config. |
+| **Desktop** | Local workbench across multiple Mongo connections. macOS, Windows, Linux — runs offline. |
 
-## Repository layout
+## Quick start
 
+### Aspire
+
+```csharp
+using Aspire.Hosting;
+
+var builder = DistributedApplication.CreateBuilder(args);
+
+var mongo = builder.AddMongoDB("mongo")
+    .WithLifetime(ContainerLifetime.Persistent);
+
+mongo.WithMango();          // ← drops the Mango UI alongside Mongo
+
+builder.Build().Run();
 ```
-mango/
-├── server/        Hono API + SQLite store (Node)
-├── ui/            React + Vite SPA
-├── desktop/       Tauri shell (Rust) + sidecar config
-├── aspire/        Mango.Hosting (.NET class library)
-├── docker/        Dockerfile + compose example
-└── docs/          Roadmap, deployment notes, architecture
+
+```bash
+dotnet add package Mango.Hosting
 ```
 
-## Quick start (standalone, dev)
+`WithMango()` defaults to **standalone mode**: the Mongo container's connection string is wired in as the only connection and the connection-manager UI is hidden. Pass `standalone: false` to expose the full multi-connection workbench. Override the image with `image:` / `tag:` parameters.
+
+### Docker
+
+```bash
+docker run --rm -p 5180:5180 \
+  -e MONGO_URL="mongodb://host.docker.internal:27017/mydb" \
+  -e MANGO_MODE=standalone \
+  -v mango-data:/data \
+  ghcr.io/philbir/mango:latest
+```
+
+Open <http://localhost:5180>. Drop `MANGO_MODE=standalone` to enable the full connection manager (you can then add more connections from the UI).
+
+Or with `docker compose`:
+
+```yaml
+services:
+  mongo:
+    image: mongo:7
+    volumes: ["mongo-data:/data/db"]
+
+  mango:
+    image: ghcr.io/philbir/mango:latest
+    depends_on: [mongo]
+    ports: ["5180:5180"]
+    environment:
+      MONGO_URL: mongodb://mongo:27017/mydb
+      MANGO_MODE: standalone
+    volumes: ["mango-data:/data"]
+
+volumes:
+  mongo-data:
+  mango-data:
+```
+
+### Desktop
+
+Download the installer for your OS from [Releases](https://github.com/philbir/mango/releases) and run it. The desktop app ships a self-contained server (Bun-compiled sidecar) with no external dependencies.
+
+To build locally:
 
 ```bash
 yarn install
-MONGO_URL="mongodb://localhost:27017/mydb" yarn aspire
-# → http://localhost:5180
+yarn compile-server     # builds the sidecar binary (requires Bun)
+yarn tauri:build        # produces a .dmg / .msi / .deb / .AppImage
 ```
 
-`MONGO_URL` is optional — Mango works without it and will prompt for a connection in the UI. If set, it's auto-seeded as a "Default" connection on first run.
+## Configuration
 
-## Connection manager
+All modes read the same env vars:
 
-Mango stores its connections in a SQLite database (`./.mango/mango.db` by default; `$MANGO_DATA_DIR` overrides). Each connection is `{name, uri, defaultDatabase, color}` with the URI encrypted at rest using AES-256-GCM.
+| Variable | Purpose |
+|---|---|
+| `MONGO_URL` | Mongo connection string. Required in standalone mode. |
+| `MONGO_DB` | Default database (overrides URI path). |
+| `MANGO_MODE` | `standalone` or unset (= multi-connection). |
+| `MANGO_DATA_DIR` | Where SQLite + saved settings live. Defaults: `./.mango/` (dev), `/data` (Docker), OS app-data (desktop). |
+| `MANGO_MASTER_KEY` | 32-byte AES-256-GCM key (base64 or hex) for encrypting saved connection URIs. Auto-generated per-process if unset. **Set this in production** so saved state survives restarts. |
+| `PORT` | Server port. Default `5180`. |
 
-To make encrypted state portable across machines / restarts, set the master key:
+### AI assistant
+
+| Variable | Purpose |
+|---|---|
+| `AI_PROVIDER` | `openai` (any OpenAI-compatible endpoint), `copilot`, or `claude-code`. |
+| `AI_MODEL` | e.g. `gpt-4o-mini`, `claude-sonnet-4.5`. |
+| `AI_API_KEY` | Provider key. OpenAI / GitHub Models / Azure / Ollama. |
+| `AI_BASE_URL` | OpenAI provider only — point at GitHub Models, Azure, Ollama, etc. |
+| `GITHUB_TOKEN` | Copilot provider — falls back to logged-in Copilot CLI session if unset. |
+
+You can also configure the assistant from the UI (Settings menu); it'll be persisted (encrypted) in the SQLite store.
+
+## Development
 
 ```bash
-export MANGO_MASTER_KEY="$(openssl rand -base64 32)"
+yarn install
+yarn dev                # server (5180) + Vite (5173) concurrently
+yarn test               # vitest (server)
+yarn workspace @mango/ui typecheck
 ```
 
-If unset, Mango generates an ephemeral per-process key (logged warning) — fine for dev, not for production.
+The server is ESM Node 22 + [Hono](https://hono.dev) + the official `mongodb` driver, with a SQLite-backed connection store (`better-sqlite3` on Node, `bun:sqlite` in the Tauri sidecar). The UI is React 19 + Vite + Tailwind + Monaco. The desktop shell is Tauri 2.
 
-## AI
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `AI_PROVIDER` | `openai` | `openai` or `copilot`. |
-| `AI_MODEL` | provider default | `gpt-4o-mini`, `claude-sonnet-4.5`, etc. |
-| `AI_API_KEY` | _(unset)_ | OpenAI provider only. |
-| `AI_BASE_URL` | OpenAI default | OpenAI provider only — point at GitHub Models, Azure, Ollama, etc. |
-| `GITHUB_TOKEN` | _(unset)_ | Copilot provider — falls back to logged-in Copilot CLI session if unset. |
-
-## Aspire integration
-
-```csharp
-var mongo = builder.AddMongoDB("mongo")
-    .WithLifetime(ContainerLifetime.Persistent)
-    .WithMango();           // ← drops in the Mango UI
-```
-
-Configuration via `dotnet user-secrets` in the AppHost project:
-
-```bash
-dotnet user-secrets set "Mango:Ai:Provider" "copilot"
-dotnet user-secrets set "Mango:Ai:Model"    "claude-sonnet-4.5"
-dotnet user-secrets set "Mango:MasterKey"   "$(openssl rand -base64 32)"
-```
-
-See [`aspire/Mango.Hosting/MangoExtensions.cs`](aspire/Mango.Hosting/MangoExtensions.cs) for all options.
+See [CLAUDE.md](CLAUDE.md) for the architecture overview.
 
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full feature plan. Headlines:
+See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines:
 
-- Phase 1 (✅ done) — Connection manager, AES-GCM encryption, AI assistant, Aspire integration
+- Phase 1 — Connection manager, AES-GCM encryption, AI assistant, Aspire integration ✅
 - Phase 2 — Tauri desktop release with auto-update + OS-keychain master key
 - Phase 3 — OIDC auth (server mode), per-user state, audit log
 - Phase 4 — Insert/delete/bulk, index manager, aggregation builder, sharing

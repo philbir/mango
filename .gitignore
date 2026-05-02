@@ -1,26 +1,43 @@
-# Node
+# ── Node / Yarn ─────────────────────────────────────────────────────────────
 node_modules/
-dist/
 .yarn/cache
 .yarn/install-state.gz
 .pnp.*
+*.tgz
 
-# Build output
+# ── Build outputs ──────────────────────────────────────────────────────────
+dist/
 server/public/
 *.tsbuildinfo
 
-# Env / secrets
+# ── Env / secrets / runtime state ──────────────────────────────────────────
 .env
-.env.local
+.env.*
+!.env.example
 .mango/
+*.db
+*.db-shm
+*.db-wal
 
-# Tauri / Rust
+# ── Tauri / Rust ───────────────────────────────────────────────────────────
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 desktop/bin/
+*.bun-build
 
-# OS / editor
+# ── .NET ────────────────────────────────────────────────────────────────────
+bin/
+obj/
+.vs/
+*.user
+*.suo
+artifacts/
+*.nupkg
+*.snupkg
+
+# ── OS / editor ─────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
 *.log
 .vscode/
 .idea/

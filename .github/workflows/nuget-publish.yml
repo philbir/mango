@@ -1,0 +1,49 @@
+name: Publish NuGet package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (e.g. 0.1.0)"
+        required: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            v="${GITHUB_REF#refs/tags/v}"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pack
+        working-directory: aspire/Mango.Hosting
+        run: |
+          dotnet pack \
+            -c Release \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -o ../../artifacts
+
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push artifacts/*.nupkg \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --skip-duplicate

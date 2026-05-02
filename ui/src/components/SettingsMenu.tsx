@@ -1,11 +1,21 @@
-import { IconMoon, IconSettings, IconSun, IconX } from "@tabler/icons-react";
+import {
+  IconMoon,
+  IconSettings,
+  IconSparkles,
+  IconSun,
+  IconTable,
+  IconTerminal2,
+  IconX,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  type CollectionMode,
   type PageSize,
   type Theme,
   type UuidFormat,
   useSettings,
 } from "../settings";
+import { AiSettingsModal } from "../features/connections/AiSettingsModal";
 
 const UUID_LABELS: Record<UuidFormat, string> = {
   canonical: "Canonical (8-4-4-4-12)",
@@ -19,6 +29,7 @@ const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 export const SettingsMenu = () => {
   const settings = useSettings();
   const [open, setOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -89,8 +100,50 @@ export const SettingsMenu = () => {
               options={PAGE_SIZES.map((n) => ({ value: n, label: String(n) }))}
             />
           </Section>
+
+          <Section label="Default collection mode">
+            <ToggleGroup<CollectionMode>
+              value={settings.defaultCollectionMode}
+              onChange={settings.setDefaultCollectionMode}
+              options={[
+                { value: "query", label: "Query", icon: <IconTable size={12} /> },
+                {
+                  value: "console",
+                  label: "Console",
+                  icon: <IconTerminal2 size={12} />,
+                },
+              ]}
+            />
+          </Section>
+
+          <Section label="Tabs">
+            <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={settings.tabMode}
+                onChange={(e) => settings.setTabMode(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-sky-500 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800"
+              />
+              Tab mode (open each collection in its own tab)
+            </label>
+          </Section>
+
+          <Section label="AI">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setAiOpen(true);
+              }}
+              className="flex w-full items-center gap-1.5 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <IconSparkles size={12} />
+              Configure provider
+            </button>
+          </Section>
         </div>
       )}
+      {aiOpen && <AiSettingsModal onClose={() => setAiOpen(false)} />}
     </div>
   );
 };

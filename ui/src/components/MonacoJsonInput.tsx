@@ -133,5 +133,11 @@ export const MonacoJsonInput = ({
     setModelMongoConfig(model.uri, completion ?? {});
   }, [completion]);
 
-  return <div ref={hostRef} style={{ minHeight }} className="w-full" />;
+  return (
+    <div
+      ref={hostRef}
+      style={{ minHeight }}
+      className="h-full w-full"
+    />
+  );
 };
