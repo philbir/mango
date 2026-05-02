@@ -28,7 +28,9 @@ ENV STATIC_DIR=/app/public
 ENV MANGO_DATA_DIR=/data
 COPY --from=build-server /app/server/dist ./dist
 COPY --from=build-server /app/server/package.json ./package.json
-COPY --from=build-server /app/server/node_modules ./node_modules
+# Yarn 4 (`nodeLinker: node-modules`) hoists deps to the workspace root —
+# the per-workspace `server/node_modules` only holds a sliver, if anything.
+COPY --from=build-server /app/node_modules ./node_modules
 COPY --from=build-ui /app/server/public ./public
 RUN mkdir -p /data
 VOLUME ["/data"]
