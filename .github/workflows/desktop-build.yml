@@ -67,6 +67,9 @@ jobs:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
           releaseName: "Mango ${{ github.ref_name }}"
-          releaseDraft: true
-          prerelease: false
+          # Publish immediately so artifacts are downloadable from the
+          # Releases page. Tags with a dash (e.g. v0.1.0-alpha.3) are
+          # marked as pre-releases.
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
