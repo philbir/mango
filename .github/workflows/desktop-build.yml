@@ -60,9 +60,38 @@ jobs:
 
       - run: yarn compile-server ${{ matrix.target }}
 
+      # Notarization needs the App Store Connect .p8 private key on disk.
+      # The secret holds the base64-encoded file; decode and export the
+      # path so tauri-action picks it up. No-op on non-macOS runners and
+      # when the secret isn't set.
+      - name: Decode App Store Connect API key (macOS only)
+        if: startsWith(matrix.runner, 'macos-')
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          if [ -n "$APPLE_API_KEY_BASE64" ]; then
+            mkdir -p "$HOME/.private_keys"
+            echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$HOME/.private_keys/AuthKey.p8"
+            echo "APPLE_API_KEY_PATH=$HOME/.private_keys/AuthKey.p8" >> "$GITHUB_ENV"
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code-signing + notarization. Tauri-action only acts on
+          # these when bundling for macOS targets; on other runners they
+          # resolve to empty strings and are ignored. Until the secrets
+          # are populated on GitHub the build falls back to ad-hoc signing
+          # (same behavior as before this commit) — no breakage.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Notarization via App Store Connect API key (preferred over
+          # app-specific passwords). Set ALL of APPLE_API_* together.
+          # APPLE_API_KEY_PATH is exported by the decode step above.
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
