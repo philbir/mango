@@ -1214,6 +1214,19 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@mango/docs-site@workspace:docs-site":
+  version: 0.0.0-use.local
+  resolution: "@mango/docs-site@workspace:docs-site"
+  dependencies:
+    "@tabler/icons-react": "npm:^3.41.1"
+    "@vitejs/plugin-react": "npm:^4.3.4"
+    react: "npm:^19.0.0"
+    react-dom: "npm:^19.0.0"
+    typescript: "npm:^5.7.2"
+    vite: "npm:^6.0.5"
+  languageName: unknown
+  linkType: soft
+
 "@mango/server@workspace:server":
   version: 0.0.0-use.local
   resolution: "@mango/server@workspace:server"

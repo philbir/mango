@@ -1,3 +1,7 @@
+import { useEffect } from "react";
+import { useAssistant } from "./features/assistant/AssistantContext";
+import { AssistantPanel } from "./features/assistant/AssistantPanel";
+import { AssistantToggle } from "./features/assistant/AssistantToggle";
 import { Sidebar } from "./features/collections/Sidebar";
 import { CollectionView } from "./features/documents/CollectionView";
 import { ConsoleView } from "./features/documents/ConsoleView";
@@ -9,26 +13,43 @@ import { useSettings } from "./settings";
 export const App = () => {
   const { tabMode } = useSettings();
   const { activeTab } = useTabs();
+  const { toggle } = useAssistant();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "i" || e.key === "I")) {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggle]);
 
   return (
     <div className="flex h-full bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <Sidebar />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="relative flex flex-1 flex-col overflow-hidden">
         {tabMode && <TabBar />}
         <div className="flex flex-1 flex-col overflow-hidden">
           {!activeTab && <EmptyState />}
           {activeTab?.kind === "collection" && activeTab.collection && (
             <CollectionView
               key={activeTab.id}
+              tabId={activeTab.id}
               name={activeTab.collection}
             />
           )}
           {activeTab?.kind === "console" && (
-            <ConsoleView key={activeTab.id} />
+            <ConsoleView key={activeTab.id} tabId={activeTab.id} />
           )}
-          {activeTab?.kind === "shell" && <ShellView key={activeTab.id} />}
+          {activeTab?.kind === "shell" && (
+            <ShellView key={activeTab.id} tabId={activeTab.id} />
+          )}
         </div>
+        <AssistantToggle />
       </main>
+      <AssistantPanel />
     </div>
   );
 };

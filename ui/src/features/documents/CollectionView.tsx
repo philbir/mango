@@ -1,19 +1,27 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  IconBraces,
+  IconInfoCircle,
   IconPlayerPlayFilled,
-  IconSparkles,
   IconTable,
   IconTerminal2,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, extractIdString } from "../../api/client";
-import { MonacoJsonInput } from "../../components/MonacoJsonInput";
+import {
+  MonacoJsonInput,
+  type MonacoJsonInputHandle,
+} from "../../components/MonacoJsonInput";
 import { useResize } from "../../components/useResize";
 import { type PageSize, useSettings } from "../../settings";
+import {
+  type ApplyKind,
+  useAssistantBinding,
+} from "../assistant/AssistantContext";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { DocumentEditor } from "../editor/DocumentEditor";
-import { AiQueryPrompt } from "./AiQueryPrompt";
+import { InfoView } from "../info/InfoView";
 import { ConsoleView } from "./ConsoleView";
 import { FieldPicker, buildProjectionJson } from "./FieldPicker";
 import { QueryBuilder } from "./QueryBuilder";
@@ -24,9 +32,10 @@ const EMPTY_FILTER_TEMPLATE = "{\n  \n}";
 
 interface CollectionViewProps {
   name: string;
+  tabId?: string;
 }
 
-export const CollectionView = ({ name }: CollectionViewProps) => {
+export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   const { pageSize, setPageSize, defaultCollectionMode } = useSettings();
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
@@ -38,10 +47,10 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
   );
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ResultFormat>("table");
-  const [pageMode, setPageMode] = useState<"query" | "console">(
+  const [pageMode, setPageMode] = useState<"query" | "console" | "info">(
     defaultCollectionMode,
   );
-  const [queryMode, setQueryMode] = useState<"raw" | "builder" | "ai">("raw");
+  const [queryMode, setQueryMode] = useState<"raw" | "builder">("raw");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { size: filterHeight, onMouseDown: onFilterResize } = useResize({
@@ -69,6 +78,8 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
   // Track query timing for the footer status.
   const queryStartRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+
+  const filterEditorRef = useRef<MonacoJsonInputHandle | null>(null);
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
     queryKey: [
@@ -135,9 +146,67 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
     [schema],
   );
 
+  // The assistant's mode follows the active sub-tab inside the collection view:
+  //  - Query mode → it can edit the filter / projection / sort BSON
+  //  - Console mode → it can write a full db.<collection>.<method>(…) command
+  // The inner ConsoleView (mounted when pageMode === "console") also binds
+  // itself; its binding wins while it's mounted, and when it unmounts our
+  // effect re-fires (supports list changes) and we re-bind.
+  const handlerSupports: ApplyKind[] = useMemo(() => {
+    if (pageMode === "console") return ["console"];
+    if (pageMode === "info") return [];
+    return ["filter", "projection", "sort", "pipeline"];
+  }, [pageMode]);
+
+  const assistantMode =
+    pageMode === "console"
+      ? "console"
+      : pageMode === "info"
+        ? "indexes"
+        : "collection";
+
+  useAssistantBinding({
+    key: tabId ? `tab:${tabId}` : `collection:${name}`,
+    mode: assistantMode,
+    collection: name,
+    handlers: {
+      supports: handlerSupports,
+      apply: (kind, payload) => {
+        if (kind === "filter") {
+          setFilterDraft(payload);
+          onApplyFilter(payload);
+          setQueryMode("raw");
+          setPageMode("query");
+        } else if (kind === "projection" || kind === "sort" || kind === "pipeline") {
+          // No first-class slot for these on the query view yet — drop the user
+          // into console mode and pre-fill an aggregation skeleton so they can
+          // tweak it. (The pipeline payload is itself the most useful here.)
+          setPageMode("console");
+          if (kind === "pipeline") {
+            window.dispatchEvent(
+              new CustomEvent("mango:console:set", {
+                detail: {
+                  key: "*",
+                  command: `db.${name}.aggregate(${payload})`,
+                },
+              }),
+            );
+          }
+        } else if (kind === "console") {
+          setPageMode("console");
+          window.dispatchEvent(
+            new CustomEvent("mango:console:set", {
+              detail: { key: "*", command: payload },
+            }),
+          );
+        }
+      },
+    },
+  });
+
   return (
     <div className="flex h-full flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
         <IconTable size={18} className="text-sky-600 dark:text-sky-400" />
         <div className="flex-1">
           <div className="font-mono text-base text-slate-900 dark:text-slate-100">{name}</div>
@@ -170,11 +239,36 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
             <IconTerminal2 size={14} />
             Console
           </button>
+          <button
+            type="button"
+            onClick={() => setPageMode("info")}
+            className={`flex items-center gap-1 rounded px-2 py-1 ${
+              pageMode === "info"
+                ? "bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
+                : "text-slate-600 dark:text-slate-300"
+            }`}
+            title="Stats, indexes, and query plan playground"
+          >
+            <IconInfoCircle size={14} />
+            Info
+          </button>
         </div>
       </header>
 
       {pageMode === "console" && (
-        <ConsoleView initialCommand={`db.${name}.find(\n{\n  \n})\n`} />
+        <ConsoleView
+          tabId={tabId}
+          initialCommand={`db.${name}.find(\n{\n  \n})\n`}
+        />
+      )}
+
+      {pageMode === "info" && activeId && (
+        <InfoView
+          cid={activeId}
+          database={database}
+          collection={name}
+          threadKey={tabId ? `tab:${tabId}` : `collection:${name}`}
+        />
       )}
 
       {pageMode === "query" && (
@@ -207,18 +301,6 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
             >
               Builder
             </button>
-            <button
-              type="button"
-              onClick={() => setQueryMode("ai")}
-              className={`flex items-center gap-1 rounded px-2 py-0.5 ${
-                queryMode === "ai"
-                  ? "bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              <IconSparkles size={11} />
-              AI
-            </button>
           </div>
           <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
             Filter
@@ -231,6 +313,7 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
               <div className="flex flex-1 items-stretch gap-2 overflow-hidden">
                 <div className="flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
                   <MonacoJsonInput
+                    ref={filterEditorRef}
                     value={filterDraft}
                     onChange={setFilterDraft}
                     minHeight="64px"
@@ -238,14 +321,25 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
                     onSubmit={() => onApplyFilter()}
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onApplyFilter()}
-                  className="flex items-center gap-1.5 self-start rounded bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400"
-                >
-                  <IconPlayerPlayFilled size={14} />
-                  Run
-                </button>
+                <div className="flex flex-col gap-1.5 self-start">
+                  <button
+                    type="button"
+                    onClick={() => onApplyFilter()}
+                    className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400"
+                  >
+                    <IconPlayerPlayFilled size={14} />
+                    Run
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => filterEditorRef.current?.format()}
+                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Format JSON (⇧⌥F)"
+                  >
+                    <IconBraces size={11} />
+                    Format
+                  </button>
+                </div>
               </div>
             )}
             {queryMode === "builder" && (
@@ -255,17 +349,6 @@ export const CollectionView = ({ name }: CollectionViewProps) => {
                   filterJson={filterDraft}
                   onChange={setFilterDraft}
                   onRun={(json) => onApplyFilter(json)}
-                />
-              </div>
-            )}
-            {queryMode === "ai" && (
-              <div className="flex-1 overflow-y-auto pr-1">
-                <AiQueryPrompt
-                  collectionName={name}
-                  onApply={(json) => {
-                    setFilterDraft(json);
-                    onApplyFilter(json);
-                  }}
                 />
               </div>
             )}

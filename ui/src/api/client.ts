@@ -46,6 +46,44 @@ export interface ServerConfig {
   standaloneConnectionId: string | null;
 }
 
+export interface CollectionStats {
+  collection: string;
+  database: string;
+  count: number | null;
+  size: number | null;
+  avgObjSize: number | null;
+  storageSize: number | null;
+  totalIndexSize: number | null;
+  totalSize: number | null;
+  indexCount: number;
+  capped: boolean;
+  max: number | null;
+  sharded: boolean;
+  indexSizes: Record<string, number>;
+  raw: Record<string, unknown>;
+}
+
+export interface IndexInfo {
+  name: string;
+  key: Record<string, 1 | -1 | string>;
+  unique: boolean;
+  sparse: boolean;
+  hidden: boolean;
+  partialFilterExpression: Record<string, unknown> | null;
+  expireAfterSeconds: number | null;
+  collation: Record<string, unknown> | null;
+  v: number | null;
+  ops: number | null;
+  since: unknown;
+}
+
+export interface CollectionIndexes {
+  collection: string;
+  database: string;
+  indexes: IndexInfo[];
+  usageAvailable: boolean;
+}
+
 export interface ConnectionPublic {
   id: string;
   name: string;
@@ -305,30 +343,6 @@ export const api = {
     }>;
   },
 
-  async generateAiCommand(params: {
-    connectionId: string;
-    prompt: string;
-    model?: string;
-    database?: string;
-  }): Promise<{
-    command: string;
-    explanation: string;
-    model: string;
-    provider: AiProviderId;
-  }> {
-    const res = await fetch("/api/ai/command", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    return handleJson(res) as Promise<{
-      command: string;
-      explanation: string;
-      model: string;
-      provider: AiProviderId;
-    }>;
-  },
-
   async runShell(cid: string, commandJson: string, database?: string): Promise<unknown> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
     const res = await fetch(`${cidPath(cid)}/shell${qs}`, {
@@ -354,31 +368,6 @@ export const api = {
       baseUrl?: string;
       model: string;
       setupHint: string;
-    }>;
-  },
-
-  async runAiQuery(params: {
-    connectionId: string;
-    collection: string;
-    prompt: string;
-    model?: string;
-    database?: string;
-  }): Promise<{
-    filter: Record<string, unknown>;
-    explanation: string;
-    model: string;
-    provider: AiProviderId;
-  }> {
-    const res = await fetch("/api/ai/query", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    return handleJson(res) as Promise<{
-      filter: Record<string, unknown>;
-      explanation: string;
-      model: string;
-      provider: AiProviderId;
     }>;
   },
 
@@ -408,6 +397,140 @@ export const api = {
       const text = await res.text().catch(() => "");
       throw new ApiError(res.status, text || res.statusText);
     }
+  },
+
+  async chatAi(params: {
+    mode: "collection" | "console" | "shell" | "general" | "indexes";
+    connectionId?: string;
+    database?: string;
+    collection?: string;
+    model?: string;
+    context?: { indexes?: string; explain?: string };
+    messages: Array<{ role: "user" | "assistant"; content: string }>;
+  }): Promise<{
+    text: string;
+    model: string;
+    provider: AiProviderId;
+  }> {
+    const res = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    return handleJson(res) as Promise<{
+      text: string;
+      model: string;
+      provider: AiProviderId;
+    }>;
+  },
+
+  async getCollectionStats(
+    cid: string,
+    name: string,
+    database?: string,
+  ): Promise<CollectionStats> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/stats${qs}`,
+    );
+    return handleJson(res) as Promise<CollectionStats>;
+  },
+
+  async getCollectionIndexes(
+    cid: string,
+    name: string,
+    database?: string,
+  ): Promise<CollectionIndexes> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/indexes${qs}`,
+    );
+    return handleJson(res) as Promise<CollectionIndexes>;
+  },
+
+  async dropIndex(
+    cid: string,
+    name: string,
+    indexName: string,
+    database?: string,
+  ): Promise<void> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/indexes/drop${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: indexName }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
+  },
+
+  async createIndex(params: {
+    cid: string;
+    name: string;
+    database?: string;
+    keys: Record<string, 1 | -1 | string>;
+    options?: {
+      name?: string;
+      unique?: boolean;
+      sparse?: boolean;
+      partialFilterExpression?: Record<string, unknown>;
+      expireAfterSeconds?: number;
+    };
+  }): Promise<{ ok: boolean; name: string }> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await fetch(
+      `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/indexes/create${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ keys: params.keys, options: params.options }),
+      },
+    );
+    return handleJson(res) as Promise<{ ok: boolean; name: string }>;
+  },
+
+  async runExplain(params: {
+    cid: string;
+    name: string;
+    database?: string;
+    filter?: string;
+    projection?: string;
+    sort?: string;
+    pipeline?: string;
+    limit?: number;
+    skip?: number;
+    verbosity?: "queryPlanner" | "executionStats" | "allPlansExecution";
+  }): Promise<{ collection: string; explain: Record<string, unknown> }> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await fetch(
+      `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/explain${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          filter: params.filter,
+          projection: params.projection,
+          sort: params.sort,
+          pipeline: params.pipeline,
+          limit: params.limit,
+          skip: params.skip,
+          verbosity: params.verbosity ?? "executionStats",
+        }),
+      },
+    );
+    return handleJson(res) as Promise<{
+      collection: string;
+      explain: Record<string, unknown>;
+    }>;
   },
 
   async listAiModels(): Promise<{

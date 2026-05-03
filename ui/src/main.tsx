@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { App } from "./app";
+import { AssistantProvider } from "./features/assistant/AssistantContext";
 import { TabsProvider } from "./features/tabs/TabsContext";
 import "./index.css";
 import "./monaco-setup";
@@ -27,7 +28,9 @@ createRoot(root).render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <TabsProvider>
-            <App />
+            <AssistantProvider>
+              <App />
+            </AssistantProvider>
           </TabsProvider>
         </MemoryRouter>
       </QueryClientProvider>

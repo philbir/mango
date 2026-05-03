@@ -1,13 +1,9 @@
 import OpenAI from "openai";
 import {
-  type AiCommandInput,
-  type AiCommandResult,
+  type AiChatInput,
+  type AiChatResult,
   type AiProvider,
-  type AiQueryInput,
-  type AiQueryResult,
   type ModelOption,
-  buildCommandSystemPrompt,
-  buildSystemPrompt,
 } from "./types.js";
 
 const FALLBACK_OPENAI_MODELS: ModelOption[] = [
@@ -60,7 +56,7 @@ export const buildOpenAiProvider = (
         return FALLBACK_OPENAI_MODELS;
       }
     },
-    async query(input: AiQueryInput): Promise<AiQueryResult> {
+    async chat(input: AiChatInput): Promise<AiChatResult> {
       if (!apiKey) {
         throw new Error("AI_API_KEY is not set.");
       }
@@ -68,126 +64,14 @@ export const buildOpenAiProvider = (
       const client = new OpenAI({ apiKey, baseURL: baseUrl });
       const completion = await client.chat.completions.create({
         model: useModel,
-        temperature: 0.2,
+        temperature: 0.4,
         messages: [
-          {
-            role: "system",
-            content: buildSystemPrompt(input.collection, input.schemaText),
-          },
-          { role: "user", content: input.prompt },
+          { role: "system", content: input.systemPrompt },
+          ...input.messages.map((m) => ({ role: m.role, content: m.content })),
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "propose_filter",
-              description:
-                "Propose a MongoDB filter document for the user's query.",
-              parameters: {
-                type: "object",
-                properties: {
-                  filter: {
-                    type: "object",
-                    description: "The MongoDB filter document.",
-                    additionalProperties: true,
-                  },
-                  explanation: {
-                    type: "string",
-                    description:
-                      "One or two sentences explaining what the filter does.",
-                  },
-                },
-                required: ["filter", "explanation"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: {
-          type: "function",
-          function: { name: "propose_filter" },
-        },
       });
-
-      const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
-      if (!toolCall || toolCall.type !== "function") {
-        throw new Error(
-          "AI did not return a tool call. Try rephrasing your prompt.",
-        );
-      }
-
-      const args = JSON.parse(toolCall.function.arguments) as {
-        filter: Record<string, unknown>;
-        explanation: string;
-      };
-
-      return {
-        filter: args.filter ?? {},
-        explanation: args.explanation ?? "",
-        model: completion.model,
-      };
-    },
-    async generateCommand(input: AiCommandInput): Promise<AiCommandResult> {
-      if (!apiKey) {
-        throw new Error("AI_API_KEY is not set.");
-      }
-      const useModel = input.model ?? model;
-      const client = new OpenAI({ apiKey, baseURL: baseUrl });
-      const completion = await client.chat.completions.create({
-        model: useModel,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: buildCommandSystemPrompt(input.schemaText) },
-          { role: "user", content: input.prompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "propose_command",
-              description:
-                "Propose a single mongo-shell JavaScript expression for the user's request.",
-              parameters: {
-                type: "object",
-                properties: {
-                  command: {
-                    type: "string",
-                    description:
-                      "JavaScript expression like db.users.find({age:{$gte:18}}).sort({name:1}).limit(20)",
-                  },
-                  explanation: {
-                    type: "string",
-                    description:
-                      "One or two sentences explaining what the command does.",
-                  },
-                },
-                required: ["command", "explanation"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: {
-          type: "function",
-          function: { name: "propose_command" },
-        },
-      });
-
-      const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
-      if (!toolCall || toolCall.type !== "function") {
-        throw new Error(
-          "AI did not return a tool call. Try rephrasing your prompt.",
-        );
-      }
-      const args = JSON.parse(toolCall.function.arguments) as {
-        command: string;
-        explanation: string;
-      };
-      return {
-        command: args.command ?? "",
-        explanation: args.explanation ?? "",
-        model: completion.model,
-      };
+      const text = completion.choices[0]?.message?.content ?? "";
+      return { text, model: completion.model };
     },
   };
 };

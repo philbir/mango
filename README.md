@@ -6,6 +6,7 @@
 
   <h1>Mango</h1>
   <p><strong>A friendly MongoDB workbench.</strong> Browse, edit, query, and shell into any MongoDB — with an AI assistant that understands your schema.</p>
+  <p><a href="https://philbir.github.io/mango/"><strong>Landing page and docs</strong></a></p>
 
   <p>
     <a href="https://philbir.github.io/mango/"><img alt="Docs" src="https://img.shields.io/badge/docs-GitHub%20Pages-14945f"></a>

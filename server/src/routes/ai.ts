@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { getProvider, invalidateProvider } from "../providers/index.js";
+import { buildChatSystemPrompt } from "../providers/types.js";
 import { redactErrorMessage, validateAiBaseUrl } from "../security.js";
 import {
   enrichWithDistinctValues,
@@ -16,21 +17,6 @@ import {
 } from "../store/aiSettings.js";
 
 export const aiRoute = new Hono();
-
-const queryBody = z.object({
-  connectionId: z.string().min(1),
-  collection: z.string().min(1),
-  prompt: z.string().min(1).max(2000),
-  model: z.string().optional(),
-  database: z.string().optional(),
-});
-
-const commandBody = z.object({
-  connectionId: z.string().min(1),
-  prompt: z.string().min(1).max(2000),
-  model: z.string().optional(),
-  database: z.string().optional(),
-});
 
 const configBody = z.object({
   provider: z.enum(["openai", "copilot", "claude-code"]),
@@ -126,7 +112,33 @@ aiRoute.get("/models", async (c) => {
   }
 });
 
-aiRoute.post("/query", async (c) => {
+const chatBody = z.object({
+  connectionId: z.string().min(1).optional(),
+  database: z.string().optional(),
+  collection: z.string().optional(),
+  mode: z
+    .enum(["collection", "console", "shell", "general", "indexes"])
+    .default("general"),
+  model: z.string().optional(),
+  /** Pre-rendered context the UI can hand the assistant for index mode. */
+  context: z
+    .object({
+      indexes: z.string().optional(),
+      explain: z.string().optional(),
+    })
+    .optional(),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(8000),
+      }),
+    )
+    .min(1)
+    .max(40),
+});
+
+aiRoute.post("/chat", async (c) => {
   const provider = getProvider();
   if (!provider.configured) {
     return c.json(
@@ -135,40 +147,54 @@ aiRoute.post("/query", async (c) => {
     );
   }
 
-  const parsed = queryBody.safeParse(await c.req.json().catch(() => ({})));
+  const parsed = chatBody.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
 
-  const { client } = await getMongoClientFor(parsed.data.connectionId);
-  const dbName = databaseNameFor(parsed.data.connectionId, parsed.data.database);
-  const db = client.db(dbName);
+  const { mode, messages, model, connectionId, database, collection, context } =
+    parsed.data;
 
+  let dbName: string | null = null;
   let schemaText = "";
-  try {
-    const schema = await sampleCollectionSchema(db, parsed.data.collection, 30, {
-      maxTimeMS: config.mongoMaxTimeMS,
-    });
-    const settings = readAiSettings();
-    if (settings?.allowDataSampling) {
-      await enrichWithDistinctValues(db, parsed.data.collection, schema.fields);
+  if (connectionId) {
+    try {
+      const { client } = await getMongoClientFor(connectionId);
+      dbName = databaseNameFor(connectionId, database);
+      const db = client.db(dbName);
+      if ((mode === "collection" || mode === "indexes") && collection) {
+        const schema = await sampleCollectionSchema(db, collection, 30, {
+          maxTimeMS: config.mongoMaxTimeMS,
+        });
+        const settings = readAiSettings();
+        if (settings?.allowDataSampling) {
+          await enrichWithDistinctValues(db, collection, schema.fields);
+        }
+        schemaText = renderSchemaForPrompt(schema.fields);
+      } else if (mode === "console" || mode === "shell" || mode === "general") {
+        schemaText = await sampleDatabaseSchema(db, {
+          maxTimeMS: config.mongoMaxTimeMS,
+        });
+      }
+    } catch (e) {
+      schemaText = `(could not sample schema: ${redactErrorMessage(e)})`;
     }
-    schemaText = renderSchemaForPrompt(schema.fields);
-  } catch (e) {
-    return c.json(
-      {
-        error: `Could not sample schema: ${redactErrorMessage(e)}`,
-      },
-      400,
-    );
   }
 
+  const systemPrompt = buildChatSystemPrompt({
+    mode,
+    databaseName: dbName,
+    collection: collection ?? null,
+    schemaText,
+    indexesText: context?.indexes ?? null,
+    explainText: context?.explain ?? null,
+  });
+
   try {
-    const result = await provider.query({
-      collection: parsed.data.collection,
-      prompt: parsed.data.prompt,
-      schemaText,
-      model: parsed.data.model,
+    const result = await provider.chat({
+      systemPrompt,
+      messages,
+      model,
     });
     return c.json({ ...result, provider: provider.name });
   } catch (e) {
@@ -179,47 +205,3 @@ aiRoute.post("/query", async (c) => {
   }
 });
 
-aiRoute.post("/command", async (c) => {
-  const provider = getProvider();
-  if (!provider.configured) {
-    return c.json(
-      { error: `AI (${provider.name}) is not configured. ${provider.setupHint}` },
-      503,
-    );
-  }
-
-  const parsed = commandBody.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) {
-    return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
-  }
-
-  const { client } = await getMongoClientFor(parsed.data.connectionId);
-  const dbName = databaseNameFor(parsed.data.connectionId, parsed.data.database);
-  const db = client.db(dbName);
-
-  let schemaText = "";
-  try {
-    schemaText = await sampleDatabaseSchema(db, { maxTimeMS: config.mongoMaxTimeMS });
-  } catch (e) {
-    return c.json(
-      {
-        error: `Could not sample database schema: ${redactErrorMessage(e)}`,
-      },
-      400,
-    );
-  }
-
-  try {
-    const result = await provider.generateCommand({
-      prompt: parsed.data.prompt,
-      schemaText,
-      model: parsed.data.model,
-    });
-    return c.json({ ...result, provider: provider.name });
-  } catch (e) {
-    return c.json(
-      { error: `AI request failed: ${redactErrorMessage(e)}` },
-      502,
-    );
-  }
-});

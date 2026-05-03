@@ -2,14 +2,10 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
-  type AiCommandInput,
-  type AiCommandResult,
+  type AiChatInput,
+  type AiChatResult,
   type AiProvider,
-  type AiQueryInput,
-  type AiQueryResult,
   type ModelOption,
-  buildCommandSystemPrompt,
-  buildSystemPrompt,
 } from "./types.js";
 
 const detectCopilotAuth = (): boolean => {
@@ -40,38 +36,6 @@ const getClient = async () => {
   await client.start();
   cachedClient = client;
   return cachedClient;
-};
-
-const COPILOT_INSTRUCTIONS = `
-
-You will respond in EXACTLY this format and nothing else:
-
-\`\`\`json
-{
-  "filter": <the MongoDB filter document>,
-  "explanation": "<one sentence>"
-}
-\`\`\`
-
-Do not invoke any tool. Do not write any prose outside the fenced JSON block.`;
-
-const extractJsonObject = (text: string): unknown | null => {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const candidate = fenced ? fenced[1] : text;
-  if (!candidate) return null;
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // Try to locate the first JSON object in the text
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) return null;
-    try {
-      return JSON.parse(candidate.slice(start, end + 1));
-    } catch {
-      return null;
-    }
-  }
 };
 
 export interface CopilotBuildOptions {
@@ -120,13 +84,12 @@ export const buildCopilotProvider = (
         ];
       }
     },
-    async query(input: AiQueryInput): Promise<AiQueryResult> {
+    async chat(input: AiChatInput): Promise<AiChatResult> {
       const sdk = await import("@github/copilot-sdk").catch((e) => {
         throw new Error(
           `Could not load @github/copilot-sdk: ${e instanceof Error ? e.message : String(e)}`,
         );
       });
-
       const client = (await getClient()) as {
         createSession: (cfg: object) => Promise<{
           on: (event: string, handler: (e: unknown) => void) => () => void;
@@ -134,125 +97,45 @@ export const buildCopilotProvider = (
           disconnect: () => Promise<void>;
         }>;
       };
-
       const useModel = input.model ?? model;
+      const history = input.messages
+        .map((m) =>
+          m.role === "user"
+            ? `User: ${m.content}`
+            : `Assistant: ${m.content}`,
+        )
+        .join("\n\n");
+      const lastUser = input.messages
+        .slice()
+        .reverse()
+        .find((m) => m.role === "user");
+      if (!lastUser) {
+        return { text: "", model: useModel };
+      }
       const session = await client.createSession({
         model: useModel,
         onPermissionRequest: (sdk as { approveAll: unknown }).approveAll,
         systemMessage: {
           mode: "replace" as const,
-          content:
-            buildSystemPrompt(input.collection, input.schemaText) +
-            COPILOT_INSTRUCTIONS,
+          content: input.systemPrompt,
         },
       });
-
       let lastMessage = "";
       session.on("assistant.message", (event: unknown) => {
         const data = (event as { data?: { content?: string } }).data;
         if (data?.content) lastMessage = data.content;
       });
-
       try {
-        await session.sendAndWait({ prompt: input.prompt });
-      } finally {
-        await session.disconnect().catch(() => {
-          /* ignore */
+        await session.sendAndWait({
+          prompt:
+            input.messages.length > 1
+              ? `Conversation so far:\n\n${history}\n\nReply to the latest user message.`
+              : lastUser.content,
         });
-      }
-
-      const parsed = extractJsonObject(lastMessage);
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed) ||
-        !("filter" in (parsed as Record<string, unknown>))
-      ) {
-        throw new Error(
-          `Could not extract a filter JSON from the model response. Raw: ${
-            lastMessage.slice(0, 240) || "(empty)"
-          }`,
-        );
-      }
-
-      const obj = parsed as {
-        filter: Record<string, unknown>;
-        explanation?: string;
-      };
-
-      return {
-        filter: obj.filter ?? {},
-        explanation: obj.explanation ?? "",
-        model: useModel,
-      };
-    },
-    async generateCommand(input: AiCommandInput): Promise<AiCommandResult> {
-      const sdk = await import("@github/copilot-sdk").catch((e) => {
-        throw new Error(
-          `Could not load @github/copilot-sdk: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      });
-      const client = (await getClient()) as {
-        createSession: (cfg: object) => Promise<{
-          on: (event: string, handler: (e: unknown) => void) => () => void;
-          sendAndWait: (opts: { prompt: string }) => Promise<unknown>;
-          disconnect: () => Promise<void>;
-        }>;
-      };
-      const useModel = input.model ?? model;
-      const session = await client.createSession({
-        model: useModel,
-        onPermissionRequest: (sdk as { approveAll: unknown }).approveAll,
-        systemMessage: {
-          mode: "replace" as const,
-          content:
-            buildCommandSystemPrompt(input.schemaText) +
-            `
-
-You will respond in EXACTLY this format and nothing else:
-
-\`\`\`json
-{
-  "command": "<the JavaScript expression>",
-  "explanation": "<one sentence>"
-}
-\`\`\`
-
-Do not invoke any tool. Do not write any prose outside the fenced JSON block.`,
-        },
-      });
-
-      let lastMessage = "";
-      session.on("assistant.message", (event: unknown) => {
-        const data = (event as { data?: { content?: string } }).data;
-        if (data?.content) lastMessage = data.content;
-      });
-
-      try {
-        await session.sendAndWait({ prompt: input.prompt });
       } finally {
         await session.disconnect().catch(() => {});
       }
-
-      const parsed = extractJsonObject(lastMessage);
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed) ||
-        !("command" in (parsed as Record<string, unknown>))
-      ) {
-        throw new Error(
-          `Could not extract a command from the model response. Raw: ${
-            lastMessage.slice(0, 240) || "(empty)"
-          }`,
-        );
-      }
-      const obj = parsed as { command?: string; explanation?: string };
-      return {
-        command: obj.command ?? "",
-        explanation: obj.explanation ?? "",
-        model: useModel,
-      };
+      return { text: lastMessage, model: useModel };
     },
   };
 };

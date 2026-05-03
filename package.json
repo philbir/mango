@@ -3,9 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "description": "Mango — a friendly MongoDB workbench. Browser, editor, AI query assistant, and shell. Runs as Aspire extension, Docker container, or desktop app.",
+  "homepage": "https://philbir.github.io/mango/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/philbir/mango.git"
+  },
   "workspaces": [
     "server",
     "ui",
+    "docs-site",
     "desktop"
   ],
   "scripts": {
@@ -15,6 +21,9 @@
     "build": "yarn workspace @mango/ui build && yarn workspace @mango/server build",
     "start": "yarn workspace @mango/server start",
     "test": "yarn workspace @mango/server test",
+    "docs:dev": "yarn workspace @mango/docs-site dev",
+    "docs:build": "yarn workspace @mango/docs-site build",
+    "docs:preview": "yarn workspace @mango/docs-site preview",
     "aspire": "yarn install && yarn workspace @mango/ui build && yarn workspace @mango/server dev",
     "tauri": "yarn workspace @mango/desktop tauri",
     "tauri:dev": "yarn workspace @mango/desktop dev",

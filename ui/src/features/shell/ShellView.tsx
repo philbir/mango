@@ -1,8 +1,19 @@
-import { IconPlayerPlayFilled, IconTerminal2 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import {
+  IconBraces,
+  IconPlayerPlayFilled,
+  IconTerminal2,
+} from "@tabler/icons-react";
+import { useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
 import { InteractiveJsonView } from "../../components/JsonView";
-import { MonacoJsonInput } from "../../components/MonacoJsonInput";
+import {
+  MonacoJsonInput,
+  type MonacoJsonInputHandle,
+} from "../../components/MonacoJsonInput";
+import {
+  type ApplyKind,
+  useAssistantBinding,
+} from "../assistant/AssistantContext";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 
@@ -25,7 +36,11 @@ const PRESETS: Array<{ label: string; command: string }> = [
   },
 ];
 
-export const ShellView = () => {
+interface ShellViewProps {
+  tabId?: string;
+}
+
+export const ShellView = ({ tabId }: ShellViewProps = {}) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
   const [text, setText] = useState('{"ping":1}');
@@ -34,6 +49,20 @@ export const ShellView = () => {
   const [error, setError] = useState<string | null>(null);
 
   const shellCompletion = useMemo(() => ({ commandKeywords: true }), []);
+  const editorRef = useRef<MonacoJsonInputHandle | null>(null);
+
+  const handlerSupports: ApplyKind[] = useMemo(() => ["shell"], []);
+  useAssistantBinding({
+    key: tabId ? `tab:${tabId}` : "shell",
+    mode: "shell",
+    collection: null,
+    handlers: {
+      supports: handlerSupports,
+      apply: (kind, payload) => {
+        if (kind === "shell") setText(payload);
+      },
+    },
+  });
 
   const onRun = async () => {
     if (!activeId) {
@@ -56,7 +85,7 @@ export const ShellView = () => {
 
   return (
     <div className="flex h-full flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
         <IconTerminal2 size={18} className="text-sky-600 dark:text-sky-400" />
         <div className="flex-1">
           <div className="font-mono text-base text-slate-900 dark:text-slate-100">
@@ -83,10 +112,21 @@ export const ShellView = () => {
               {p.label}
             </button>
           ))}
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => editorRef.current?.format()}
+            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Format JSON (⇧⌥F)"
+          >
+            <IconBraces size={11} />
+            Format
+          </button>
         </div>
         <div className="flex items-stretch gap-2">
           <div className="min-h-[140px] flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
             <MonacoJsonInput
+              ref={editorRef}
               value={text}
               onChange={setText}
               minHeight="140px"

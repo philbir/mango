@@ -20,6 +20,9 @@ import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { useTabs } from "../tabs/TabsContext";
 
 export const Sidebar = () => {
+  const docsUrl =
+    import.meta.env.VITE_MANGO_DOCS_URL ?? "https://philbir.github.io/mango/";
+  const version = import.meta.env.VITE_MANGO_VERSION ?? "v0.1.0";
   const { activeId } = useActiveConnection();
   const { database, setDatabase } = useActiveDatabase();
   const { activeTab, openCollection, openConsole, openShell } = useTabs();
@@ -183,7 +186,13 @@ export const Sidebar = () => {
         )}
       </div>
 
-      <div className="flex items-center gap-2 border-t border-slate-200 px-3 py-1.5 text-[10px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
+      <a
+        href={docsUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-2 border-t border-slate-200 px-3 py-1.5 text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800/70 dark:hover:text-slate-300"
+        title="Open Mango docs"
+      >
         <img
           src="/assets/mango-mark.svg"
           alt=""
@@ -196,8 +205,8 @@ export const Sidebar = () => {
           className="hidden h-4 w-4 shrink-0 dark:block"
           draggable={false}
         />
-        <span>Mango · v0.1</span>
-      </div>
+        <span>Mango · {version}</span>
+      </a>
       <div
         onMouseDown={onResizeStart}
         className="absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-sky-500/40"

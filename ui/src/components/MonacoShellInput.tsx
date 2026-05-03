@@ -1,5 +1,12 @@
 import * as monaco from "monaco-editor";
-import { useEffect, useId, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import { formatLikeJs } from "./MonacoJsonInput";
 import { useSettings } from "../settings";
 
 interface Props {
@@ -270,81 +277,135 @@ export const setMongoShellSchemas = (
   schemasRef = byCollection;
 };
 
-export const MonacoShellInput = ({
-  value,
-  onChange,
-  collections,
-  minHeight = "200px",
-  showLineNumbers = true,
-  onSubmit,
-}: Props) => {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onSubmitRef = useRef(onSubmit);
-  onSubmitRef.current = onSubmit;
-  const { theme } = useSettings();
-  const idHint = useId();
+export interface MonacoShellInputHandle {
+  format: () => void;
+}
 
-  // Keep collections list current for the global completion provider.
-  setMongoShellCollections(collections);
+export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
+  function MonacoShellInput(
+    {
+      value,
+      onChange,
+      collections,
+      minHeight = "200px",
+      showLineNumbers = true,
+      onSubmit,
+    },
+    ref,
+  ) {
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+    const onSubmitRef = useRef(onSubmit);
+    onSubmitRef.current = onSubmit;
+    const { theme } = useSettings();
+    const idHint = useId();
 
-  useEffect(() => {
-    if (!hostRef.current) return;
-    ensureMongoShellCompletionRegistered();
+    // Keep collections list current for the global completion provider.
+    setMongoShellCollections(collections);
 
-    const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
-    const uri = monaco.Uri.parse(`inmemory://mango-shell/${safeId}.js`);
-    const existing = monaco.editor.getModel(uri);
-    const model =
-      existing ?? monaco.editor.createModel(value, "javascript", uri);
-    if (existing && existing.getValue() !== value) {
-      existing.setValue(value);
-    }
-
-    const editor = monaco.editor.create(hostRef.current, {
-      model,
-      theme: theme === "dark" ? "vs-dark" : "vs",
-      lineNumbers: showLineNumbers ? "on" : "off",
-      minimap: { enabled: false },
-      automaticLayout: true,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      wordWrap: "on",
-      fontSize: 13,
-      fontFamily:
-        "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-    });
-    editorRef.current = editor;
-
-    const sub = model.onDidChangeContent(() => {
-      onChangeRef.current(model.getValue());
-    });
-
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-      () => onSubmitRef.current?.(),
+    useImperativeHandle(
+      ref,
+      () => ({
+        format: () => {
+          const editor = editorRef.current;
+          if (!editor) return;
+          formatShellExpression(editor);
+        },
+      }),
+      [],
     );
 
-    return () => {
-      sub.dispose();
-      editor.dispose();
-      // Don't dispose the model — Monaco may reuse it for the same uri.
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    useEffect(() => {
+      if (!hostRef.current) return;
+      ensureMongoShellCompletionRegistered();
 
-  // Theme + value sync.
-  useEffect(() => {
-    monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
-  }, [theme]);
+      const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
+      const uri = monaco.Uri.parse(`inmemory://mango-shell/${safeId}.js`);
+      const existing = monaco.editor.getModel(uri);
+      const model =
+        existing ?? monaco.editor.createModel(value, "javascript", uri);
+      if (existing && existing.getValue() !== value) {
+        existing.setValue(value);
+      }
 
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    if (editor.getValue() !== value) editor.setValue(value);
-  }, [value]);
+      const editor = monaco.editor.create(hostRef.current, {
+        model,
+        theme: theme === "dark" ? "vs-dark" : "vs",
+        lineNumbers: showLineNumbers ? "on" : "off",
+        minimap: { enabled: false },
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+        tabSize: 2,
+        wordWrap: "on",
+        fontSize: 13,
+        fontFamily:
+          "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        formatOnPaste: true,
+      });
+      editorRef.current = editor;
 
-  return <div ref={hostRef} style={{ minHeight, height: "100%" }} />;
+      const sub = model.onDidChangeContent(() => {
+        onChangeRef.current(model.getValue());
+      });
+
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+        () => onSubmitRef.current?.(),
+      );
+
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+        () => formatShellExpression(editor),
+      );
+      editor.addCommand(
+        monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+        () => formatShellExpression(editor),
+      );
+
+      return () => {
+        sub.dispose();
+        editor.dispose();
+        // Don't dispose the model — Monaco may reuse it for the same uri.
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Theme + value sync.
+    useEffect(() => {
+      monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
+    }, [theme]);
+
+    useEffect(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      if (editor.getValue() !== value) editor.setValue(value);
+    }, [value]);
+
+    return <div ref={hostRef} style={{ minHeight, height: "100%" }} />;
+  },
+);
+
+/**
+ * Pretty-print a mongo-shell expression. Uses the same JS-aware tokenizing
+ * formatter as the JSON editor, so it handles unquoted keys, helpers like
+ * `ObjectId("…")`, regex literals, and template strings without choking the
+ * way `JSON.parse` does.
+ */
+const formatShellExpression = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+) => {
+  const model = editor.getModel();
+  if (!model) return;
+  const text = model.getValue();
+  const formatted = formatLikeJs(text);
+  if (formatted === null || formatted === text) return;
+  editor.executeEdits("format-shell", [
+    {
+      range: model.getFullModelRange(),
+      text: formatted,
+      forceMoveMarkers: true,
+    },
+  ]);
 };

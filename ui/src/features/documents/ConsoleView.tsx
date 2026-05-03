@@ -1,17 +1,22 @@
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
+  IconBraces,
   IconLoader2,
   IconPlayerPlayFilled,
-  IconSparkles,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString } from "../../api/client";
 import {
   MonacoShellInput,
+  type MonacoShellInputHandle,
   setMongoShellSchemas,
 } from "../../components/MonacoShellInput";
 import { useResize } from "../../components/useResize";
 import { type PageSize, useSettings } from "../../settings";
+import {
+  type ApplyKind,
+  useAssistantBinding,
+} from "../assistant/AssistantContext";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { DocumentEditor } from "../editor/DocumentEditor";
@@ -19,18 +24,18 @@ import { ResultPanel, type ResultFormat } from "./ResultPanel";
 
 interface Props {
   initialCommand?: string;
+  tabId?: string;
 }
 
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 
-export const ConsoleView = ({ initialCommand = "db.\n" }: Props) => {
+export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
   const { pageSize, setPageSize } = useSettings();
   const [code, setCode] = useState(initialCommand);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiOpen, setAiOpen] = useState(false);
   const [resultView, setResultView] = useState<ResultFormat>("table");
+  const editorRef = useRef<MonacoShellInputHandle | null>(null);
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Pin the command for paging — we re-run the same command across page changes
@@ -103,27 +108,41 @@ export const ConsoleView = ({ initialCommand = "db.\n" }: Props) => {
     enabled: !!activeId && !!pinned,
   });
 
-  const ai = useMutation({
-    mutationFn: async () => {
-      if (!activeId) throw new Error("No active connection.");
-      return api.generateAiCommand({
-        connectionId: activeId,
-        prompt: aiPrompt.trim(),
-        database: database ?? undefined,
-      });
-    },
-    onSuccess: (result) => {
-      setCode(result.command);
-      setAiOpen(false);
-    },
-  });
-
   const onRun = () => {
     const cmd = code.trim();
     if (!cmd) return;
     setPage(0);
     setPinned(cmd);
   };
+
+  const handlerSupports: ApplyKind[] = useMemo(() => ["console"], []);
+  useAssistantBinding({
+    key: tabId ? `tab:${tabId}` : "console",
+    mode: "console",
+    collection: null,
+    handlers: {
+      supports: handlerSupports,
+      apply: (kind, payload) => {
+        if (kind === "console") {
+          setCode(payload);
+        }
+      },
+    },
+  });
+
+  // Pick up commands sent from other views (e.g. CollectionView routing a
+  // `mango-console` block from the assistant into the active console tab).
+  useEffect(() => {
+    const onSet = (e: Event) => {
+      const detail = (e as CustomEvent<{ key: string; command: string }>).detail;
+      if (!detail) return;
+      if (detail.key === tabId || detail.key === "*") {
+        setCode(detail.command);
+      }
+    };
+    window.addEventListener("mango:console:set", onSet);
+    return () => window.removeEventListener("mango:console:set", onSet);
+  }, [tabId]);
 
   const resultDocs = Array.isArray(run.data?.result)
     ? (run.data!.result as Array<Record<string, unknown>>)
@@ -144,13 +163,6 @@ export const ConsoleView = ({ initialCommand = "db.\n" }: Props) => {
         ? run.error.message
         : null);
 
-  const aiError =
-    ai.error instanceof ApiError
-      ? ai.error.message
-      : ai.error instanceof Error
-        ? ai.error.message
-        : null;
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div
@@ -164,79 +176,22 @@ export const ConsoleView = ({ initialCommand = "db.\n" }: Props) => {
           <div className="flex-1" />
           <button
             type="button"
-            onClick={() => setAiOpen((o) => !o)}
-            className={[
-              "flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium",
-              aiOpen
-                ? "border-violet-400 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-900/30 dark:text-violet-200"
-                : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800",
-            ].join(" ")}
+            onClick={() => editorRef.current?.format()}
+            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Format command (⇧⌥F or ⌘⇧F)"
           >
-            <IconSparkles size={11} />
-            AI
+            <IconBraces size={11} />
+            Format
           </button>
-          <kbd className="rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <kbd className="mr-12 rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
             ⌘/Ctrl + Enter
           </kbd>
         </div>
 
-        {aiOpen && (
-          <div className="flex items-stretch gap-2 border-b border-slate-200 bg-violet-50/50 px-4 py-2 dark:border-slate-800 dark:bg-violet-900/10">
-            <input
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  aiPrompt.trim() &&
-                  !ai.isPending
-                ) {
-                  e.preventDefault();
-                  ai.mutate();
-                }
-              }}
-              placeholder='Describe what to run, e.g. "delete users that never logged in"'
-              className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-            <button
-              type="button"
-              onClick={() => ai.mutate()}
-              disabled={!aiPrompt.trim() || ai.isPending}
-              className="flex items-center gap-1 rounded bg-violet-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-400 disabled:opacity-50"
-            >
-              {ai.isPending ? (
-                <>
-                  <IconLoader2 size={12} className="animate-spin" />
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <IconSparkles size={12} />
-                  Generate
-                </>
-              )}
-            </button>
-          </div>
-        )}
-        {ai.data?.explanation && (
-          <div className="border-b border-violet-200 bg-violet-50 px-4 py-1 text-[11px] text-violet-800 dark:border-violet-700/30 dark:bg-violet-900/20 dark:text-violet-200">
-            <span className="font-medium">
-              {ai.data.provider} · {ai.data.model}
-            </span>
-            {" — "}
-            {ai.data.explanation}
-          </div>
-        )}
-        {aiError && (
-          <div className="border-b border-red-200 bg-red-50 px-4 py-1 text-[11px] text-red-700 dark:border-red-700/30 dark:bg-red-900/20 dark:text-red-300">
-            {aiError}
-          </div>
-        )}
-
         <div className="flex flex-1 items-stretch overflow-hidden">
           <div className="flex-1 overflow-hidden bg-white dark:bg-slate-900">
             <MonacoShellInput
+              ref={editorRef}
               value={code}
               onChange={setCode}
               collections={collections}
