@@ -16,6 +16,7 @@ import { aiRoute } from "./routes/ai.js";
 import { collectionsRoute } from "./routes/collections.js";
 import { connectionsRoute } from "./routes/connections.js";
 import { consoleRoute } from "./routes/console.js";
+import { discoveryRoute } from "./routes/discovery.js";
 import { documentsRoute } from "./routes/documents.js";
 import { infoRoute } from "./routes/info.js";
 import { schemaRoute } from "./routes/schema.js";
@@ -91,6 +92,7 @@ app.route("/api/connections/:cid", connectionScoped);
 
 app.route("/api/ai", aiRoute);
 app.route("/api/system", systemRoute);
+app.route("/api/discovery", discoveryRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {

@@ -104,7 +104,10 @@ export const Sidebar = () => {
           <span className="flex-1 truncate font-mono text-[11px] text-slate-700 dark:text-slate-200">
             {database}
           </span>
-          <NewMenu onNewConsole={openConsole} onNewShell={openShell} />
+          <NewMenu
+            onNewConsole={() => openConsole(activeId)}
+            onNewShell={() => openShell(activeId)}
+          />
         </div>
       )}
 
@@ -164,7 +167,7 @@ export const Sidebar = () => {
                   <li key={c.name}>
                     <button
                       type="button"
-                      onClick={() => openCollection(c.name)}
+                      onClick={() => openCollection(activeId!, c.name)}
                       className={[
                         "flex w-full items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight",
                         isActive

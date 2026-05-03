@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useServerConfig } from "./useServerConfig";
 
@@ -23,18 +23,31 @@ const writeStored = (id: string | null) => {
 };
 
 /**
+ * Components rendered inside an active tab register the tab's connection ID
+ * via this context. When set, `useActiveConnection().activeId` returns that
+ * value instead of the picker selection — so views always operate against the
+ * connection their tab was opened with, even if the user later flips the
+ * picker to a different connection.
+ *
+ * Outside the provider (Sidebar, ConnectionPicker), the picker selection is
+ * returned. `setActiveId` always controls the picker, regardless of context.
+ */
+export const ViewConnectionContext = createContext<string | null>(null);
+
+/**
  * Resolves the currently active connection ID.
  *
- * Order of resolution:
- *   1. localStorage (last selected by the user)
- *   2. Most recently used connection from the server
- *   3. First connection in the list (alphabetical)
- *   4. null — caller should prompt the user to add one
+ *   1. ViewConnectionContext (when rendered inside an active tab)
+ *   2. localStorage picker selection
+ *   3. Most recently used connection from the server
+ *   4. First connection in the list (alphabetical)
+ *   5. null — caller should prompt the user to add one
  */
 export const useActiveConnection = () => {
   const config = useServerConfig();
   const isStandalone = config.mode === "standalone";
-  const [activeId, setActiveIdState] = useState<string | null>(() => readStored());
+  const viewCid = useContext(ViewConnectionContext);
+  const [pickerId, setPickerIdState] = useState<string | null>(() => readStored());
 
   const list = useQuery({
     queryKey: ["connections"],
@@ -44,36 +57,37 @@ export const useActiveConnection = () => {
 
   useEffect(() => {
     if (isStandalone) {
-      // Server is the source of truth; ignore localStorage entirely.
       const pinned = config.standaloneConnectionId ?? null;
-      if (pinned !== activeId) setActiveIdState(pinned);
+      if (pinned !== pickerId) setPickerIdState(pinned);
       return;
     }
     if (!list.data) return;
     const ids = list.data.connections.map((c) => c.id);
     if (ids.length === 0) {
-      if (activeId !== null) {
-        setActiveIdState(null);
+      if (pickerId !== null) {
+        setPickerIdState(null);
         writeStored(null);
       }
       return;
     }
-    if (activeId && ids.includes(activeId)) return;
-    // Either nothing selected, or stored id no longer exists — pick a default.
+    if (pickerId && ids.includes(pickerId)) return;
     const fallback = list.data.connections[0]!.id;
-    setActiveIdState(fallback);
+    setPickerIdState(fallback);
     writeStored(fallback);
-  }, [list.data, activeId, isStandalone, config.standaloneConnectionId]);
+  }, [list.data, pickerId, isStandalone, config.standaloneConnectionId]);
 
   const setActiveId = (id: string | null) => {
     if (isStandalone) return;
-    setActiveIdState(id);
+    setPickerIdState(id);
     writeStored(id);
   };
 
-  const active = list.data?.connections.find((c) => c.id === activeId) ?? null;
+  const effectiveId = viewCid ?? pickerId;
+  const active =
+    list.data?.connections.find((c) => c.id === effectiveId) ?? null;
   return {
-    activeId,
+    activeId: effectiveId,
+    pickerId,
     active,
     setActiveId,
     connections: list.data?.connections ?? [],

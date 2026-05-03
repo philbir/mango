@@ -1,9 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAssistant } from "./features/assistant/AssistantContext";
 import { AssistantPanel } from "./features/assistant/AssistantPanel";
 import { AssistantToggle } from "./features/assistant/AssistantToggle";
 import { Sidebar } from "./features/collections/Sidebar";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
+import {
+  ViewConnectionContext,
+  useActiveConnection,
+} from "./features/connections/useActiveConnection";
 import { CollectionView } from "./features/documents/CollectionView";
 import { ConsoleView } from "./features/documents/ConsoleView";
 import { ShellView } from "./features/shell/ShellView";
@@ -13,8 +17,9 @@ import { useSettings } from "./settings";
 
 export const App = () => {
   const { tabMode } = useSettings();
-  const { activeTab } = useTabs();
+  const { activeTab, closeTab } = useTabs();
   const { toggle } = useAssistant();
+  const { pickerId, setActiveId } = useActiveConnection();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,6 +32,30 @@ export const App = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggle]);
 
+  // Multi-tab: switching tab follows that tab's connection in the picker
+  // (so the sidebar shows matching databases/collections).
+  useEffect(() => {
+    if (!tabMode) return;
+    if (!activeTab) return;
+    if (activeTab.connectionId !== pickerId) {
+      setActiveId(activeTab.connectionId);
+    }
+  }, [tabMode, activeTab, pickerId, setActiveId]);
+
+  // Single-tab: when the picker connection changes, drop any open tab —
+  // the page belongs to the previous connection and would query the wrong DB.
+  const lastPickerRef = useRef<string | null>(pickerId);
+  useEffect(() => {
+    if (tabMode) {
+      lastPickerRef.current = pickerId;
+      return;
+    }
+    if (lastPickerRef.current !== pickerId) {
+      lastPickerRef.current = pickerId;
+      if (activeTab) closeTab(activeTab.id);
+    }
+  }, [tabMode, pickerId, activeTab, closeTab]);
+
   return (
     <div className="flex h-full flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <KeyHealthBanner />
@@ -36,18 +65,22 @@ export const App = () => {
           {tabMode && <TabBar />}
           <div className="flex flex-1 flex-col overflow-hidden">
             {!activeTab && <EmptyState />}
-            {activeTab?.kind === "collection" && activeTab.collection && (
-              <CollectionView
-                key={activeTab.id}
-                tabId={activeTab.id}
-                name={activeTab.collection}
-              />
-            )}
-            {activeTab?.kind === "console" && (
-              <ConsoleView key={activeTab.id} tabId={activeTab.id} />
-            )}
-            {activeTab?.kind === "shell" && (
-              <ShellView key={activeTab.id} tabId={activeTab.id} />
+            {activeTab && (
+              <ViewConnectionContext.Provider value={activeTab.connectionId}>
+                {activeTab.kind === "collection" && activeTab.collection && (
+                  <CollectionView
+                    key={activeTab.id}
+                    tabId={activeTab.id}
+                    name={activeTab.collection}
+                  />
+                )}
+                {activeTab.kind === "console" && (
+                  <ConsoleView key={activeTab.id} tabId={activeTab.id} />
+                )}
+                {activeTab.kind === "shell" && (
+                  <ShellView key={activeTab.id} tabId={activeTab.id} />
+                )}
+              </ViewConnectionContext.Provider>
             )}
           </div>
           <AssistantToggle />

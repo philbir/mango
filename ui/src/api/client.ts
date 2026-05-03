@@ -119,6 +119,24 @@ export interface ConnectionPublic {
   lastUsedAt: number | null;
 }
 
+export interface DiscoveredMongo {
+  containerId: string;
+  containerName: string;
+  image: string;
+  hostPort: number | null;
+  username: string | null;
+  hasPassword: boolean;
+  uri: string | null;
+  warning: string | null;
+}
+
+export interface DiscoveryResult {
+  ok: boolean;
+  socket?: string;
+  error?: string;
+  containers: DiscoveredMongo[];
+}
+
 const cidPath = (cid: string) => `/api/connections/${encodeURIComponent(cid)}`;
 
 export const api = {
@@ -205,6 +223,11 @@ export const api = {
     });
     const data = (await handleJson(res)) as { ok: boolean; error?: string };
     return data;
+  },
+
+  async discoverDocker(): Promise<DiscoveryResult> {
+    const res = await fetch("/api/discovery/docker");
+    return handlePlainJson(res) as Promise<DiscoveryResult>;
   },
 
   async testUri(uri: string): Promise<{ ok: boolean; error?: string }> {

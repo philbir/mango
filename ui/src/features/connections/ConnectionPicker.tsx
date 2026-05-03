@@ -132,6 +132,7 @@ export const ConnectionPicker = () => {
           mode={modal.mode}
           existing={modal.mode === "edit" ? modal.conn : undefined}
           onClose={() => setModal(null)}
+          onCreated={(c) => setActiveId(c.id)}
         />
       )}
     </>

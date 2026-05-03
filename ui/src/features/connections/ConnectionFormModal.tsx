@@ -1,7 +1,19 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { IconCheck, IconPlugConnected, IconTrash, IconX } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  IconBrandDocker,
+  IconCheck,
+  IconPlugConnected,
+  IconRefresh,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { ApiError, api, type ConnectionPublic } from "../../api/client";
+import {
+  ApiError,
+  api,
+  type ConnectionPublic,
+  type DiscoveredMongo,
+} from "../../api/client";
 
 const COLORS = [
   "#38bdf8",
@@ -177,11 +189,12 @@ interface Props {
   mode: "create" | "edit";
   existing?: ConnectionPublic;
   onClose: () => void;
+  onCreated?: (conn: ConnectionPublic) => void;
 }
 
 type Tab = "server" | "auth";
 
-export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
+export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Props) => {
   const queryClient = useQueryClient();
   const [name, setName] = useState(existing?.name ?? "");
   const [color, setColor] = useState(existing?.color ?? COLORS[0]!);
@@ -199,6 +212,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
     { ok: true } | { ok: false; error: string } | null
   >(null);
   const [testing, setTesting] = useState(false);
+
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
 
   const effectiveUri = uriString.trim();
 
@@ -227,6 +242,13 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
       fromStringEdit.current = true;
       setBuilder(parsed);
     }
+  };
+
+  const applyDiscovered = (d: DiscoveredMongo) => {
+    if (!d.uri) return;
+    if (!name.trim()) setName(d.containerName);
+    onUriChange(d.uri);
+    setDiscoveryOpen(false);
   };
 
   const onTest = async () => {
@@ -264,8 +286,9 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
         color,
       });
     },
-    onSuccess: () => {
+    onSuccess: (conn) => {
       queryClient.invalidateQueries({ queryKey: ["connections"] });
+      if (mode === "create") onCreated?.(conn);
       onClose();
     },
   });
@@ -338,7 +361,20 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
             </Field>
           </div>
 
-          <Field label="Connection string">
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Connection string
+              </div>
+              <button
+                type="button"
+                onClick={() => setDiscoveryOpen((v) => !v)}
+                className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <IconBrandDocker size={12} />
+                Discover from Docker
+              </button>
+            </div>
             <textarea
               value={uriString}
               onChange={(e) => onUriChange(e.target.value)}
@@ -350,7 +386,9 @@ export const ConnectionFormModal = ({ mode, existing, onClose }: Props) => {
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               Stays in sync with the form below — edit either side.
             </p>
-          </Field>
+          </div>
+
+          {discoveryOpen && <DockerDiscoveryPanel onPick={applyDiscovered} />}
 
           <div className="flex border-b border-slate-200 dark:border-slate-700">
             <TabButton active={tab === "server"} onClick={() => setTab("server")}>
@@ -634,6 +672,108 @@ const AuthTab = ({ builder, setB }: TabProps) => {
             (e.g. Azure / GCP workload identity).
           </p>
         </>
+      )}
+    </div>
+  );
+};
+
+const DockerDiscoveryPanel = ({
+  onPick,
+}: {
+  onPick: (d: DiscoveredMongo) => void;
+}) => {
+  const q = useQuery({
+    queryKey: ["discovery", "docker"],
+    queryFn: () => api.discoverDocker(),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  const data = q.data;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40">
+      <div className="mb-2 flex items-center gap-2">
+        <IconBrandDocker size={14} className="text-sky-600 dark:text-sky-400" />
+        <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+          Running MongoDB containers
+        </span>
+        <button
+          type="button"
+          onClick={() => q.refetch()}
+          disabled={q.isFetching}
+          className="ml-auto flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+          <IconRefresh size={11} />
+          {q.isFetching ? "Scanning…" : "Rescan"}
+        </button>
+      </div>
+
+      {q.isLoading && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Scanning Docker socket…
+        </div>
+      )}
+
+      {data && !data.ok && (
+        <div className="text-xs text-amber-700 dark:text-amber-400">
+          {data.error ?? "Could not reach Docker."}
+        </div>
+      )}
+
+      {data?.ok && data.containers.length === 0 && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          No running containers look like MongoDB.
+        </div>
+      )}
+
+      {data?.ok && data.containers.length > 0 && (
+        <ul className="space-y-1.5">
+          {data.containers.map((c) => (
+            <li
+              key={c.containerId}
+              className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium text-slate-900 dark:text-slate-100">
+                    {c.containerName}
+                  </span>
+                  <span className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                    {c.image}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>port: {c.hostPort ?? "—"}</span>
+                  <span>
+                    auth:{" "}
+                    {c.username
+                      ? `${c.username}${c.hasPassword ? " / ***" : ""}`
+                      : "none"}
+                  </span>
+                  {c.warning && (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {c.warning}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onPick(c)}
+                disabled={!c.uri}
+                className="rounded bg-sky-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              >
+                Use
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {data?.socket && (
+        <div className="mt-2 truncate text-[10px] text-slate-400 dark:text-slate-500">
+          via {data.socket}
+        </div>
       )}
     </div>
   );

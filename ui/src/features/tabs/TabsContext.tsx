@@ -13,6 +13,8 @@ export type TabKind = "collection" | "console" | "shell";
 export interface Tab {
   id: string;
   kind: TabKind;
+  /** Connection this tab is bound to. Doesn't change after creation. */
+  connectionId: string;
   collection?: string;
 }
 
@@ -20,16 +22,16 @@ interface TabsContextValue {
   tabs: Tab[];
   activeId: string | null;
   activeTab: Tab | null;
-  openCollection: (name: string) => void;
-  openConsole: () => void;
-  openShell: () => void;
+  openCollection: (connectionId: string, name: string) => void;
+  openConsole: (connectionId: string) => void;
+  openShell: (connectionId: string) => void;
   closeTab: (id: string) => void;
   activate: (id: string) => void;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
 
-const STORAGE_KEY = "mango:tabs:v2";
+const STORAGE_KEY = "mango:tabs:v3";
 
 const genId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -53,7 +55,11 @@ const loadState = (): PersistedState => {
     return {
       tabs: parsed.tabs.filter(
         (t): t is Tab =>
-          !!t && typeof t.id === "string" && typeof t.kind === "string",
+          !!t &&
+          typeof t.id === "string" &&
+          typeof t.kind === "string" &&
+          typeof t.connectionId === "string" &&
+          t.connectionId.length > 0,
       ),
       activeId: parsed.activeId ?? null,
     };
@@ -75,23 +81,34 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
   }, [state]);
 
   const openCollection = useCallback(
-    (name: string) => {
+    (connectionId: string, name: string) => {
       setState((prev) => {
         const existing = prev.tabs.find(
-          (t) => t.kind === "collection" && t.collection === name,
+          (t) =>
+            t.kind === "collection" &&
+            t.collection === name &&
+            t.connectionId === connectionId,
         );
         if (existing) return { ...prev, activeId: existing.id };
         if (!tabMode && prev.activeId) {
           const tabs = prev.tabs.map((t) =>
             t.id === prev.activeId
-              ? { id: t.id, kind: "collection" as const, collection: name }
+              ? {
+                  id: t.id,
+                  kind: "collection" as const,
+                  connectionId,
+                  collection: name,
+                }
               : t,
           );
           return { tabs, activeId: prev.activeId };
         }
         const id = genId();
         return {
-          tabs: [...prev.tabs, { id, kind: "collection", collection: name }],
+          tabs: [
+            ...prev.tabs,
+            { id, kind: "collection", connectionId, collection: name },
+          ],
           activeId: id,
         };
       });
@@ -99,31 +116,47 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
     [tabMode],
   );
 
-  const openConsole = useCallback(() => {
-    setState((prev) => {
-      if (!tabMode && prev.activeId) {
-        const tabs = prev.tabs.map((t) =>
-          t.id === prev.activeId ? { id: t.id, kind: "console" as const } : t,
-        );
-        return { tabs, activeId: prev.activeId };
-      }
-      const id = genId();
-      return { tabs: [...prev.tabs, { id, kind: "console" }], activeId: id };
-    });
-  }, [tabMode]);
+  const openConsole = useCallback(
+    (connectionId: string) => {
+      setState((prev) => {
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) =>
+            t.id === prev.activeId
+              ? { id: t.id, kind: "console" as const, connectionId }
+              : t,
+          );
+          return { tabs, activeId: prev.activeId };
+        }
+        const id = genId();
+        return {
+          tabs: [...prev.tabs, { id, kind: "console", connectionId }],
+          activeId: id,
+        };
+      });
+    },
+    [tabMode],
+  );
 
-  const openShell = useCallback(() => {
-    setState((prev) => {
-      if (!tabMode && prev.activeId) {
-        const tabs = prev.tabs.map((t) =>
-          t.id === prev.activeId ? { id: t.id, kind: "shell" as const } : t,
-        );
-        return { tabs, activeId: prev.activeId };
-      }
-      const id = genId();
-      return { tabs: [...prev.tabs, { id, kind: "shell" }], activeId: id };
-    });
-  }, [tabMode]);
+  const openShell = useCallback(
+    (connectionId: string) => {
+      setState((prev) => {
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) =>
+            t.id === prev.activeId
+              ? { id: t.id, kind: "shell" as const, connectionId }
+              : t,
+          );
+          return { tabs, activeId: prev.activeId };
+        }
+        const id = genId();
+        return {
+          tabs: [...prev.tabs, { id, kind: "shell", connectionId }],
+          activeId: id,
+        };
+      });
+    },
+    [tabMode],
+  );
 
   const closeTab = useCallback((id: string) => {
     setState((prev) => {
