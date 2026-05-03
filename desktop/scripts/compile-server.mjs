@@ -61,16 +61,32 @@ console.log(`         entry  : ${serverEntry}`);
 console.log(`         target : ${bunTarget}`);
 console.log(`         output : ${outFile}`);
 
+// Packages we explicitly do NOT bundle into the standalone binary:
+//
+// - better-sqlite3: Node-only, gated by an `isBun` check at runtime.
+//
+// - @github/copilot-sdk + @github/copilot: ship native Windows .node addons
+//   (keytar, win32, conpty, pty) that crash the bundled binary at startup
+//   on Windows with STATUS_ACCESS_VIOLATION. Loaded via `await import().catch()`
+//   in providers/copilot.ts, so missing-at-runtime degrades to a clear error
+//   message when the user picks the copilot provider.
+//
+// - @anthropic-ai/claude-agent-sdk: same pattern — lazy-loaded with catch.
+//   Externalized for symmetry and to keep binary size sane.
+const externals = [
+  "better-sqlite3",
+  "@github/copilot-sdk",
+  "@github/copilot",
+  "@anthropic-ai/claude-agent-sdk",
+];
+
 const r = spawnSync(
   "bun",
   [
     "build",
     "--compile",
     `--target=bun-${bunTarget}`,
-    // The Node-only SQLite driver is gated behind a runtime `isBun` check —
-    // mark it external so bun doesn't bundle the native .node addon.
-    "--external",
-    "better-sqlite3",
+    ...externals.flatMap((m) => ["--external", m]),
     serverEntry,
     "--outfile",
     outFile,
