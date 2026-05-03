@@ -7,6 +7,7 @@ import {
   IconSparkles,
   IconTrash,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
 import { AiSettingsModal } from "../connections/AiSettingsModal";
@@ -354,54 +355,29 @@ export const ChatBox = () => {
 };
 
 const useStatus = () => {
-  const [data, setData] = useState<{
-    provider: string;
-    configured: boolean;
-    model: string;
-    setupHint: string;
-  } | null>(null);
-  useEffect(() => {
-    let alive = true;
-    api
-      .getAiStatus()
-      .then((s) => {
-        if (alive) setData(s);
-      })
-      .catch(() => {
-        /* ignore */
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return { data };
+  // Wired via react-query so AiSettingsModal's invalidate calls refresh us.
+  const q = useQuery({
+    queryKey: ["ai-status"],
+    queryFn: () => api.getAiStatus(),
+    staleTime: 30_000,
+  });
+  return { data: q.data ?? null };
 };
 
 const useModels = (enabled: boolean) => {
-  const [data, setData] = useState<
-    Array<{ id: string; name?: string; description?: string }> | null
-  >(null);
-  const [isLoading, setLoading] = useState(false);
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    setLoading(true);
-    api
-      .listAiModels()
-      .then((r) => {
-        if (alive) setData(r.models);
-      })
-      .catch(() => {
-        if (alive) setData([]);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
-  return { data, isLoading };
+  const q = useQuery({
+    queryKey: ["ai-models"],
+    queryFn: async () => {
+      try {
+        return (await api.listAiModels()).models;
+      } catch {
+        return [];
+      }
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+  return { data: q.data ?? null, isLoading: q.isLoading };
 };
 
 interface BubbleProps {

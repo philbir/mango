@@ -15,6 +15,7 @@ import { documentsRoute } from "./routes/documents.js";
 import { infoRoute } from "./routes/info.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
+import { systemRoute } from "./routes/system.js";
 import { isAllowedOrigin } from "./security.js";
 import {
   seedFromEnvIfEmpty,
@@ -84,6 +85,7 @@ connectionScoped.route("/console", consoleRoute);
 app.route("/api/connections/:cid", connectionScoped);
 
 app.route("/api/ai", aiRoute);
+app.route("/api/system", systemRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {

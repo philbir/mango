@@ -18,6 +18,28 @@ const handleJson = async (res: Response): Promise<unknown> => {
   return EJSON.parse(text, { relaxed: false });
 };
 
+/**
+ * Plain JSON parse for endpoints that return config/status objects, not Mongo
+ * documents. The EJSON canonical parser used by handleJson wraps numbers in
+ * Int32/Double objects which React refuses to render — use this for any
+ * response that doesn't carry BSON types.
+ */
+const handlePlainJson = async (res: Response): Promise<unknown> => {
+  const text = await res.text();
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const parsed = text ? (JSON.parse(text) as { error?: string }) : null;
+      if (parsed?.error) message = parsed.error;
+    } catch {
+      if (text) message = text;
+    }
+    throw new ApiError(res.status, message);
+  }
+  if (!text) return null;
+  return JSON.parse(text);
+};
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -44,6 +66,7 @@ export type ServerMode = "multi" | "standalone";
 export interface ServerConfig {
   mode: ServerMode;
   standaloneConnectionId: string | null;
+  logsAvailable: boolean;
 }
 
 export interface CollectionStats {
@@ -102,6 +125,31 @@ export const api = {
   async getConfig(): Promise<ServerConfig> {
     const res = await fetch("/api/config");
     return handleJson(res) as Promise<ServerConfig>;
+  },
+
+  async revealLogs(): Promise<{ ok: boolean; path?: string; error?: string }> {
+    const res = await fetch("/api/system/reveal-logs", { method: "POST" });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      path?: string;
+      error?: string;
+    }>;
+  },
+
+  async getKeyHealth(): Promise<{ healthy: boolean; undecryptableCount: number }> {
+    const res = await fetch("/api/system/key-health");
+    return handlePlainJson(res) as Promise<{
+      healthy: boolean;
+      undecryptableCount: number;
+    }>;
+  },
+
+  async resetEncrypted(): Promise<{ ok: boolean; removedConnections: number }> {
+    const res = await fetch("/api/system/reset-encrypted", { method: "POST" });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      removedConnections: number;
+    }>;
   },
 
   // ── Connection management ───────────────────────────────────────────────────
@@ -397,6 +445,32 @@ export const api = {
       const text = await res.text().catch(() => "");
       throw new ApiError(res.status, text || res.statusText);
     }
+  },
+
+  async testAiConfig(input: {
+    provider: AiProviderId;
+    apiKey?: string | null;
+    baseUrl?: string | null;
+    model?: string | null;
+  }): Promise<{
+    ok: boolean;
+    provider?: AiProviderId;
+    modelCount?: number;
+    sample?: string[];
+    error?: string;
+  }> {
+    const res = await fetch("/api/ai/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      provider?: AiProviderId;
+      modelCount?: number;
+      sample?: string[];
+      error?: string;
+    }>;
   },
 
   async chatAi(params: {

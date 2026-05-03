@@ -16,27 +16,45 @@ const resolveProviderName = (): AiProviderName => {
   return "openai";
 };
 
+export interface ProviderOverrides {
+  provider: AiProviderName;
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  model?: string | null;
+}
+
+/**
+ * Build a one-off provider from explicit overrides — used by /api/ai/test so
+ * the user can validate draft settings before persisting them.
+ */
+export const buildProviderFromConfig = (
+  overrides: ProviderOverrides,
+): AiProvider => {
+  if (overrides.provider === "copilot") {
+    return buildCopilotProvider({ model: overrides.model ?? undefined });
+  }
+  if (overrides.provider === "claude-code") {
+    return buildClaudeCodeProvider({ model: overrides.model ?? undefined });
+  }
+  return buildOpenAiProvider({
+    apiKey: overrides.apiKey ?? undefined,
+    baseUrl: overrides.baseUrl ?? undefined,
+    model: overrides.model ?? undefined,
+  });
+};
+
 export const getProvider = (): AiProvider => {
   const stored = readAiSettings();
   const name = resolveProviderName();
   const signature = JSON.stringify({ name, stored });
   if (cachedProvider && cachedSignature === signature) return cachedProvider;
   cachedSignature = signature;
-  if (name === "copilot") {
-    cachedProvider = buildCopilotProvider({
-      model: stored?.model ?? undefined,
-    });
-  } else if (name === "claude-code") {
-    cachedProvider = buildClaudeCodeProvider({
-      model: stored?.model ?? undefined,
-    });
-  } else {
-    cachedProvider = buildOpenAiProvider({
-      apiKey: stored?.apiKey ?? undefined,
-      baseUrl: stored?.baseUrl ?? undefined,
-      model: stored?.model ?? undefined,
-    });
-  }
+  cachedProvider = buildProviderFromConfig({
+    provider: name,
+    apiKey: stored?.apiKey ?? null,
+    baseUrl: stored?.baseUrl ?? null,
+    model: stored?.model ?? null,
+  });
   return cachedProvider;
 };
 

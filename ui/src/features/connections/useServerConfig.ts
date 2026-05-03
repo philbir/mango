@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, type ServerConfig } from "../../api/client";
 
-const FALLBACK: ServerConfig = { mode: "multi", standaloneConnectionId: null };
+const FALLBACK: ServerConfig = {
+  mode: "multi",
+  standaloneConnectionId: null,
+  logsAvailable: false,
+};
 
 /**
  * Fetched once on boot — drives whether the connection manager is shown.

@@ -47,8 +47,22 @@ const rowToWithUri = (row: ConnectionRow): ConnectionWithUri => ({
   uri: decryptString(row.uri_encrypted),
 });
 
-const rowToPublic = (row: ConnectionRow): ConnectionPublic => {
-  const uri = decryptString(row.uri_encrypted);
+const rowToPublic = (row: ConnectionRow): ConnectionPublic | null => {
+  let uri: string;
+  try {
+    uri = decryptString(row.uri_encrypted);
+  } catch (e) {
+    // The master key has changed since this row was written. The row is
+    // unrecoverable — skip it from the list rather than crashing the whole
+    // request. The undecryptable count is exposed via /api/system/key-health
+    // so the UI can offer a reset action.
+    console.warn(
+      `[mango] could not decrypt connection ${row.id} (${row.name}) — ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return null;
+  }
   return {
     ...rowToConnection(row),
     uriRedacted: redactUri(uri),
@@ -77,7 +91,35 @@ export const listConnections = (): ConnectionPublic[] => {
       "SELECT * FROM connections ORDER BY last_used_at DESC NULLS LAST, name ASC",
     )
     .all() as ConnectionRow[];
-  return rows.map(rowToPublic);
+  return rows.map(rowToPublic).filter((c): c is ConnectionPublic => c !== null);
+};
+
+/**
+ * Count rows whose `uri_encrypted` cannot be decrypted with the current master
+ * key. Used by the key-health probe — a non-zero count means the user's saved
+ * connections are stranded and they should reset.
+ */
+export const countUndecryptableConnections = (): number => {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT uri_encrypted FROM connections")
+    .all() as Array<{ uri_encrypted: string }>;
+  let bad = 0;
+  for (const row of rows) {
+    try {
+      decryptString(row.uri_encrypted);
+    } catch {
+      bad++;
+    }
+  }
+  return bad;
+};
+
+/** Wipe every encrypted row. Called when the user opts to reset after a key mismatch. */
+export const deleteAllConnections = (): number => {
+  const db = getDb();
+  const result = db.prepare("DELETE FROM connections").run();
+  return result.changes;
 };
 
 export const getConnection = (id: string): ConnectionWithUri | null => {

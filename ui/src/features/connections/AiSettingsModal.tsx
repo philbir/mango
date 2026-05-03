@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconCheck, IconTrash, IconX } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconLoader2,
+  IconPlugConnected,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { type AiProviderId, ApiError, api } from "../../api/client";
 
@@ -60,6 +67,19 @@ export const AiSettingsModal = ({ onClose }: Props) => {
     },
   });
 
+  const test = useMutation({
+    mutationFn: () =>
+      api.testAiConfig({
+        provider,
+        // For openai: only send a key if the user typed a fresh one. Otherwise
+        // the server falls back to the persisted key.
+        apiKey:
+          provider === "openai" && !keepExistingKey ? apiKey || null : undefined,
+        baseUrl: baseUrl.trim() || null,
+        model: model.trim() || null,
+      }),
+  });
+
   const error =
     save.error instanceof ApiError
       ? save.error.message
@@ -69,7 +89,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex h-[640px] max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <header className="mb-3 flex items-start gap-3">
           <div className="flex-1">
             <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -88,7 +108,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
           </button>
         </header>
 
-        <div className="space-y-3">
+        <div className="-mx-1 flex-1 space-y-3 overflow-y-auto px-1">
           <Field label="Provider">
             <div className="flex rounded border border-slate-300 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-950">
               <ProviderTab
@@ -219,9 +239,55 @@ export const AiSettingsModal = ({ onClose }: Props) => {
               {error}
             </div>
           )}
+
+          {test.data && test.data.ok && (
+            <div className="flex items-start gap-2 rounded border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-800 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-200">
+              <IconCheck size={14} className="mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">
+                  Connected — {test.data.modelCount ?? 0} model
+                  {test.data.modelCount === 1 ? "" : "s"} available.
+                </div>
+                {test.data.sample && test.data.sample.length > 0 && (
+                  <div className="mt-0.5 break-words font-mono text-[11px] opacity-80">
+                    {test.data.sample.join(", ")}
+                    {(test.data.modelCount ?? 0) > test.data.sample.length
+                      ? ", …"
+                      : ""}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {test.data && !test.data.ok && (
+            <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+              <IconAlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">Test failed</div>
+                <div className="mt-0.5 break-words opacity-80">
+                  {test.data.error ?? "Unknown error"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {test.error && !test.data && (
+            <div className="flex items-start gap-2 rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+              <IconAlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">Test failed</div>
+                <div className="mt-0.5 break-words opacity-80">
+                  {test.error instanceof Error
+                    ? test.error.message
+                    : String(test.error)}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <footer className="mt-5 flex items-center gap-2">
+        <footer className="mt-5 flex flex-shrink-0 items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
           {config.data?.persisted && (
             <button
               type="button"
@@ -236,6 +302,19 @@ export const AiSettingsModal = ({ onClose }: Props) => {
             </button>
           )}
           <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => test.mutate()}
+            disabled={test.isPending}
+            className="flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {test.isPending ? (
+              <IconLoader2 size={12} className="animate-spin" />
+            ) : (
+              <IconPlugConnected size={12} />
+            )}
+            {test.isPending ? "Testing…" : "Test"}
+          </button>
           <button
             type="button"
             onClick={onClose}

@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { config, databaseNameFor, getMongoClientFor } from "../config.js";
-import { getProvider, invalidateProvider } from "../providers/index.js";
+import {
+  buildProviderFromConfig,
+  getProvider,
+  invalidateProvider,
+} from "../providers/index.js";
 import { buildChatSystemPrompt } from "../providers/types.js";
 import { redactErrorMessage, validateAiBaseUrl } from "../security.js";
 import {
@@ -85,6 +89,60 @@ aiRoute.delete("/config", (c) => {
   clearAiSettings();
   invalidateProvider();
   return c.body(null, 204);
+});
+
+/**
+ * Validate draft AI settings without persisting. Builds a one-off provider
+ * from the request body and tries to list models — fastest cheap call that
+ * exercises auth + base URL.
+ */
+aiRoute.post("/test", async (c) => {
+  const parsed = configBody.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" },
+      400,
+    );
+  }
+  const baseUrlError = validateAiBaseUrl(parsed.data.baseUrl);
+  if (baseUrlError) return c.json({ ok: false, error: baseUrlError }, 400);
+
+  // For OpenAI, fall back to the saved key when the form left it untouched.
+  let apiKey = parsed.data.apiKey ?? null;
+  if (parsed.data.provider === "openai" && (apiKey === null || apiKey === "")) {
+    apiKey = readAiSettings()?.apiKey ?? null;
+  }
+
+  const provider = buildProviderFromConfig({
+    provider: parsed.data.provider,
+    apiKey,
+    baseUrl: parsed.data.baseUrl ?? null,
+    model: parsed.data.model ?? null,
+  });
+
+  if (!provider.configured) {
+    return c.json({
+      ok: false,
+      provider: provider.name,
+      error: provider.setupHint,
+    });
+  }
+
+  try {
+    const models = await provider.listModels();
+    return c.json({
+      ok: true,
+      provider: provider.name,
+      modelCount: models.length,
+      sample: models.slice(0, 5).map((m) => m.id),
+    });
+  } catch (e) {
+    return c.json({
+      ok: false,
+      provider: provider.name,
+      error: redactErrorMessage(e),
+    });
+  }
 });
 
 aiRoute.get("/models", async (c) => {
