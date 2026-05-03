@@ -40,7 +40,13 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # Pinned: `bun build --compile --target=bun-<triple>` downloads a
+          # matching bun binary for the cross-compile target on first run.
+          # v1.3.13's windows-x64-baseline tarball failed to extract in CI
+          # ("Failed to extract executable for 'bun-windows-x64-baseline-…'").
+          # Pin to the last known-good release until the upstream download
+          # is verified again.
+          bun-version: 1.3.12
 
       - uses: dtolnay/rust-toolchain@stable
         with:
