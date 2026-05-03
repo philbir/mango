@@ -13,6 +13,7 @@ import { Toaster } from "./components/Toaster";
 import { showToast } from "./components/toasts";
 import { AssistantProvider } from "./features/assistant/AssistantContext";
 import { TabsProvider } from "./features/tabs/TabsContext";
+import { ActiveDatabaseProvider } from "./features/connections/useActiveDatabase";
 import "./index.css";
 import "./monaco-setup";
 import { SettingsProvider } from "./settings";
@@ -91,10 +92,12 @@ createRoot(root).render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <TabsProvider>
-            <AssistantProvider>
-              <App />
-              <Toaster />
-            </AssistantProvider>
+            <ActiveDatabaseProvider>
+              <AssistantProvider>
+                <App />
+                <Toaster />
+              </AssistantProvider>
+            </ActiveDatabaseProvider>
           </TabsProvider>
         </MemoryRouter>
       </QueryClientProvider>

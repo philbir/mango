@@ -1,6 +1,7 @@
 import {
   IconChevronDown,
   IconCircleDot,
+  IconCopy,
   IconList,
   IconPlus,
   IconSettings,
@@ -11,6 +12,25 @@ import { useActiveConnection } from "./useActiveConnection";
 import { useServerConfig } from "./useServerConfig";
 import { ConnectionFormModal } from "./ConnectionFormModal";
 import { ConnectionsManagerModal } from "./ConnectionsManagerModal";
+
+/**
+ * Extract a "host:port" (or "host") label from a Mongo URI for compact display.
+ * Falls back to null when the URI can't be parsed.
+ */
+const hostLabelFromUri = (uri: string | null | undefined): string | null => {
+  if (!uri) return null;
+  try {
+    // URL doesn't accept "mongodb://" — swap for http:// to reuse its parser.
+    const normalised = uri.replace(/^mongodb(\+srv)?:\/\//i, "http://");
+    const u = new URL(normalised);
+    if (!u.hostname) return null;
+    // mongodb+srv URIs don't carry an explicit port — show host alone.
+    const isSrv = /^mongodb\+srv:\/\//i.test(uri);
+    return isSrv || !u.port ? u.hostname : `${u.hostname}:${u.port}`;
+  } catch {
+    return null;
+  }
+};
 
 export const ConnectionPicker = () => {
   const { active, connections, setActiveId } = useActiveConnection();
@@ -35,13 +55,7 @@ export const ConnectionPicker = () => {
 
   if (mode === "standalone") {
     return (
-      <div className="flex w-full items-center gap-2 px-1 py-1.5">
-        <IconCircleDot size={14} className="flex-shrink-0 text-emerald-500" />
-        <div className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">
-          {active?.name ?? "Connecting…"}
-        </div>
-        {active && <SourceBadge conn={active} />}
-      </div>
+      <StandaloneLabel active={active} />
     );
   }
 
@@ -186,6 +200,75 @@ const KIND_ICON: Record<Exclude<BadgeKind, null>, { src: string; alt: string }> 
   aspire: { src: "/assets/aspire-logo.svg", alt: "Aspire" },
   atlas: { src: "/assets/mongodb-logo.svg", alt: "MongoDB Atlas" },
   docker: { src: "/assets/docker-logo.svg", alt: "Docker" },
+};
+
+const StandaloneLabel = ({ active }: { active: ConnectionPublic | null }) => {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const hostLabel = hostLabelFromUri(active?.uriRedacted);
+  const label = hostLabel ?? active?.name ?? "Connecting…";
+
+  const onCopy = () => {
+    if (!active?.uriRedacted) return;
+    void navigator.clipboard?.writeText(active.uriRedacted).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+
+  return (
+    <div className="relative w-full" ref={ref}>
+      <button
+        type="button"
+        disabled={!active}
+        onClick={() => setOpen((o) => !o)}
+        title={active ? "Show connection string" : undefined}
+        className="flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-slate-800"
+      >
+        <IconCircleDot size={14} className="flex-shrink-0 text-emerald-500" />
+        <div className="min-w-0 flex-1 truncate font-mono text-[13px] font-medium text-slate-900 dark:text-slate-100">
+          {label}
+        </div>
+        {active && <SourceBadge conn={active} />}
+      </button>
+      {open && active && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Connection string
+          </div>
+          <div className="break-all rounded bg-slate-50 p-2 font-mono text-[11.5px] text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+            {active.uriRedacted}
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+              Credentials redacted.
+            </div>
+            <button
+              type="button"
+              onClick={onCopy}
+              className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <IconCopy size={11} />
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export const SourceBadge = ({ conn }: { conn: ConnectionPublic }) => {

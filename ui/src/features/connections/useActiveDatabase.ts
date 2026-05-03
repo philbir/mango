@@ -1,25 +1,61 @@
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { type ConnectionPublic } from "../../api/client";
 import { useActiveConnection } from "./useActiveConnection";
 
+interface ActiveDatabaseValue {
+  database: string | null;
+  setDatabase: (db: string | null) => void;
+  activeId: string | null;
+  active: ConnectionPublic | null;
+}
+
+const ActiveDatabaseContext = createContext<ActiveDatabaseValue | null>(null);
+
 /**
- * Resolves the active database for the active connection.
+ * Provides the active database for the active connection. Backed by a single
+ * piece of state so every consumer (sidebar, collection view, console, etc.)
+ * sees the same value — without this, each call site held its own useState
+ * copy and selecting a database in the sidebar didn't propagate to query
+ * components, which then silently fell through to the server's default ("test").
  *
  * Whenever the active connection changes, the database resets to that
  * connection's `effectiveDefaultDatabase` (or null). We deliberately don't
  * remember the previously-picked database across connection switches —
  * carrying it over showed stale collection lists when the database didn't
- * exist on the new connection. The sidebar always reflects the current
- * connection's state.
+ * exist on the new connection.
  */
-export const useActiveDatabase = () => {
+export const ActiveDatabaseProvider = ({ children }: { children: ReactNode }) => {
   const { active, activeId } = useActiveConnection();
-  const [database, setDatabaseState] = useState<string | null>(
+  const [database, setDatabase] = useState<string | null>(
     active?.effectiveDefaultDatabase ?? null,
   );
 
   useEffect(() => {
-    setDatabaseState(active?.effectiveDefaultDatabase ?? null);
+    setDatabase(active?.effectiveDefaultDatabase ?? null);
   }, [activeId, active?.effectiveDefaultDatabase]);
 
-  return { database, setDatabase: setDatabaseState, activeId, active };
+  const value = useMemo<ActiveDatabaseValue>(
+    () => ({ database, setDatabase, activeId, active }),
+    [database, activeId, active],
+  );
+
+  return createElement(ActiveDatabaseContext.Provider, { value }, children);
+};
+
+export const useActiveDatabase = (): ActiveDatabaseValue => {
+  const ctx = useContext(ActiveDatabaseContext);
+  if (!ctx) {
+    throw new Error(
+      "useActiveDatabase must be used within ActiveDatabaseProvider",
+    );
+  }
+  return ctx;
 };

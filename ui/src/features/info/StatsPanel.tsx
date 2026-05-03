@@ -1,20 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertCircle,
   IconCalendarStats,
   IconDatabase,
+  IconDotsVertical,
+  IconEraser,
   IconLockSquareRounded,
   IconRefresh,
   IconServerCog,
   IconStack2,
+  IconTrash,
 } from "@tabler/icons-react";
-import { api } from "../../api/client";
+import { useEffect, useRef, useState } from "react";
+import { ApiError, api } from "../../api/client";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useTabs } from "../tabs/TabsContext";
 
 interface Props {
   cid: string;
   database: string | null;
   collection: string;
 }
+
+type ConfirmAction = "clear" | "drop" | null;
 
 const formatBytes = (n: number | null): string => {
   if (n === null || n === undefined) return "—";
@@ -28,12 +36,70 @@ const formatCount = (n: number | null): string =>
   n === null || n === undefined ? "—" : n.toLocaleString();
 
 export const StatsPanel = ({ cid, database, collection }: Props) => {
+  const queryClient = useQueryClient();
+  const { tabs, closeTab } = useTabs();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState<ConfirmAction>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
+
   const stats = useQuery({
     queryKey: ["collection-stats", cid, database, collection],
     queryFn: () =>
       api.getCollectionStats(cid, collection, database ?? undefined),
     enabled: !!cid && !!collection,
   });
+
+  const clear = useMutation({
+    mutationFn: () =>
+      api.clearCollection(cid, collection, database ?? undefined),
+    onSuccess: () => {
+      setConfirming(null);
+      queryClient.invalidateQueries({
+        queryKey: ["collection-stats", cid, database, collection],
+      });
+      queryClient.invalidateQueries({ queryKey: ["collections", cid, database] });
+      queryClient.invalidateQueries({
+        queryKey: ["documents", cid, database, collection],
+      });
+    },
+  });
+
+  const drop = useMutation({
+    mutationFn: () =>
+      api.dropCollection(cid, collection, database ?? undefined),
+    onSuccess: () => {
+      setConfirming(null);
+      queryClient.invalidateQueries({ queryKey: ["collections", cid, database] });
+      tabs
+        .filter(
+          (t) =>
+            t.kind === "collection" &&
+            t.connectionId === cid &&
+            t.collection === collection,
+        )
+        .forEach((t) => closeTab(t.id));
+    },
+  });
+
+  const mutationError =
+    confirming === "clear" ? clear.error : confirming === "drop" ? drop.error : null;
+  const errorMessage =
+    mutationError instanceof ApiError
+      ? mutationError.message
+      : mutationError instanceof Error
+        ? mutationError.message
+        : null;
 
   if (stats.isLoading) {
     return (
@@ -56,6 +122,7 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
   if (!data) return null;
 
   return (
+    <>
     <div className="space-y-5 p-5">
       <header className="flex items-center justify-between">
         <div>
@@ -67,18 +134,60 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
             reflect on-disk usage.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => stats.refetch()}
-          disabled={stats.isFetching}
-          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <IconRefresh
-            size={12}
-            className={stats.isFetching ? "animate-spin" : ""}
-          />
-          Refresh
-        </button>
+        <div className="flex items-center gap-1.5">
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex items-center rounded border border-slate-300 p-1 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              title="Collection actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              <IconDotsVertical size={12} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    clear.reset();
+                    setConfirming("clear");
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <IconEraser size={13} />
+                  Clear collection
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    drop.reset();
+                    setConfirming("drop");
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  <IconTrash size={13} />
+                  Drop collection
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => stats.refetch()}
+            disabled={stats.isFetching}
+            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <IconRefresh
+              size={12}
+              className={stats.isFetching ? "animate-spin" : ""}
+            />
+            Refresh
+          </button>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -156,6 +265,65 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
         </section>
       )}
     </div>
+    {confirming === "clear" && (
+      <ConfirmDialog
+        title="Clear collection?"
+        message={
+          <div className="space-y-2">
+            <div>
+              This will delete all documents in{" "}
+              <span className="font-mono font-semibold">{collection}</span>.
+              Indexes are preserved. This cannot be undone.
+            </div>
+            {errorMessage && (
+              <div className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+                {errorMessage}
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel="Clear"
+        danger
+        busy={clear.isPending}
+        onConfirm={() => clear.mutate()}
+        onCancel={() => {
+          if (!clear.isPending) {
+            clear.reset();
+            setConfirming(null);
+          }
+        }}
+      />
+    )}
+    {confirming === "drop" && (
+      <ConfirmDialog
+        title="Drop collection?"
+        message={
+          <div className="space-y-2">
+            <div>
+              This will permanently drop{" "}
+              <span className="font-mono font-semibold">{collection}</span>{" "}
+              along with all its documents and indexes. This cannot be undone.
+            </div>
+            {errorMessage && (
+              <div className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+                {errorMessage}
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel="Drop"
+        danger
+        busy={drop.isPending}
+        onConfirm={() => drop.mutate()}
+        onCancel={() => {
+          if (!drop.isPending) {
+            drop.reset();
+            setConfirming(null);
+          }
+        }}
+      />
+    )}
+    </>
   );
 };
 

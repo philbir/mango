@@ -628,6 +628,32 @@ export const api = {
     }
   },
 
+  async dropCollection(
+    cid: string,
+    name: string,
+    database?: string,
+  ): Promise<void> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/drop${qs}`,
+      { method: "POST" },
+    );
+    await handlePlainJson(res);
+  },
+
+  async clearCollection(
+    cid: string,
+    name: string,
+    database?: string,
+  ): Promise<{ deletedCount: number }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/clear${qs}`,
+      { method: "POST" },
+    );
+    return (await handlePlainJson(res)) as { deletedCount: number };
+  },
+
   async createIndex(params: {
     cid: string;
     name: string;

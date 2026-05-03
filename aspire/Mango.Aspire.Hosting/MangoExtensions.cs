@@ -1,3 +1,4 @@
+using System.Globalization;
 using Aspire.Hosting.ApplicationModel;
 using Microsoft.Extensions.Configuration;
 
@@ -50,9 +51,11 @@ public static class MangoExtensions
             .WithParentRelationship(builder.Resource)
             .WithHttpEndpoint(port: port, targetPort: ContainerTargetPort, name: "http")
             .WithExternalHttpEndpoints()
-            // Resolved at runtime — when consumed by another container, Aspire
-            // rewrites the host to the Mongo container's network alias.
-            .WithEnvironment("MONGO_URL", builder.Resource)
+            // The Mongo resource's ConnectionStringExpression resolves the host
+            // through .NET service discovery (e.g. mongo.dev.internal), which a
+            // non-.NET container can't resolve. Build the URL using the Mongo
+            // container's network alias instead — same trick WithMongoExpress uses.
+            .WithEnvironment(ctx => ctx.EnvironmentVariables["MONGO_URL"] = BuildContainerMongoUrl(builder.Resource))
             // Persist JSON state (saved settings + multi-mode connection list) across restarts.
             .WithVolume($"{name}-data", "/data")
             .WithEnvironment("MANGO_DATA_DIR", "/data");
@@ -88,6 +91,20 @@ public static class MangoExtensions
         }
 
         return builder;
+    }
+
+    private static ReferenceExpression BuildContainerMongoUrl(MongoDBServerResource server)
+    {
+        var port = (server.PrimaryEndpoint.TargetPort ?? 27017)
+            .ToString(CultureInfo.InvariantCulture);
+
+        if (server.PasswordParameter is not null)
+        {
+            return ReferenceExpression.Create(
+                $"mongodb://{server.UserNameReference}:{server.PasswordParameter}@{server.Name}:{port}/?authSource=admin&authMechanism=SCRAM-SHA-256");
+        }
+
+        return ReferenceExpression.Create($"mongodb://{server.Name}:{port}");
     }
 
     private static void ApplyAiSettings(
