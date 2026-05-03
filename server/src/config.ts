@@ -1,4 +1,6 @@
 import { MongoClient } from "mongodb";
+import { resolveAspireConnectionUri } from "./aspire.js";
+import { sanitizeMongoUri } from "./security.js";
 import { getConnection, touchConnection } from "./store/connections.js";
 
 export const config = {
@@ -13,32 +15,66 @@ export const config = {
 interface CachedClient {
   client: MongoClient;
   defaultDatabase: string | null;
+  uri: string;
 }
 
 const clients = new Map<string, CachedClient>();
+const ASPIRE_CACHE_MS = 30_000;
+const aspireUriCache = new Map<string, { uri: string; ts: number }>();
+
+const resolveUriForConnection = async (connectionId: string): Promise<{
+  uri: string;
+  defaultDatabase: string | null;
+} | null> => {
+  const conn = getConnection(connectionId);
+  if (!conn) return null;
+  if (!conn.aspire) {
+    return { uri: conn.uri, defaultDatabase: conn.defaultDatabase };
+  }
+  const cached = aspireUriCache.get(connectionId);
+  if (cached && Date.now() - cached.ts < ASPIRE_CACHE_MS) {
+    return { uri: cached.uri, defaultDatabase: conn.defaultDatabase };
+  }
+  const fresh = await resolveAspireConnectionUri(
+    conn.aspire.appHostPath,
+    conn.aspire.resourceName,
+  );
+  aspireUriCache.set(connectionId, { uri: fresh, ts: Date.now() });
+  return { uri: fresh, defaultDatabase: conn.defaultDatabase };
+};
 
 /**
  * Resolve a Mongo client for a connection ID. Connection details are loaded
- * from SQLite; the MongoClient itself is cached per connection.
+ * from the JSON store; the MongoClient itself is cached per connection. For
+ * aspire-backed connections the URI is re-resolved on a TTL — when it
+ * changes (port rotation between `aspire run`s), the cached client is
+ * dropped and a fresh one is opened.
  */
 export const getMongoClientFor = async (
   connectionId: string,
 ): Promise<{ client: MongoClient; defaultDatabase: string | null }> => {
+  const resolved = await resolveUriForConnection(connectionId);
+  if (!resolved) throw new Error(`Connection not found: ${connectionId}`);
+
   const cached = clients.get(connectionId);
-  if (cached) {
+  if (cached && cached.uri === resolved.uri) {
     touchConnection(connectionId);
     return cached;
   }
-
-  const conn = getConnection(connectionId);
-  if (!conn) {
-    throw new Error(`Connection not found: ${connectionId}`);
+  if (cached && cached.uri !== resolved.uri) {
+    clients.delete(connectionId);
+    cached.client.close().catch(() => {});
   }
-  const client = new MongoClient(conn.uri, {
+
+  const client = new MongoClient(sanitizeMongoUri(resolved.uri), {
     serverSelectionTimeoutMS: 5_000,
   });
   await client.connect();
-  const entry: CachedClient = { client, defaultDatabase: conn.defaultDatabase };
+  const entry: CachedClient = {
+    client,
+    defaultDatabase: resolved.defaultDatabase,
+    uri: resolved.uri,
+  };
   clients.set(connectionId, entry);
   touchConnection(connectionId);
   return entry;
@@ -66,6 +102,7 @@ export const databaseNameFor = (
 };
 
 export const closeMongoClient = async (connectionId: string): Promise<void> => {
+  aspireUriCache.delete(connectionId);
   const cached = clients.get(connectionId);
   if (!cached) return;
   clients.delete(connectionId);

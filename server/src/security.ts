@@ -32,6 +32,36 @@ export const isAllowedOrigin = (origin: string, requestUrl: string): boolean => 
   }
 };
 
+/**
+ * Strip query parameters that the official Node MongoDB driver doesn't
+ * accept. Studio 3T's "Copy connection string" pastes its own `3t.*` options
+ * (uriversion, connection.name, alwaysshowauthdb, …) that crash MongoClient
+ * with "MongoParseError: options ... are not supported".
+ */
+const UNSUPPORTED_OPTION_PREFIXES = [/^3t\./i];
+
+export const sanitizeMongoUri = (uri: string): string => {
+  const m = uri.match(/^(mongodb(?:\+srv)?:\/\/)(.*)$/i);
+  if (!m) return uri;
+  const scheme = m[1] ?? "";
+  const rest = m[2] ?? "";
+  const qIdx = rest.indexOf("?");
+  if (qIdx === -1) return uri;
+  const before = rest.slice(0, qIdx);
+  const fragIdx = rest.indexOf("#", qIdx);
+  const fragment = fragIdx === -1 ? "" : rest.slice(fragIdx);
+  const queryStr = rest.slice(qIdx + 1, fragIdx === -1 ? undefined : fragIdx);
+  const kept = queryStr
+    .split("&")
+    .filter((kv) => {
+      if (!kv) return false;
+      const key = kv.split("=", 1)[0] ?? "";
+      return !UNSUPPORTED_OPTION_PREFIXES.some((re) => re.test(key));
+    })
+    .join("&");
+  return `${scheme}${before}${kept ? `?${kept}` : ""}${fragment}`;
+};
+
 export const validateMongoUri = (uri: string): string | null => {
   const scheme = uri.match(/^mongodb(\+srv)?:\/\//i)?.[0];
   if (!scheme) {

@@ -11,7 +11,7 @@ Tauri 2 wrapper that runs Mango as a native desktop app. Bundles the server as a
 │     ↓ spawns                              │
 │   mango-server  (sidecar binary)          │
 │     ├ Hono on 127.0.0.1:<random>          │
-│     ├ SQLite at $APPDATA/dev.mango.app/   │
+│     ├ JSON state at $APPDATA/dev.mango.app/│
 │     └ Static UI assets                    │
 │     ↑                                     │
 │   OS-native WebView2/WKWebView/WebKitGTK  │
@@ -111,7 +111,7 @@ The sidecar receives `MANGO_DATA_DIR=<OS app-data path>` at launch. Defaults:
 | Windows | `%APPDATA%\dev.mango.app\` |
 | Linux | `~/.local/share/dev.mango.app/` |
 
-Contains `mango.db` (the connections SQLite) and any future per-user state.
+Contains `connections.json`, `ai-settings.json`, and `master.key`.
 
 ## Master key (encryption at rest)
 

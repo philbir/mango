@@ -11,9 +11,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
   api,
+  type AspireAppHostInfo,
+  type AspireRef,
+  type AspireResourceSummary,
   type ConnectionPublic,
+  type ConnectionSource,
   type DiscoveredMongo,
 } from "../../api/client";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 
 const COLORS = [
   "#38bdf8",
@@ -213,7 +218,16 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
   >(null);
   const [testing, setTesting] = useState(false);
 
-  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [discoveryOpen, setDiscoveryOpen] = useState<
+    "docker" | "aspire" | null
+  >(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [aspireRef, setAspireRef] = useState<AspireRef | null>(
+    existing?.aspire ?? null,
+  );
+  const [source, setSource] = useState<ConnectionSource>(
+    existing?.source ?? null,
+  );
 
   const effectiveUri = uriString.trim();
 
@@ -229,6 +243,31 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     setUriString(buildUri(builder));
   }, [builder]);
 
+  // Edit mode: fetch the decrypted URI once and populate the form. Without
+  // this, the builder/URI fields would render their defaults regardless of
+  // what's actually saved.
+  useEffect(() => {
+    if (mode !== "edit" || !existing) return;
+    let cancelled = false;
+    api
+      .getConnectionSecret(existing.id)
+      .then((r) => {
+        if (cancelled) return;
+        setUriString(r.uri);
+        const parsed = parseUri(r.uri);
+        if (parsed) {
+          fromStringEdit.current = true;
+          setBuilder(parsed);
+        }
+      })
+      .catch(() => {
+        /* leave defaults — user can still edit via the URI box */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, existing]);
+
   const setB = <K extends keyof BuilderState>(k: K, v: BuilderState[K]) => {
     setBuilder((s) => ({ ...s, [k]: v }));
     setTestResult(null);
@@ -237,6 +276,10 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
   const onUriChange = (next: string) => {
     setUriString(next);
     setTestResult(null);
+    // Hand-edited URI detaches from any discovery binding — the user is taking
+    // control of the connection string.
+    setAspireRef(null);
+    setSource(null);
     const parsed = parseUri(next.trim());
     if (parsed) {
       fromStringEdit.current = true;
@@ -248,7 +291,28 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     if (!d.uri) return;
     if (!name.trim()) setName(d.containerName);
     onUriChange(d.uri);
-    setDiscoveryOpen(false);
+    setSource("docker");
+    setDiscoveryOpen(null);
+  };
+
+  const applyAspire = (
+    appHost: AspireAppHostInfo,
+    resource: AspireResourceSummary,
+  ) => {
+    if (!resource.uri) return;
+    if (!name.trim()) setName(`${appHost.appHostName} · ${resource.name}`);
+    setUriString(resource.uri);
+    const parsed = parseUri(resource.uri);
+    if (parsed) {
+      fromStringEdit.current = true;
+      setBuilder(parsed);
+    }
+    setAspireRef({
+      appHostPath: appHost.appHostPath,
+      resourceName: resource.name,
+    });
+    setTestResult(null);
+    setDiscoveryOpen(null);
   };
 
   const onTest = async () => {
@@ -277,6 +341,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           uri: effectiveUri,
           defaultDatabase: payloadDb,
           color,
+          aspire: aspireRef,
+          source,
         });
       }
       return api.updateConnection(existing!.id, {
@@ -284,6 +350,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         uri: effectiveUri || undefined,
         defaultDatabase: payloadDb,
         color,
+        aspire: aspireRef,
+        source,
       });
     },
     onSuccess: (conn) => {
@@ -312,6 +380,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     !!name.trim() && (mode === "edit" || !!effectiveUri);
 
   return (
+    <>
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
       <div className="flex h-[42rem] max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <header className="flex items-start gap-3 border-b border-slate-200 px-5 pb-3 pt-4 dark:border-slate-700">
@@ -362,18 +431,40 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           </div>
 
           <div>
-            <div className="mb-1 flex items-center justify-between">
+            <div className="mb-1 flex items-center justify-between gap-2">
               <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Connection string
               </div>
-              <button
-                type="button"
-                onClick={() => setDiscoveryOpen((v) => !v)}
-                className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <IconBrandDocker size={12} />
-                Discover from Docker
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDiscoveryOpen((v) => (v === "docker" ? null : "docker"))
+                  }
+                  className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
+                    discoveryOpen === "docker"
+                      ? "border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <IconBrandDocker size={12} />
+                  Docker
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDiscoveryOpen((v) => (v === "aspire" ? null : "aspire"))
+                  }
+                  className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
+                    discoveryOpen === "aspire"
+                      ? "border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <AspireLogo className="h-3 w-3" />
+                  Aspire
+                </button>
+              </div>
             </div>
             <textarea
               value={uriString}
@@ -383,12 +474,37 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
               spellCheck={false}
               className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              Stays in sync with the form below — edit either side.
-            </p>
+            {aspireRef ? (
+              <div className="mt-1 flex items-start gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400">
+                <AspireLogo className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                <span className="flex-1">
+                  Bound to Aspire resource{" "}
+                  <span className="font-mono">{aspireRef.resourceName}</span> in{" "}
+                  <span className="font-mono">{aspireRef.appHostPath}</span>.
+                  Connection string will be re-resolved on every connect.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAspireRef(null)}
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  title="Detach from Aspire"
+                >
+                  <IconX size={11} />
+                </button>
+              </div>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Stays in sync with the form below — edit either side.
+              </p>
+            )}
           </div>
 
-          {discoveryOpen && <DockerDiscoveryPanel onPick={applyDiscovered} />}
+          {discoveryOpen === "docker" && (
+            <DockerDiscoveryPanel onPick={applyDiscovered} />
+          )}
+          {discoveryOpen === "aspire" && (
+            <AspireDiscoveryPanel onPick={applyAspire} />
+          )}
 
           <div className="flex border-b border-slate-200 dark:border-slate-700">
             <TabButton active={tab === "server"} onClick={() => setTab("server")}>
@@ -447,11 +563,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           {mode === "edit" && existing && (
             <button
               type="button"
-              onClick={() => {
-                if (confirm(`Delete connection "${existing.name}"?`)) {
-                  remove.mutate();
-                }
-              }}
+              onClick={() => setConfirmingDelete(true)}
               disabled={remove.isPending}
               className="flex items-center gap-1 rounded border border-red-300 px-2 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-700/40 dark:text-red-300 dark:hover:bg-red-900/20"
             >
@@ -478,6 +590,19 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         </footer>
       </div>
     </div>
+
+    {confirmingDelete && existing && (
+      <ConfirmDialog
+        title={`Delete connection "${existing.name}"?`}
+        message="This removes the saved connection and its encrypted URI. It will not affect the underlying MongoDB database."
+        confirmLabel="Delete"
+        danger
+        busy={remove.isPending}
+        onConfirm={() => remove.mutate()}
+        onCancel={() => setConfirmingDelete(false)}
+      />
+    )}
+    </>
   );
 };
 
@@ -778,6 +903,188 @@ const DockerDiscoveryPanel = ({
     </div>
   );
 };
+
+const AspireDiscoveryPanel = ({
+  onPick,
+}: {
+  onPick: (appHost: AspireAppHostInfo, resource: AspireResourceSummary) => void;
+}) => {
+  const q = useQuery({
+    queryKey: ["discovery", "aspire"],
+    queryFn: () => api.discoverAspire(),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  const data = q.data;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40">
+      <div className="mb-2 flex items-center gap-2">
+        <AspireLogo className="h-3.5 w-3.5" />
+        <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+          Aspire apphosts
+        </span>
+        <button
+          type="button"
+          onClick={() => q.refetch()}
+          disabled={q.isFetching}
+          className="ml-auto flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+          <IconRefresh size={11} />
+          {q.isFetching ? "Scanning…" : "Rescan"}
+        </button>
+      </div>
+
+      {q.isLoading && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          Running <span className="font-mono">aspire ps</span>…
+        </div>
+      )}
+
+      {data && !data.ok && (
+        <div className="text-xs text-amber-700 dark:text-amber-400">
+          {data.error ?? "Could not query Aspire."}
+          {data.cli?.installed && data.cli.version && (
+            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+              installed: <span className="font-mono">{data.cli.version}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {data?.ok && data.cli?.version && (
+        <div className="mb-2 text-[11px] text-slate-400 dark:text-slate-500">
+          aspire <span className="font-mono">{data.cli.version}</span>
+        </div>
+      )}
+
+      {data?.ok && data.appHosts.length === 0 && (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          No running apphosts.
+        </div>
+      )}
+
+      {data?.ok && data.appHosts.length > 0 && (
+        <div className="space-y-3">
+          {data.appHosts.map((ah) => (
+            <AspireAppHostBlock key={ah.appHostPath} appHost={ah} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AspireAppHostBlock = ({
+  appHost,
+  onPick,
+}: {
+  appHost: AspireAppHostInfo;
+  onPick: (appHost: AspireAppHostInfo, resource: AspireResourceSummary) => void;
+}) => {
+  const mongoCount = appHost.resources.filter((r) => r.kind !== "other").length;
+  return (
+    <div className="rounded border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+      <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-700">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
+            {appHost.appHostName}
+          </span>
+          <span className="text-[10px] text-slate-400">
+            pid {appHost.appHostPid}
+          </span>
+          <span className="ml-auto text-[10px] text-slate-400">
+            {mongoCount} mongo · {appHost.resources.length} total
+          </span>
+        </div>
+        <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+          {appHost.appHostPath}
+        </div>
+      </div>
+      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+        {appHost.resources.map((r) => (
+          <AspireResourceRow
+            key={r.name}
+            resource={r}
+            onPick={() => onPick(appHost, r)}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const AspireResourceRow = ({
+  resource,
+  onPick,
+}: {
+  resource: AspireResourceSummary;
+  onPick: () => void;
+}) => {
+  const selectable = resource.kind !== "other" && !!resource.uri;
+  const stateColor =
+    resource.state === "Running"
+      ? "bg-emerald-500"
+      : resource.state === "NotStarted" || resource.state === "Stopped"
+        ? "bg-slate-400"
+        : "bg-amber-500";
+  return (
+    <li
+      className={[
+        "flex items-center gap-2 px-2 py-1 text-xs",
+        resource.kind === "other"
+          ? "text-slate-500 dark:text-slate-400"
+          : "text-slate-800 dark:text-slate-100",
+      ].join(" ")}
+    >
+      <span
+        className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${stateColor}`}
+        title={resource.state ?? "unknown"}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-mono">{resource.displayName}</span>
+          {resource.kind === "mongo-database" && (
+            <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              mongo db
+            </span>
+          )}
+          {resource.kind === "mongo-server" && (
+            <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              mongo server
+            </span>
+          )}
+        </div>
+        <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+          {resource.resourceType}
+          {resource.warning && (
+            <span className="ml-2 text-amber-600 dark:text-amber-400">
+              {resource.warning}
+            </span>
+          )}
+        </div>
+      </div>
+      {selectable && (
+        <button
+          type="button"
+          onClick={onPick}
+          className="rounded bg-sky-500 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-sky-400"
+        >
+          Use
+        </button>
+      )}
+    </li>
+  );
+};
+
+const AspireLogo = ({ className }: { className?: string }) => (
+  <img
+    src="/assets/aspire-logo.svg"
+    alt="Aspire"
+    draggable={false}
+    className={className ?? "h-3.5 w-3.5"}
+  />
+);
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>

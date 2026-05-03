@@ -45,12 +45,15 @@ public static class MangoExtensions
         var mango = builder.ApplicationBuilder
             .AddContainer(name, image, tag)
             .WaitFor(builder)
+            // Nest under the Mongo resource in the Aspire dashboard, mirroring
+            // the layout of WithMongoExpress.
+            .WithParentRelationship(builder.Resource)
             .WithHttpEndpoint(port: port, targetPort: ContainerTargetPort, name: "http")
             .WithExternalHttpEndpoints()
             // Resolved at runtime — when consumed by another container, Aspire
             // rewrites the host to the Mongo container's network alias.
             .WithEnvironment("MONGO_URL", builder.Resource)
-            // Persist SQLite (saved settings + multi-mode connection list) across restarts.
+            // Persist JSON state (saved settings + multi-mode connection list) across restarts.
             .WithVolume($"{name}-data", "/data")
             .WithEnvironment("MANGO_DATA_DIR", "/data");
 
@@ -77,7 +80,7 @@ public static class MangoExtensions
 
         // Master key for encrypting saved connection URIs at rest. Auto-generated
         // by the server on first run if not supplied — set explicitly to share an
-        // encrypted SQLite across machines or to rotate the key.
+        // encrypted state across machines or to rotate the key.
         var masterKey = builder.ApplicationBuilder.Configuration["Mango:MasterKey"];
         if (!string.IsNullOrWhiteSpace(masterKey))
         {

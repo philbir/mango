@@ -418,7 +418,7 @@ const DocBlock = ({ doc }: { doc: DocSection }) => {
         {[
           ["MONGO_URL", "MongoDB connection string for standalone mode."],
           ["MANGO_MODE", "Set standalone to hide the multi-connection manager."],
-          ["MANGO_DATA_DIR", "SQLite data directory for connections and settings."],
+          ["MANGO_DATA_DIR", "Directory for the JSON files holding connections and settings."],
           ["MANGO_MASTER_KEY", "32-byte AES-GCM key for persistent encrypted secrets."],
           ["AI_PROVIDER", "openai, copilot, or claude-code."],
           ["AI_BASE_URL", "OpenAI-compatible endpoint override."],

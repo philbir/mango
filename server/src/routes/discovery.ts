@@ -3,6 +3,11 @@ import { request } from "node:http";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import {
+  MIN_ASPIRE_MAJOR,
+  discoverAspireAppHosts,
+  getAspireCliInfo,
+} from "../aspire.js";
 
 export const discoveryRoute = new Hono();
 
@@ -226,4 +231,46 @@ discoveryRoute.get("/docker", async (c) => {
   }
 
   return c.json({ ok: true, socket, containers: results });
+});
+
+discoveryRoute.get("/aspire", async (c) => {
+  const cli = await getAspireCliInfo();
+  if (!cli.installed) {
+    return c.json(
+      {
+        ok: false,
+        cli,
+        error:
+          "Aspire CLI not found. Install from https://aspire.dev or set ASPIRE_CLI to its path.",
+        appHosts: [],
+      },
+      200,
+    );
+  }
+  if (!cli.supported) {
+    return c.json(
+      {
+        ok: false,
+        cli,
+        error: `Aspire CLI ${cli.version ?? "?"} is too old — Mango requires v${MIN_ASPIRE_MAJOR}.x or newer. Run \`aspire update\` (or reinstall) to upgrade.`,
+        appHosts: [],
+      },
+      200,
+    );
+  }
+
+  try {
+    const appHosts = await discoverAspireAppHosts();
+    return c.json({ ok: true, cli, appHosts });
+  } catch (e) {
+    return c.json(
+      {
+        ok: false,
+        cli,
+        error: `aspire ps failed: ${e instanceof Error ? e.message : String(e)}`,
+        appHosts: [],
+      },
+      200,
+    );
+  }
 });

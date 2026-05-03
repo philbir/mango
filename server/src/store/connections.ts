@@ -1,6 +1,18 @@
 import { v4 as uuid } from "uuid";
 import { decryptString, encryptString, redactUri } from "./crypto.js";
-import { getDb } from "./db.js";
+import { JsonFileStore } from "./jsonFile.js";
+
+export interface AspireRef {
+  appHostPath: string;
+  resourceName: string;
+}
+
+/**
+ * Origin marker — set when a connection is created from a discovery flow.
+ * `null` means the user typed/built the URI by hand. Aspire uses its own
+ * dedicated `aspire` ref instead of this field.
+ */
+export type ConnectionSource = "docker" | null;
 
 export interface Connection {
   id: string;
@@ -10,6 +22,8 @@ export interface Connection {
   createdAt: number;
   updatedAt: number;
   lastUsedAt: number | null;
+  aspire: AspireRef | null;
+  source: ConnectionSource;
 }
 
 export interface ConnectionWithUri extends Connection {
@@ -21,52 +35,69 @@ export interface ConnectionPublic extends Connection {
   effectiveDefaultDatabase: string | null;
 }
 
-interface ConnectionRow {
+interface StoredConnection {
   id: string;
   name: string;
-  uri_encrypted: string;
-  default_database: string | null;
+  uriEncrypted: string;
+  defaultDatabase: string | null;
   color: string | null;
-  created_at: number;
-  updated_at: number;
-  last_used_at: number | null;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt: number | null;
+  aspire: AspireRef | null;
+  source: ConnectionSource;
 }
 
-const rowToConnection = (row: ConnectionRow): Connection => ({
-  id: row.id,
-  name: row.name,
-  defaultDatabase: row.default_database,
-  color: row.color,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  lastUsedAt: row.last_used_at,
+interface ConnectionsFile {
+  version: number;
+  connections: StoredConnection[];
+}
+
+const store = new JsonFileStore<ConnectionsFile>("connections.json", () => ({
+  version: 1,
+  connections: [],
+}));
+
+const normalizeSource = (s: unknown): ConnectionSource =>
+  s === "docker" ? "docker" : null;
+
+const fromStored = (s: StoredConnection): Connection => ({
+  id: s.id,
+  name: s.name,
+  defaultDatabase: s.defaultDatabase ?? null,
+  color: s.color ?? null,
+  createdAt: s.createdAt,
+  updatedAt: s.updatedAt,
+  lastUsedAt: s.lastUsedAt ?? null,
+  aspire: s.aspire ?? null,
+  source: normalizeSource(s.source),
 });
 
-const rowToWithUri = (row: ConnectionRow): ConnectionWithUri => ({
-  ...rowToConnection(row),
-  uri: decryptString(row.uri_encrypted),
+const toWithUri = (s: StoredConnection): ConnectionWithUri => ({
+  ...fromStored(s),
+  uri: decryptString(s.uriEncrypted),
 });
 
-const rowToPublic = (row: ConnectionRow): ConnectionPublic | null => {
+const toPublic = (s: StoredConnection): ConnectionPublic | null => {
   let uri: string;
   try {
-    uri = decryptString(row.uri_encrypted);
+    uri = decryptString(s.uriEncrypted);
   } catch (e) {
     // The master key has changed since this row was written. The row is
     // unrecoverable — skip it from the list rather than crashing the whole
     // request. The undecryptable count is exposed via /api/system/key-health
     // so the UI can offer a reset action.
     console.warn(
-      `[mango] could not decrypt connection ${row.id} (${row.name}) — ${
+      `[mango] could not decrypt connection ${s.id} (${s.name}) — ${
         e instanceof Error ? e.message : String(e)
       }`,
     );
     return null;
   }
   return {
-    ...rowToConnection(row),
+    ...fromStored(s),
     uriRedacted: redactUri(uri),
-    effectiveDefaultDatabase: row.default_database ?? extractDbFromUri(uri),
+    effectiveDefaultDatabase: s.defaultDatabase ?? extractDbFromUri(uri),
   };
 };
 
@@ -75,6 +106,8 @@ export interface CreateConnectionInput {
   uri: string;
   defaultDatabase?: string | null;
   color?: string | null;
+  aspire?: AspireRef | null;
+  source?: ConnectionSource;
 }
 
 export interface UpdateConnectionInput {
@@ -82,32 +115,37 @@ export interface UpdateConnectionInput {
   uri?: string;
   defaultDatabase?: string | null;
   color?: string | null;
+  aspire?: AspireRef | null;
+  source?: ConnectionSource;
 }
 
+const sortForList = (a: StoredConnection, b: StoredConnection): number => {
+  // last_used_at DESC NULLS LAST, then name ASC
+  if (a.lastUsedAt && b.lastUsedAt) return b.lastUsedAt - a.lastUsedAt;
+  if (a.lastUsedAt) return -1;
+  if (b.lastUsedAt) return 1;
+  return a.name.localeCompare(b.name);
+};
+
 export const listConnections = (): ConnectionPublic[] => {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT * FROM connections ORDER BY last_used_at DESC NULLS LAST, name ASC",
-    )
-    .all() as ConnectionRow[];
-  return rows.map(rowToPublic).filter((c): c is ConnectionPublic => c !== null);
+  const { connections } = store.read();
+  return [...connections]
+    .sort(sortForList)
+    .map(toPublic)
+    .filter((c): c is ConnectionPublic => c !== null);
 };
 
 /**
- * Count rows whose `uri_encrypted` cannot be decrypted with the current master
+ * Count rows whose `uriEncrypted` cannot be decrypted with the current master
  * key. Used by the key-health probe — a non-zero count means the user's saved
  * connections are stranded and they should reset.
  */
 export const countUndecryptableConnections = (): number => {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT uri_encrypted FROM connections")
-    .all() as Array<{ uri_encrypted: string }>;
+  const { connections } = store.read();
   let bad = 0;
-  for (const row of rows) {
+  for (const c of connections) {
     try {
-      decryptString(row.uri_encrypted);
+      decryptString(c.uriEncrypted);
     } catch {
       bad++;
     }
@@ -117,44 +155,40 @@ export const countUndecryptableConnections = (): number => {
 
 /** Wipe every encrypted row. Called when the user opts to reset after a key mismatch. */
 export const deleteAllConnections = (): number => {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM connections").run();
-  return result.changes;
+  const before = store.read().connections.length;
+  store.mutate((file) => ({ ...file, connections: [] }));
+  return before;
 };
 
 export const getConnection = (id: string): ConnectionWithUri | null => {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM connections WHERE id = ?")
-    .get(id) as ConnectionRow | undefined;
-  return row ? rowToWithUri(row) : null;
+  const found = store.read().connections.find((c) => c.id === id);
+  return found ? toWithUri(found) : null;
 };
 
 export const getConnectionPublic = (id: string): ConnectionPublic | null => {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM connections WHERE id = ?")
-    .get(id) as ConnectionRow | undefined;
-  return row ? rowToPublic(row) : null;
+  const found = store.read().connections.find((c) => c.id === id);
+  return found ? toPublic(found) : null;
 };
 
 export const createConnection = (input: CreateConnectionInput): ConnectionPublic => {
-  const db = getDb();
   const now = Date.now();
   const id = uuid();
-  db.prepare(
-    `INSERT INTO connections
-       (id, name, uri_encrypted, default_database, color, created_at, updated_at, last_used_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-  ).run(
+  const stored: StoredConnection = {
     id,
-    input.name,
-    encryptString(input.uri),
-    input.defaultDatabase ?? null,
-    input.color ?? null,
-    now,
-    now,
-  );
+    name: input.name,
+    uriEncrypted: encryptString(input.uri),
+    defaultDatabase: input.defaultDatabase ?? null,
+    color: input.color ?? null,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: null,
+    aspire: input.aspire ?? null,
+    source: input.source ?? null,
+  };
+  store.mutate((file) => ({
+    ...file,
+    connections: [...file.connections, stored],
+  }));
   return getConnectionPublic(id)!;
 };
 
@@ -162,41 +196,48 @@ export const updateConnection = (
   id: string,
   input: UpdateConnectionInput,
 ): ConnectionPublic | null => {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT * FROM connections WHERE id = ?")
-    .get(id) as ConnectionRow | undefined;
+  const existing = store.read().connections.find((c) => c.id === id);
   if (!existing) return null;
   const now = Date.now();
-  db.prepare(
-    `UPDATE connections SET
-       name = ?, uri_encrypted = ?, default_database = ?, color = ?, updated_at = ?
-     WHERE id = ?`,
-  ).run(
-    input.name ?? existing.name,
-    input.uri !== undefined ? encryptString(input.uri) : existing.uri_encrypted,
-    input.defaultDatabase !== undefined
-      ? input.defaultDatabase
-      : existing.default_database,
-    input.color !== undefined ? input.color : existing.color,
-    now,
-    id,
-  );
+  const next: StoredConnection = {
+    ...existing,
+    name: input.name ?? existing.name,
+    uriEncrypted:
+      input.uri !== undefined ? encryptString(input.uri) : existing.uriEncrypted,
+    defaultDatabase:
+      input.defaultDatabase !== undefined
+        ? input.defaultDatabase
+        : existing.defaultDatabase,
+    color: input.color !== undefined ? input.color : existing.color,
+    aspire: input.aspire !== undefined ? input.aspire ?? null : existing.aspire,
+    source: input.source !== undefined ? input.source ?? null : existing.source,
+    updatedAt: now,
+  };
+  store.mutate((file) => ({
+    ...file,
+    connections: file.connections.map((c) => (c.id === id ? next : c)),
+  }));
   return getConnectionPublic(id);
 };
 
 export const deleteConnection = (id: string): boolean => {
-  const db = getDb();
-  const r = db.prepare("DELETE FROM connections WHERE id = ?").run(id);
-  return r.changes > 0;
+  let removed = false;
+  store.mutate((file) => {
+    const next = file.connections.filter((c) => c.id !== id);
+    removed = next.length !== file.connections.length;
+    return { ...file, connections: next };
+  });
+  return removed;
 };
 
 export const touchConnection = (id: string): void => {
-  const db = getDb();
-  db.prepare("UPDATE connections SET last_used_at = ? WHERE id = ?").run(
-    Date.now(),
-    id,
-  );
+  const now = Date.now();
+  store.mutate((file) => ({
+    ...file,
+    connections: file.connections.map((c) =>
+      c.id === id ? { ...c, lastUsedAt: now } : c,
+    ),
+  }));
 };
 
 /**
@@ -208,18 +249,37 @@ export const upsertStandaloneConnection = (
   uri: string,
   defaultDatabase?: string | null,
 ): void => {
-  const db = getDb();
   const now = Date.now();
   const resolvedDb = defaultDatabase ?? extractDbFromUri(uri) ?? null;
-  db.prepare(
-    `INSERT INTO connections
-       (id, name, uri_encrypted, default_database, color, created_at, updated_at, last_used_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
-     ON CONFLICT(id) DO UPDATE SET
-       uri_encrypted = excluded.uri_encrypted,
-       default_database = excluded.default_database,
-       updated_at = excluded.updated_at`,
-  ).run(id, "Default", encryptString(uri), resolvedDb, "#38bdf8", now, now);
+  const uriEncrypted = encryptString(uri);
+  store.mutate((file) => {
+    const existing = file.connections.find((c) => c.id === id);
+    const next: StoredConnection = existing
+      ? {
+          ...existing,
+          uriEncrypted,
+          defaultDatabase: resolvedDb,
+          updatedAt: now,
+        }
+      : {
+          id,
+          name: "Default",
+          uriEncrypted,
+          defaultDatabase: resolvedDb,
+          color: "#38bdf8",
+          createdAt: now,
+          updatedAt: now,
+          lastUsedAt: null,
+          aspire: null,
+          source: null,
+        };
+    return {
+      ...file,
+      connections: existing
+        ? file.connections.map((c) => (c.id === id ? next : c))
+        : [...file.connections, next],
+    };
+  });
 };
 
 /**
@@ -227,11 +287,7 @@ export const upsertStandaloneConnection = (
  * Lets existing Aspire / Docker users keep working with no migration step.
  */
 export const seedFromEnvIfEmpty = (): void => {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT COUNT(*) AS n FROM connections")
-    .get() as { n: number };
-  if (row.n > 0) return;
+  if (store.read().connections.length > 0) return;
   const uri = process.env.MONGO_URL;
   if (!uri) return;
   const defaultDb = process.env.MONGO_DB || extractDbFromUri(uri) || null;

@@ -17,9 +17,10 @@ import { useSettings } from "./settings";
 
 export const App = () => {
   const { tabMode } = useSettings();
-  const { activeTab, closeTab } = useTabs();
+  const { tabs, activeTab, closeTab } = useTabs();
   const { toggle } = useAssistant();
-  const { pickerId, setActiveId } = useActiveConnection();
+  const { pickerId, setActiveId, connections, isLoading: connectionsLoading } =
+    useActiveConnection();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -33,14 +34,34 @@ export const App = () => {
   }, [toggle]);
 
   // Multi-tab: switching tab follows that tab's connection in the picker
-  // (so the sidebar shows matching databases/collections).
+  // (so the sidebar shows matching databases/collections). We trigger ONLY on
+  // active-tab changes — without the ref guard, a manual picker change would
+  // also fire this effect and immediately revert pickerId back to the active
+  // tab's connection, defeating the picker.
+  const lastActiveTabIdRef = useRef<string | null>(activeTab?.id ?? null);
   useEffect(() => {
-    if (!tabMode) return;
-    if (!activeTab) return;
-    if (activeTab.connectionId !== pickerId) {
+    if (!tabMode) {
+      lastActiveTabIdRef.current = activeTab?.id ?? null;
+      return;
+    }
+    const currentTabId = activeTab?.id ?? null;
+    if (lastActiveTabIdRef.current === currentTabId) return;
+    lastActiveTabIdRef.current = currentTabId;
+    if (activeTab && activeTab.connectionId !== pickerId) {
       setActiveId(activeTab.connectionId);
     }
   }, [tabMode, activeTab, pickerId, setActiveId]);
+
+  // Drop tabs that point at a connection no longer in the list (deleted, or
+  // hidden by a mode switch). Without this, stale tabs keep firing requests
+  // that 404 on the server.
+  useEffect(() => {
+    if (connectionsLoading) return;
+    const known = new Set(connections.map((c) => c.id));
+    for (const t of tabs) {
+      if (!known.has(t.connectionId)) closeTab(t.id);
+    }
+  }, [connections, connectionsLoading, tabs, closeTab]);
 
   // Single-tab: when the picker connection changes, drop any open tab —
   // the page belongs to the previous connection and would query the wrong DB.

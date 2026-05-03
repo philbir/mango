@@ -28,15 +28,15 @@ The UI has no separate test runner — all tests live in `server/test/` and run 
 
 ## Architecture
 
-Three-tier monorepo: a **Hono API + SQLite store** (`server/`), a **React 19 + Vite SPA** (`ui/`), and a **Tauri 2 desktop shell** (`desktop/`) that bundles the server as a compiled sidecar binary. The same server binary backs all three deployment targets (Aspire, Docker, desktop) — what differs is who launches it and where `MANGO_DATA_DIR` points.
+Three-tier monorepo: a **Hono API + JSON-file store** (`server/`), a **React 19 + Vite SPA** (`ui/`), and a **Tauri 2 desktop shell** (`desktop/`) that bundles the server as a compiled sidecar binary. The same server binary backs all three deployment targets (Aspire, Docker, desktop) — what differs is who launches it and where `MANGO_DATA_DIR` points.
 
 ### Multi-connection model
 
-Every collection-scoped API path is prefixed with a connection ID: `/api/connections/:cid/collections/...`, `/api/connections/:cid/shell`. The server caches one `MongoClient` per connection ID in `server/src/config.ts` (in-memory `Map`); connection metadata (URI, default DB, color) lives in SQLite, encrypted at rest with AES-256-GCM (`server/src/store/crypto.ts`). The master key comes from `MANGO_MASTER_KEY` (base64 or hex, 32 bytes) — without it, the server logs a warning and uses an ephemeral key, meaning saved connections become unreadable after restart.
+Every collection-scoped API path is prefixed with a connection ID: `/api/connections/:cid/collections/...`, `/api/connections/:cid/shell`. The server caches one `MongoClient` per connection ID in `server/src/config.ts` (in-memory `Map`); connection metadata (URI, default DB, color) is persisted as JSON files under `$MANGO_DATA_DIR/` (`connections.json`, `ai-settings.json`) via `server/src/store/jsonFile.ts` (atomic write: temp file + rename). URIs and the AI settings blob are encrypted at rest with AES-256-GCM (`server/src/store/crypto.ts`). The master key comes from `MANGO_MASTER_KEY` (base64 or hex, 32 bytes) — without it, the server logs a warning and uses an ephemeral key, meaning saved connections become unreadable after restart.
 
-**Backwards-compat seed:** if the connections table is empty and `MONGO_URL` is set, `seedFromEnvIfEmpty()` creates a "Default" connection on boot. This is how the older single-URL Aspire/Docker users keep working without a migration step.
+**Backwards-compat seed:** if no connections exist and `MONGO_URL` is set, `seedFromEnvIfEmpty()` creates a "Default" connection on boot. This is how the older single-URL Aspire/Docker users keep working without a migration step.
 
-SQLite migrations are versioned in `server/src/store/db.ts` — append to the `migrations` array, never edit existing entries. The DB file lives at `$MANGO_DATA_DIR/mango.db` (default `./.mango/`, Tauri overrides to OS app-data).
+The data dir defaults to `./.mango/` (dev), Tauri overrides to OS app-data, Docker mounts `/data`.
 
 ### EJSON everywhere
 
@@ -54,7 +54,7 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 
 ### Aspire integration
 
-`aspire/Mango.Aspire.Hosting/MangoExtensions.cs` is a standalone .NET class library (NuGet ID `Mango.Aspire.Hosting`) exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It adds an `AddContainer` resource for the published Mango image (default `ghcr.io/philbir/mango:latest`) and points it at the wired-up Mongo container by setting `MONGO_URL` from the Mongo resource's `ConnectionStringExpression`. Defaults to standalone mode (`MANGO_MODE=standalone`); pass `standalone: false` to opt out. SQLite persists in a named volume mounted at `/data`. AI / master-key / data-dir config keys (`Mango:Ai:*`, `Mango:MasterKey`) are forwarded as env vars.
+`aspire/Mango.Aspire.Hosting/MangoExtensions.cs` is a standalone .NET class library (NuGet ID `Mango.Aspire.Hosting`) exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It adds an `AddContainer` resource for the published Mango image (default `ghcr.io/philbir/mango:latest`) and points it at the wired-up Mongo container by setting `MONGO_URL` from the Mongo resource's `ConnectionStringExpression`. Defaults to standalone mode (`MANGO_MODE=standalone`); pass `standalone: false` to opt out. The JSON store persists in a named volume mounted at `/data`. AI / master-key / data-dir config keys (`Mango:Ai:*`, `Mango:MasterKey`) are forwarded as env vars.
 
 ## Conventions
 

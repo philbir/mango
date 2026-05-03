@@ -107,6 +107,13 @@ export interface CollectionIndexes {
   usageAvailable: boolean;
 }
 
+export interface AspireRef {
+  appHostPath: string;
+  resourceName: string;
+}
+
+export type ConnectionSource = "docker" | null;
+
 export interface ConnectionPublic {
   id: string;
   name: string;
@@ -117,6 +124,8 @@ export interface ConnectionPublic {
   createdAt: number;
   updatedAt: number;
   lastUsedAt: number | null;
+  aspire: AspireRef | null;
+  source: ConnectionSource;
 }
 
 export interface DiscoveredMongo {
@@ -135,6 +144,43 @@ export interface DiscoveryResult {
   socket?: string;
   error?: string;
   containers: DiscoveredMongo[];
+}
+
+export type AspireResourceKind = "mongo-database" | "mongo-server" | "other";
+
+export interface AspireResourceSummary {
+  name: string;
+  displayName: string;
+  resourceType: string;
+  state: string | null;
+  source: string | null;
+  parentName: string | null;
+  kind: AspireResourceKind;
+  uri: string | null;
+  databaseName: string | null;
+  warning: string | null;
+}
+
+export interface AspireAppHostInfo {
+  appHostPath: string;
+  appHostName: string;
+  appHostPid: number;
+  dashboardUrl: string | null;
+  resources: AspireResourceSummary[];
+}
+
+export interface AspireCliInfo {
+  installed: boolean;
+  version: string | null;
+  major: number | null;
+  supported: boolean;
+}
+
+export interface AspireDiscoveryResult {
+  ok: boolean;
+  error?: string;
+  cli?: AspireCliInfo;
+  appHosts: AspireAppHostInfo[];
 }
 
 const cidPath = (cid: string) => `/api/connections/${encodeURIComponent(cid)}`;
@@ -181,6 +227,8 @@ export const api = {
     uri: string;
     defaultDatabase?: string | null;
     color?: string | null;
+    aspire?: AspireRef | null;
+    source?: ConnectionSource;
   }): Promise<ConnectionPublic> {
     const res = await fetch("/api/connections", {
       method: "POST",
@@ -197,6 +245,8 @@ export const api = {
       uri: string;
       defaultDatabase: string | null;
       color: string | null;
+      aspire: AspireRef | null;
+      source: ConnectionSource;
     }>,
   ): Promise<ConnectionPublic> {
     const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
@@ -217,6 +267,13 @@ export const api = {
     }
   },
 
+  async getConnectionSecret(id: string): Promise<{ uri: string }> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/secret`,
+    );
+    return handlePlainJson(res) as Promise<{ uri: string }>;
+  },
+
   async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {
     const res = await fetch(`/api/connections/${encodeURIComponent(id)}/test`, {
       method: "POST",
@@ -228,6 +285,11 @@ export const api = {
   async discoverDocker(): Promise<DiscoveryResult> {
     const res = await fetch("/api/discovery/docker");
     return handlePlainJson(res) as Promise<DiscoveryResult>;
+  },
+
+  async discoverAspire(): Promise<AspireDiscoveryResult> {
+    const res = await fetch("/api/discovery/aspire");
+    return handlePlainJson(res) as Promise<AspireDiscoveryResult>;
   },
 
   async testUri(uri: string): Promise<{ ok: boolean; error?: string }> {

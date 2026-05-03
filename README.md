@@ -107,7 +107,7 @@ All modes read the same env vars:
 | `MONGO_URL` | Mongo connection string. Required in standalone mode. |
 | `MONGO_DB` | Default database (overrides URI path). |
 | `MANGO_MODE` | `standalone` or unset (= multi-connection). |
-| `MANGO_DATA_DIR` | Where SQLite + saved settings live. Defaults: `./.mango/` (dev), `/data` (Docker), OS app-data (desktop). |
+| `MANGO_DATA_DIR` | Where saved JSON state lives (`connections.json`, `ai-settings.json`). Defaults: `./.mango/` (dev), `/data` (Docker), OS app-data (desktop). |
 | `MANGO_MASTER_KEY` | 32-byte AES-256-GCM key (base64 or hex) for encrypting saved connection URIs. Auto-generated per-process if unset. **Set this in production** so saved state survives restarts. |
 | `PORT` | Server port. Default `5180`. |
 | `HOST` / `MANGO_HOST` | Server bind host. Default `127.0.0.1`; set explicitly only for trusted private-network access. |
@@ -125,7 +125,7 @@ All modes read the same env vars:
 | `AI_BASE_URL` | OpenAI provider only — point at GitHub Models, Azure, Ollama, etc. |
 | `GITHUB_TOKEN` | Copilot provider — falls back to logged-in Copilot CLI session if unset. |
 
-You can also configure the assistant from the UI (Settings menu); it'll be persisted (encrypted) in the SQLite store.
+You can also configure the assistant from the UI (Settings menu); it'll be persisted (encrypted) in `ai-settings.json` under `MANGO_DATA_DIR`.
 
 ## Development
 
@@ -138,7 +138,7 @@ yarn docs:dev           # landing page + docs site
 yarn docs:build         # static GitHub Pages build
 ```
 
-The server is ESM Node 22 + [Hono](https://hono.dev) + the official `mongodb` driver, with a SQLite-backed connection store (`better-sqlite3` on Node, `bun:sqlite` in the Tauri sidecar). The UI is React 19 + Vite + Tailwind + Monaco. The desktop shell is Tauri 2.
+The server is ESM Node 22 + [Hono](https://hono.dev) + the official `mongodb` driver. State (connections + AI settings) is persisted as plain JSON files under `MANGO_DATA_DIR`, with sensitive fields encrypted via AES-256-GCM. The UI is React 19 + Vite + Tailwind + Monaco. The desktop shell is Tauri 2.
 
 See [CLAUDE.md](CLAUDE.md) for the architecture overview.
 
@@ -149,7 +149,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md). Headlines:
 - Phase 1 — Connection manager, AES-GCM encryption, AI assistant, Aspire integration, standalone mode ✅
 - Phase 2 — Distribution: Docker / NuGet / Tauri desktop builds ✅ · code signing + auto-update next
 - Phase 3 — Mongo auth: OIDC (`MONGODB-OIDC`), X.509, AWS IAM
-- Phase 4 — Index manager, import/export (JSONL/CSV), saved commands (SQLite + Git provider sync), aggregation builder
+- Phase 4 — Index manager, import/export (JSONL/CSV), saved commands (Git provider sync), aggregation builder
 
 ## License
 

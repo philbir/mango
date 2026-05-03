@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { closeAllClients, config } from "./config.js";
 import { resolveServerConfig } from "./mode.js";
+import { getConnection } from "./store/connections.js";
 import { aiRoute } from "./routes/ai.js";
 import { collectionsRoute } from "./routes/collections.js";
 import { connectionsRoute } from "./routes/connections.js";
@@ -27,10 +28,6 @@ import {
   seedFromEnvIfEmpty,
   upsertStandaloneConnection,
 } from "./store/connections.js";
-import { getDb } from "./store/db.js";
-
-// Bootstrap: open SQLite (runs migrations).
-getDb();
 
 const serverConfig = resolveServerConfig();
 if (serverConfig.mode === "standalone" && serverConfig.standaloneConnectionId) {
@@ -82,6 +79,13 @@ app.route("/api/connections", connectionsRoute);
 
 // All collection-scoped routes are nested under /api/connections/:cid/...
 const connectionScoped = new Hono();
+connectionScoped.use("*", async (c, next) => {
+  const cid = c.req.param("cid");
+  if (!cid || !getConnection(cid)) {
+    return c.json({ error: "Connection not found" }, 404);
+  }
+  await next();
+});
 connectionScoped.route("/collections", collectionsRoute);
 connectionScoped.route("/collections", documentsRoute);
 connectionScoped.route("/collections", schemaRoute);

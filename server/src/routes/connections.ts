@@ -2,11 +2,16 @@ import { Hono } from "hono";
 import { MongoClient } from "mongodb";
 import { z } from "zod";
 import { closeMongoClient, getMongoClientFor } from "../config.js";
-import { resolveServerConfig } from "../mode.js";
-import { redactErrorMessage, validateMongoUri } from "../security.js";
+import { resolveServerConfig, STANDALONE_CONNECTION_ID } from "../mode.js";
+import {
+  redactErrorMessage,
+  sanitizeMongoUri,
+  validateMongoUri,
+} from "../security.js";
 import {
   createConnection,
   deleteConnection,
+  getConnection,
   getConnectionPublic,
   listConnections,
   updateConnection,
@@ -20,17 +25,34 @@ const standaloneError = () => ({
 
 const isStandalone = () => resolveServerConfig().mode === "standalone";
 
+const aspireRefSchema = z
+  .object({
+    appHostPath: z.string().min(1),
+    resourceName: z.string().min(1),
+  })
+  .nullable();
+
+const sourceSchema = z.enum(["docker"]).nullable().optional();
+
 const createBody = z.object({
   name: z.string().min(1).max(100),
   uri: z.string().min(1),
   defaultDatabase: z.string().optional().nullable(),
   color: z.string().optional().nullable(),
+  aspire: aspireRefSchema.optional(),
+  source: sourceSchema,
 });
 
 const updateBody = createBody.partial();
 
 connectionsRoute.get("/", (c) => {
-  return c.json({ connections: listConnections() });
+  const all = listConnections();
+  if (isStandalone()) {
+    return c.json({
+      connections: all.filter((conn) => conn.id === STANDALONE_CONNECTION_ID),
+    });
+  }
+  return c.json({ connections: all });
 });
 
 connectionsRoute.post("/", async (c) => {
@@ -39,9 +61,10 @@ connectionsRoute.post("/", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
-  const uriError = validateMongoUri(parsed.data.uri);
+  const uri = sanitizeMongoUri(parsed.data.uri);
+  const uriError = validateMongoUri(uri);
   if (uriError) return c.json({ error: uriError }, 400);
-  const created = createConnection(parsed.data);
+  const created = createConnection({ ...parsed.data, uri });
   return c.json(created, 201);
 });
 
@@ -52,6 +75,19 @@ connectionsRoute.get("/:id", (c) => {
   return c.json(conn);
 });
 
+/**
+ * Reveal the decrypted URI for the edit form. Mango binds to localhost by
+ * default and there's no auth layer, so this is no more sensitive than what
+ * `/test` already exposes — but we keep it on a dedicated path for clarity.
+ */
+connectionsRoute.get("/:id/secret", (c) => {
+  if (isStandalone()) return c.json(standaloneError(), 403);
+  const id = c.req.param("id");
+  const conn = getConnection(id);
+  if (!conn) return c.json({ error: "Connection not found" }, 404);
+  return c.json({ uri: conn.uri });
+});
+
 connectionsRoute.patch("/:id", async (c) => {
   if (isStandalone()) return c.json(standaloneError(), 403);
   const id = c.req.param("id");
@@ -59,13 +95,15 @@ connectionsRoute.patch("/:id", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
-  if (parsed.data.uri !== undefined) {
-    const uriError = validateMongoUri(parsed.data.uri);
+  const cleaned = { ...parsed.data };
+  if (cleaned.uri !== undefined) {
+    cleaned.uri = sanitizeMongoUri(cleaned.uri);
+    const uriError = validateMongoUri(cleaned.uri);
     if (uriError) return c.json({ error: uriError }, 400);
   }
-  const updated = updateConnection(id, parsed.data);
+  const updated = updateConnection(id, cleaned);
   if (!updated) return c.json({ error: "Connection not found" }, 404);
-  if (parsed.data.uri !== undefined) {
+  if (cleaned.uri !== undefined) {
     // Force reconnect with new URI on next request
     await closeMongoClient(id);
   }
@@ -103,9 +141,10 @@ connectionsRoute.post("/test-uri", async (c) => {
   if (!body.success) {
     return c.json({ error: body.error.issues[0]?.message ?? "Bad input" }, 400);
   }
-  const uriError = validateMongoUri(body.data.uri);
+  const cleaned = sanitizeMongoUri(body.data.uri);
+  const uriError = validateMongoUri(cleaned);
   if (uriError) return c.json({ error: uriError }, 400);
-  const client = new MongoClient(body.data.uri, {
+  const client = new MongoClient(cleaned, {
     serverSelectionTimeoutMS: 5_000,
   });
   try {

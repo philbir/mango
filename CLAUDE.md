@@ -28,28 +28,24 @@ The UI has no separate test runner — all tests live in `server/test/` and run 
 
 ## Architecture
 
-Three-tier monorepo: a **Hono API + SQLite store** (`server/`), a **React 19 + Vite SPA** (`ui/`), and a **Tauri 2 desktop shell** (`desktop/`) that bundles the server as a compiled sidecar binary. The same server binary backs all three deployment targets (Aspire, Docker, desktop) — what differs is who launches it and where `MANGO_DATA_DIR` points.
+Three-tier monorepo: a **Hono API + JSON-file store** (`server/`), a **React 19 + Vite SPA** (`ui/`), and a **Tauri 2 desktop shell** (`desktop/`) that bundles the server as a compiled sidecar binary. The same server binary backs all three deployment targets (Aspire, Docker, desktop) — what differs is who launches it and where `MANGO_DATA_DIR` points.
 
 ### Multi-connection model
 
-Every collection-scoped API path is prefixed with a connection ID: `/api/connections/:cid/collections/...`, `/api/connections/:cid/shell`. The server caches one `MongoClient` per connection ID in `server/src/config.ts` (in-memory `Map`); connection metadata (URI, default DB, color) lives in SQLite, encrypted at rest with AES-256-GCM (`server/src/store/crypto.ts`). The master key comes from `MANGO_MASTER_KEY` (base64 or hex, 32 bytes) — without it, the server logs a warning and uses an ephemeral key, meaning saved connections become unreadable after restart.
+Every collection-scoped API path is prefixed with a connection ID: `/api/connections/:cid/collections/...`, `/api/connections/:cid/shell`. The server caches one `MongoClient` per connection ID in `server/src/config.ts` (in-memory `Map`); connection metadata (URI, default DB, color) is persisted as JSON files under `$MANGO_DATA_DIR/` (`connections.json`, `ai-settings.json`) via `server/src/store/jsonFile.ts` (atomic write: temp file + rename, single-process server so no locking needed). URIs and the AI settings blob are encrypted at rest with AES-256-GCM (`server/src/store/crypto.ts`). The master key comes from `MANGO_MASTER_KEY` (base64 or hex, 32 bytes) — without it, the server logs a warning and uses an ephemeral key, meaning saved connections become unreadable after restart.
 
-**Backwards-compat seed:** if the connections table is empty and `MONGO_URL` is set, `seedFromEnvIfEmpty()` creates a "Default" connection on boot. This is how the older single-URL Aspire/Docker users keep working without a migration step.
+**Backwards-compat seed:** if no connections exist and `MONGO_URL` is set, `seedFromEnvIfEmpty()` creates a "Default" connection on boot. This is how the older single-URL Aspire/Docker users keep working without a migration step.
 
-SQLite migrations are versioned in `server/src/store/db.ts` — append to the `migrations` array, never edit existing entries. The DB file lives at `$MANGO_DATA_DIR/mango.db` (default `./.mango/`, Tauri overrides to OS app-data).
+The data dir defaults to `./.mango/` (dev), Tauri overrides to OS app-data, Docker mounts `/data`. The JSON files are human-readable (URI ciphertext aside) so users can inspect or hand-edit if needed.
 
 ### Run modes (`MANGO_MODE`)
 
 `server/src/mode.ts` resolves a server-wide mode that the UI fetches once at boot via `/api/config`:
 
 - **multi** (default) — connection manager is shown; the legacy `seedFromEnvIfEmpty()` creates a "Default" connection from `MONGO_URL` only when the table is empty.
-- **standalone** — set `MANGO_MODE=standalone` plus `MONGO_URL` (Docker / Aspire). On every boot the server upserts a fixed-ID connection (`STANDALONE_CONNECTION_ID = "standalone"`) so env changes win over the SQLite snapshot. POST/PATCH/DELETE on `/api/connections` return 403, and the UI's `ConnectionPicker` renders a static label instead of a dropdown.
+- **standalone** — set `MANGO_MODE=standalone` plus `MONGO_URL` (Docker / Aspire). On every boot the server upserts a fixed-ID connection (`STANDALONE_CONNECTION_ID = "standalone"`) so env changes win over whatever's persisted in `connections.json`. POST/PATCH/DELETE on `/api/connections` return 403, and the UI's `ConnectionPicker` renders a static label instead of a dropdown.
 
 The Aspire `WithMango()` extension defaults to standalone (pass `standalone: false` to opt out). The Tauri desktop shell stays in multi mode — that's the whole point of having a workbench.
-
-### SQLite driver shim (`server/src/store/sqlite.ts`)
-
-The store's `Database` class is selected at runtime: `bun:sqlite` when running under Bun (the Tauri sidecar binary), `better-sqlite3` everywhere else (tsx dev, vitest, Node prod). `better-sqlite3` ships a native `.node` addon resolved via node-gyp `bindings`, which can't locate its binary inside Bun's `--compile` virtual FS. The compile script in `desktop/scripts/compile-server.mjs` passes `--external better-sqlite3` so bun doesn't try to bundle it. Both backends accept positional `?` params; if you reach for `.pragma()` (better-sqlite3 only), use `db.exec("PRAGMA …")` instead.
 
 ### EJSON everywhere
 
@@ -69,7 +65,7 @@ The bundled UI is shipped as a Tauri resource (`bundle.resources` maps `server/p
 
 ### Aspire integration
 
-`aspire/Mango.Aspire.Hosting/MangoExtensions.cs` is a standalone .NET class library (NuGet ID `Mango.Aspire.Hosting`) exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It adds an `AddContainer` resource for the published Mango image (default `ghcr.io/philbir/mango:latest` — override via the `image`/`tag` parameters) and points it at the wired-up Mongo container by setting `MONGO_URL` from the Mongo resource's `ConnectionStringExpression` (Aspire rewrites the host to the Mongo container's network alias at runtime). Defaults to standalone mode (`MANGO_MODE=standalone`); pass `standalone: false` to opt out. SQLite persists in a named volume mounted at `/data`. AI / master-key / data-dir config keys (`Mango:Ai:*`, `Mango:MasterKey`) are forwarded as env vars. The `Aspire.Hosting.JavaScript` package is **not** referenced — earlier versions ran `yarn run aspire` against this repo, but the container approach removes the local-node-toolchain requirement.
+`aspire/Mango.Aspire.Hosting/MangoExtensions.cs` is a standalone .NET class library (NuGet ID `Mango.Aspire.Hosting`) exposing `IResourceBuilder<MongoDBServerResource>.WithMango()`. It adds an `AddContainer` resource for the published Mango image (default `ghcr.io/philbir/mango:latest` — override via the `image`/`tag` parameters) and points it at the wired-up Mongo container by setting `MONGO_URL` from the Mongo resource's `ConnectionStringExpression` (Aspire rewrites the host to the Mongo container's network alias at runtime). Defaults to standalone mode (`MANGO_MODE=standalone`); pass `standalone: false` to opt out. The JSON store persists in a named volume mounted at `/data`. AI / master-key / data-dir config keys (`Mango:Ai:*`, `Mango:MasterKey`) are forwarded as env vars. The `Aspire.Hosting.JavaScript` package is **not** referenced — earlier versions ran `yarn run aspire` against this repo, but the container approach removes the local-node-toolchain requirement.
 
 ## Conventions
 

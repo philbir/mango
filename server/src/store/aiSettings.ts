@@ -1,5 +1,5 @@
 import { decryptString, encryptString } from "./crypto.js";
-import { getDb } from "./db.js";
+import { JsonFileStore } from "./jsonFile.js";
 
 export type AiProviderName = "openai" | "copilot" | "claude-code";
 
@@ -11,26 +11,25 @@ export interface AiSettings {
   allowDataSampling: boolean;
 }
 
-const SETTINGS_KEY = "ai";
-
-interface SettingsRow {
-  key: string;
-  value: string;
-  updated_at: number;
+interface AiSettingsFile {
+  version: number;
+  encrypted: string | null;
 }
 
+const store = new JsonFileStore<AiSettingsFile>("ai-settings.json", () => ({
+  version: 1,
+  encrypted: null,
+}));
+
 /**
- * Read AI settings from SQLite. The full settings blob is encrypted with the
- * master key (so the API key never sits as plaintext).
+ * Read AI settings. The full settings blob is encrypted with the master key
+ * (so the API key never sits as plaintext on disk).
  */
 export const readAiSettings = (): AiSettings | null => {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM settings WHERE key = ?")
-    .get(SETTINGS_KEY) as SettingsRow | undefined;
-  if (!row) return null;
+  const { encrypted } = store.read();
+  if (!encrypted) return null;
   try {
-    const json = decryptString(row.value);
+    const json = decryptString(encrypted);
     const parsed = JSON.parse(json) as Partial<AiSettings>;
     const provider: AiProviderName =
       parsed.provider === "copilot"
@@ -54,16 +53,10 @@ export const readAiSettings = (): AiSettings | null => {
 };
 
 export const writeAiSettings = (settings: AiSettings): void => {
-  const db = getDb();
   const encrypted = encryptString(JSON.stringify(settings));
-  const now = Date.now();
-  db.prepare(
-    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-  ).run(SETTINGS_KEY, encrypted, now);
+  store.write({ version: 1, encrypted });
 };
 
 export const clearAiSettings = (): void => {
-  const db = getDb();
-  db.prepare("DELETE FROM settings WHERE key = ?").run(SETTINGS_KEY);
+  store.write({ version: 1, encrypted: null });
 };

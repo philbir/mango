@@ -18,11 +18,15 @@ const repoRoot = resolve(desktopDir, "..");
 const serverEntry = resolve(repoRoot, "server/src/index.ts");
 const binDir = resolve(desktopDir, "bin");
 
+// Bun's default `linux-x64` / `windows-x64` targets emit AVX2 instructions and
+// SIGILL on CPUs without it (Proxmox `kvm64`, older Intel Atom/Celeron, some
+// cloud VMs). The `-baseline` variants build for plain x86_64 and run anywhere.
+// Cost is a marginal startup-time hit — worth it for "it just runs".
 const TRIPLE_TO_BUN_TARGET = {
   "aarch64-apple-darwin": "darwin-arm64",
   "x86_64-apple-darwin": "darwin-x64",
-  "x86_64-unknown-linux-gnu": "linux-x64",
-  "x86_64-pc-windows-msvc": "windows-x64",
+  "x86_64-unknown-linux-gnu": "linux-x64-baseline",
+  "x86_64-pc-windows-msvc": "windows-x64-baseline",
 };
 
 const detectHostTriple = () => {
@@ -63,8 +67,6 @@ console.log(`         output : ${outFile}`);
 
 // Packages we explicitly do NOT bundle into the standalone binary:
 //
-// - better-sqlite3: Node-only, gated by an `isBun` check at runtime.
-//
 // - @github/copilot-sdk + @github/copilot: ship native Windows .node addons
 //   (keytar, win32, conpty, pty) that crash the bundled binary at startup
 //   on Windows with STATUS_ACCESS_VIOLATION. Loaded via `await import().catch()`
@@ -74,7 +76,6 @@ console.log(`         output : ${outFile}`);
 // - @anthropic-ai/claude-agent-sdk: same pattern — lazy-loaded with catch.
 //   Externalized for symmetry and to keep binary size sane.
 const externals = [
-  "better-sqlite3",
   "@github/copilot-sdk",
   "@github/copilot",
   "@anthropic-ai/claude-agent-sdk",
