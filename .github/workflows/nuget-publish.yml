@@ -1,8 +1,10 @@
 name: Publish NuGet package
 
 on:
-  # Manual-only until NUGET_API_KEY is set in repo secrets — re-enable the
-  # tag trigger once the key is in place.
+  push:
+    # Plain SemVer tags, no `v` prefix — `0.1.0`, `0.1.0-alpha.4`, etc.
+    # Matches the Docker + desktop workflows.
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
   workflow_dispatch:
     inputs:
       version:
