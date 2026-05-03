@@ -12,12 +12,13 @@ const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
 let DatabaseCtor: any;
 
 if (isBun) {
-  // `bun:sqlite` is a Bun built-in; TS can't resolve it under Node so we hide
-  // the specifier from static analysis.
-  const specifier = "bun:sqlite";
+  // Literal specifier is required so `bun build --compile` can statically
+  // track this import — passing a variable here breaks the bundled binary
+  // on Windows (process hangs at startup with no stdout).
+  // @ts-expect-error bun:sqlite is a Bun built-in, not visible to tsc under Node.
+  const mod = await import("bun:sqlite");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod = (await import(specifier)) as any;
-  DatabaseCtor = mod.Database;
+  DatabaseCtor = (mod as any).Database;
 } else {
   const mod = await import("better-sqlite3");
   DatabaseCtor = mod.default;

@@ -1,3 +1,8 @@
+// Early-boot heartbeat — if this never appears, the bun-compiled binary is
+// broken before our top-level code runs (look for missing stdout in
+// desktop/src-tauri tauri logs).
+process.stderr.write("[mango] boot start\n");
+
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
