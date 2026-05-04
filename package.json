@@ -1,7 +1,7 @@
 {
   "name": "mango",
   "private": true,
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Mango — a friendly MongoDB workbench. Browser, editor, AI query assistant, and shell. Runs as Aspire extension, Docker container, or desktop app.",
   "homepage": "https://philbir.github.io/mango/",
   "repository": {

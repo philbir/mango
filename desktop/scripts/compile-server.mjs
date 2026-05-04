@@ -22,11 +22,18 @@ const binDir = resolve(desktopDir, "bin");
 // SIGILL on CPUs without it (Proxmox `kvm64`, older Intel Atom/Celeron, some
 // cloud VMs). The `-baseline` variants build for plain x86_64 and run anywhere.
 // Cost is a marginal startup-time hit — worth it for "it just runs".
+//
+// Caveat: `windows-x64-baseline` was disabled in 0.2.7 because bun's
+// cross-target downloader crashes ("Failed to extract executable for
+// 'bun-windows-x64-baseline-v1.3.x'") when the host bun is `windows-x64` and
+// the target is the baseline variant. AVX2-less Windows is rare in practice
+// (much more common on the cheap Linux VPS that the Linux baseline targets);
+// switch back once the upstream extraction bug is fixed.
 const TRIPLE_TO_BUN_TARGET = {
   "aarch64-apple-darwin": "darwin-arm64",
   "x86_64-apple-darwin": "darwin-x64",
   "x86_64-unknown-linux-gnu": "linux-x64-baseline",
-  "x86_64-pc-windows-msvc": "windows-x64-baseline",
+  "x86_64-pc-windows-msvc": "windows-x64",
 };
 
 const detectHostTriple = () => {
@@ -99,4 +106,23 @@ if (r.error) {
   console.error("Could not invoke `bun`. Install Bun: https://bun.sh");
   process.exit(2);
 }
-process.exit(r.status ?? 1);
+if (r.status !== 0) {
+  process.exit(r.status ?? 1);
+}
+
+// On macOS, `bun build --compile` emits an ad-hoc signature that `codesign`
+// later refuses to overwrite ("invalid or unsupported format for signature"),
+// breaking tauri's bundle step on signed builds. Strip it so tauri can apply
+// the real Developer ID signature cleanly. No-op on non-macOS hosts.
+if (process.platform === "darwin" && triple.includes("apple-darwin")) {
+  const strip = spawnSync("codesign", ["--remove-signature", outFile], {
+    stdio: "inherit",
+  });
+  if (strip.status !== 0) {
+    console.error(
+      `[mango] codesign --remove-signature failed (exit ${strip.status}). ` +
+        `tauri-action's signing step may fail with "invalid or unsupported format for signature".`,
+    );
+    process.exit(strip.status ?? 1);
+  }
+}
