@@ -17,6 +17,7 @@ import {
   type ConnectionPublic,
   type ConnectionSource,
   type DiscoveredMongo,
+  type OidcProvider,
 } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 
@@ -46,6 +47,10 @@ interface BuilderState {
   username: string;
   password: string;
   basicMechanism: string; // "" | SCRAM-SHA-256 | SCRAM-SHA-1 | PLAIN
+  oidcProvider: OidcProvider;
+  oidcTokenAudience: string;
+  azureClientId: string;
+  azureTenantId: string;
 }
 
 const DEFAULT_BUILDER: BuilderState = {
@@ -59,6 +64,10 @@ const DEFAULT_BUILDER: BuilderState = {
   username: "",
   password: "",
   basicMechanism: "",
+  oidcProvider: "azure-browser",
+  oidcTokenAudience: "",
+  azureClientId: "",
+  azureTenantId: "",
 };
 
 const enc = (s: string) => encodeURIComponent(s);
@@ -187,6 +196,10 @@ const parseUri = (uri: string): BuilderState | null => {
       authMethod === "basic" && authMechanism.toUpperCase() !== "MONGODB-OIDC"
         ? authMechanism
         : "",
+    oidcProvider: "azure-browser",
+    oidcTokenAudience: "",
+    azureClientId: "",
+    azureTenantId: "",
   };
 };
 
@@ -257,7 +270,13 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         const parsed = parseUri(r.uri);
         if (parsed) {
           fromStringEdit.current = true;
-          setBuilder(parsed);
+          setBuilder({
+            ...parsed,
+            oidcProvider: existing.oidcProvider ?? "azure-browser",
+            oidcTokenAudience: existing.oidcTokenAudience ?? "",
+            azureClientId: existing.azureClientId ?? "",
+            azureTenantId: existing.azureTenantId ?? "",
+          });
         }
       })
       .catch(() => {
@@ -335,6 +354,19 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
   const save = useMutation({
     mutationFn: async () => {
       const payloadDb = defaultDatabaseOverride.trim() || null;
+      const oidcProvider = builder.authMethod === "oidc" ? builder.oidcProvider : null;
+      const oidcTokenAudience =
+        builder.authMethod === "oidc" && builder.oidcTokenAudience.trim()
+          ? builder.oidcTokenAudience.trim()
+          : null;
+      const azureClientId =
+        builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser" && builder.azureClientId.trim()
+          ? builder.azureClientId.trim()
+          : null;
+      const azureTenantId =
+        builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser" && builder.azureTenantId.trim()
+          ? builder.azureTenantId.trim()
+          : null;
       if (mode === "create") {
         return api.createConnection({
           name: name.trim(),
@@ -343,6 +375,10 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           color,
           aspire: aspireRef,
           source,
+          oidcProvider,
+          oidcTokenAudience,
+          azureClientId,
+          azureTenantId,
         });
       }
       return api.updateConnection(existing!.id, {
@@ -352,6 +388,10 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         color,
         aspire: aspireRef,
         source,
+        oidcProvider,
+        oidcTokenAudience,
+        azureClientId,
+        azureTenantId,
       });
     },
     onSuccess: (conn) => {
@@ -780,6 +820,70 @@ const AuthTab = ({ builder, setB }: TabProps) => {
 
       {builder.authMethod === "oidc" && (
         <>
+          <Field label="Provider">
+            <select
+              value={builder.oidcProvider ?? "azure-browser"}
+              onChange={(e) => setB("oidcProvider", e.target.value as OidcProvider)}
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            >
+              <option value="azure-browser">Azure AD — Interactive browser (recommended)</option>
+              <option value="azure-cli">Azure CLI (az login + admin consent)</option>
+            </select>
+          </Field>
+
+          {builder.oidcProvider === "azure-browser" && (
+            <>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                A browser window will open to sign in with Azure AD — no admin
+                consent or extra setup required.
+              </p>
+              <details className="group">
+                <summary className="cursor-pointer select-none text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                  Advanced (custom Azure AD app)
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <Field label="Azure Application (Client) ID (override)">
+                    <input
+                      value={builder.azureClientId}
+                      onChange={(e) => setB("azureClientId", e.target.value)}
+                      placeholder="built-in Mango app (leave blank)"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </Field>
+                  <Field label="Tenant ID (override)">
+                    <input
+                      value={builder.azureTenantId}
+                      onChange={(e) => setB("azureTenantId", e.target.value)}
+                      placeholder="auto-detected from server"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </Field>
+                </div>
+              </details>
+            </>
+          )}
+
+          {builder.oidcProvider === "azure-cli" && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Tokens are acquired from your local{" "}
+              <code className="font-mono">az login</code> session. Requires
+              admin consent for the Azure CLI app in your tenant.
+            </p>
+          )}
+
+          <Field label="Token audience / resource (optional)">
+            <input
+              value={builder.oidcTokenAudience}
+              onChange={(e) => setB("oidcTokenAudience", e.target.value)}
+              placeholder="auto-detected from server (e.g. api://your-atlas-app-id)"
+              spellCheck={false}
+              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+          </Field>
           <Field label="Principal name (optional)">
             <input
               value={builder.username}
@@ -790,12 +894,6 @@ const AuthTab = ({ builder, setB }: TabProps) => {
               className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
           </Field>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Uses <code className="font-mono">authMechanism=MONGODB-OIDC</code> with
-            <code className="font-mono"> authSource=$external</code>. Token
-            acquisition is handled by the MongoDB driver via your environment
-            (e.g. Azure / GCP workload identity).
-          </p>
         </>
       )}
     </div>
