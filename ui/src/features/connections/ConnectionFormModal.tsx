@@ -396,6 +396,9 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     },
     onSuccess: (conn) => {
       queryClient.invalidateQueries({ queryKey: ["connections"] });
+      // Force a fresh ping for this connection — the URI / auth may have just
+      // changed, so the cached health result is stale.
+      queryClient.invalidateQueries({ queryKey: ["connection-health", conn.id] });
       if (mode === "create") onCreated?.(conn);
       onClose();
     },
@@ -405,6 +408,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     mutationFn: () => api.deleteConnection(existing!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["connections"] });
+      queryClient.removeQueries({ queryKey: ["connection-health", existing!.id] });
       onClose();
     },
   });

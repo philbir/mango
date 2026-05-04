@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { Hono } from "hono";
 import { clearAiSettings } from "../store/aiSettings.js";
 import {
@@ -33,24 +33,52 @@ const platformOpener = (): { cmd: string; args: (target: string) => string[] } |
   }
 };
 
-systemRoute.post("/reveal-logs", (c) => {
+systemRoute.post("/reveal-logs", async (c) => {
   const dir = process.env.MANGO_LOG_DIR;
   if (!dir) {
     return c.json({ error: "Logs are not available in this run mode." }, 404);
   }
   if (!existsSync(dir)) {
-    return c.json({ error: `Log directory does not exist: ${dir}` }, 404);
+    // The Tauri shell creates MANGO_LOG_DIR lazily on first log write — try
+    // to create it here so "Open logs" works even on a fresh install.
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      return c.json(
+        {
+          error: `Log directory does not exist and could not be created: ${dir} — ${e instanceof Error ? e.message : String(e)}`,
+        },
+        404,
+      );
+    }
   }
   const opener = platformOpener();
   if (!opener) {
     return c.json({ error: `Unsupported platform: ${process.platform}` }, 500);
   }
+  // Wait for the opener to finish — `open` exits quickly once Finder/Explorer
+  // has been signalled. If it fails (e.g. SIP-restricted path, broken
+  // installation), we want to surface stderr instead of returning a fake 200.
   try {
-    const child = spawn(opener.cmd, opener.args(dir), {
-      detached: true,
-      stdio: "ignore",
-    });
-    child.unref();
+    const result = await new Promise<{ code: number | null; stderr: string }>(
+      (resolve, reject) => {
+        const child = spawn(opener.cmd, opener.args(dir), {
+          stdio: ["ignore", "ignore", "pipe"],
+        });
+        let stderr = "";
+        child.stderr?.on("data", (b: Buffer) => (stderr += b.toString()));
+        child.on("error", reject);
+        child.on("close", (code) => resolve({ code, stderr }));
+      },
+    );
+    if (result.code !== 0) {
+      return c.json(
+        {
+          error: `${opener.cmd} exited with ${result.code} for "${dir}": ${result.stderr.trim() || "(no stderr)"}`,
+        },
+        500,
+      );
+    }
     return c.json({ ok: true, path: dir });
   } catch (e) {
     return c.json(

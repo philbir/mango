@@ -37,7 +37,7 @@ interface CollectionViewProps {
 
 export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   const { pageSize, setPageSize, defaultCollectionMode } = useSettings();
-  const { activeId } = useActiveConnection();
+  const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
 
   const [filterDraft, setFilterDraft] = useState(EMPTY_FILTER_TEMPLATE);
@@ -209,7 +209,14 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
       <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
         <IconTable size={18} className="text-sky-600 dark:text-sky-400" />
         <div className="flex-1">
-          <div className="font-mono text-base text-slate-900 dark:text-slate-100">{name}</div>
+          <div className="font-mono text-base text-slate-900 dark:text-slate-100">
+            {name}
+            {active?.name && (
+              <span className="ml-1.5 font-sans text-[11px] font-normal text-slate-400 dark:text-slate-500">
+                — {active.name}
+              </span>
+            )}
+          </div>
           <div className="text-xs text-slate-500 dark:text-slate-500">
             {data ? `${data.total.toLocaleString()} documents` : "…"}
           </div>
