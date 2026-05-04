@@ -34,6 +34,8 @@ const aspireRefSchema = z
 
 const sourceSchema = z.enum(["docker"]).nullable().optional();
 
+const oidcProviderSchema = z.enum(["azure-cli", "azure-browser"]).nullable().optional();
+
 const createBody = z.object({
   name: z.string().min(1).max(100),
   uri: z.string().min(1),
@@ -41,6 +43,10 @@ const createBody = z.object({
   color: z.string().optional().nullable(),
   aspire: aspireRefSchema.optional(),
   source: sourceSchema,
+  oidcProvider: oidcProviderSchema,
+  oidcTokenAudience: z.string().optional().nullable(),
+  azureClientId: z.string().optional().nullable(),
+  azureTenantId: z.string().optional().nullable(),
 });
 
 const updateBody = createBody.partial();

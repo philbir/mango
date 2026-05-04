@@ -114,6 +114,8 @@ export interface AspireRef {
 
 export type ConnectionSource = "docker" | null;
 
+export type OidcProvider = "azure-cli" | "azure-browser" | null;
+
 export interface ConnectionPublic {
   id: string;
   name: string;
@@ -126,6 +128,10 @@ export interface ConnectionPublic {
   lastUsedAt: number | null;
   aspire: AspireRef | null;
   source: ConnectionSource;
+  oidcProvider: OidcProvider;
+  oidcTokenAudience: string | null;
+  azureClientId: string | null;
+  azureTenantId: string | null;
 }
 
 export interface DiscoveredMongo {
@@ -229,6 +235,10 @@ export const api = {
     color?: string | null;
     aspire?: AspireRef | null;
     source?: ConnectionSource;
+    oidcProvider?: OidcProvider;
+    oidcTokenAudience?: string | null;
+    azureClientId?: string | null;
+    azureTenantId?: string | null;
   }): Promise<ConnectionPublic> {
     const res = await fetch("/api/connections", {
       method: "POST",
@@ -247,6 +257,10 @@ export const api = {
       color: string | null;
       aspire: AspireRef | null;
       source: ConnectionSource;
+      oidcProvider: OidcProvider;
+      oidcTokenAudience: string | null;
+      azureClientId: string | null;
+      azureTenantId: string | null;
     }>,
   ): Promise<ConnectionPublic> {
     const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {

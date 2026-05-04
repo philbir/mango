@@ -14,6 +14,18 @@ export interface AspireRef {
  */
 export type ConnectionSource = "docker" | null;
 
+/**
+ * OIDC credential provider.
+ * - `"azure-cli"` — delegates to the local `az login` session (requires admin
+ *   consent for the Azure CLI app in your tenant).
+ * - `"azure-browser"` — opens an interactive browser window, same as
+ *   NoSQLBooster's Azure AD flow. Requires a registered Azure AD app
+ *   (public client with http://localhost redirect URI) whose `clientId` is
+ *   stored on the connection.
+ * - `null` — OIDC not used / token sourced from the environment.
+ */
+export type OidcProvider = "azure-cli" | "azure-browser" | null;
+
 export interface Connection {
   id: string;
   name: string;
@@ -24,6 +36,15 @@ export interface Connection {
   lastUsedAt: number | null;
   aspire: AspireRef | null;
   source: ConnectionSource;
+  oidcProvider: OidcProvider;
+  oidcTokenAudience: string | null;
+  /** Azure AD app client ID — required for the `azure-browser` OIDC flow. */
+  azureClientId: string | null;
+  /**
+   * Azure AD tenant ID — optional for `azure-browser`. When omitted it is
+   * auto-detected from the OIDC issuer advertised by the server.
+   */
+  azureTenantId: string | null;
 }
 
 export interface ConnectionWithUri extends Connection {
@@ -46,6 +67,10 @@ interface StoredConnection {
   lastUsedAt: number | null;
   aspire: AspireRef | null;
   source: ConnectionSource;
+  oidcProvider?: OidcProvider;
+  oidcTokenAudience?: string | null;
+  azureClientId?: string | null;
+  azureTenantId?: string | null;
 }
 
 interface ConnectionsFile {
@@ -61,6 +86,9 @@ const store = new JsonFileStore<ConnectionsFile>("connections.json", () => ({
 const normalizeSource = (s: unknown): ConnectionSource =>
   s === "docker" ? "docker" : null;
 
+const normalizeOidcProvider = (v: unknown): OidcProvider =>
+  v === "azure-cli" ? "azure-cli" : v === "azure-browser" ? "azure-browser" : null;
+
 const fromStored = (s: StoredConnection): Connection => ({
   id: s.id,
   name: s.name,
@@ -71,6 +99,10 @@ const fromStored = (s: StoredConnection): Connection => ({
   lastUsedAt: s.lastUsedAt ?? null,
   aspire: s.aspire ?? null,
   source: normalizeSource(s.source),
+  oidcProvider: normalizeOidcProvider(s.oidcProvider),
+  oidcTokenAudience: s.oidcTokenAudience ?? null,
+  azureClientId: s.azureClientId ?? null,
+  azureTenantId: s.azureTenantId ?? null,
 });
 
 const toWithUri = (s: StoredConnection): ConnectionWithUri => ({
@@ -108,6 +140,10 @@ export interface CreateConnectionInput {
   color?: string | null;
   aspire?: AspireRef | null;
   source?: ConnectionSource;
+  oidcProvider?: OidcProvider;
+  oidcTokenAudience?: string | null;
+  azureClientId?: string | null;
+  azureTenantId?: string | null;
 }
 
 export interface UpdateConnectionInput {
@@ -117,6 +153,10 @@ export interface UpdateConnectionInput {
   color?: string | null;
   aspire?: AspireRef | null;
   source?: ConnectionSource;
+  oidcProvider?: OidcProvider;
+  oidcTokenAudience?: string | null;
+  azureClientId?: string | null;
+  azureTenantId?: string | null;
 }
 
 const sortForList = (a: StoredConnection, b: StoredConnection): number => {
@@ -184,6 +224,10 @@ export const createConnection = (input: CreateConnectionInput): ConnectionPublic
     lastUsedAt: null,
     aspire: input.aspire ?? null,
     source: input.source ?? null,
+    oidcProvider: input.oidcProvider ?? null,
+    oidcTokenAudience: input.oidcTokenAudience ?? null,
+    azureClientId: input.azureClientId ?? null,
+    azureTenantId: input.azureTenantId ?? null,
   };
   store.mutate((file) => ({
     ...file,
@@ -211,6 +255,22 @@ export const updateConnection = (
     color: input.color !== undefined ? input.color : existing.color,
     aspire: input.aspire !== undefined ? input.aspire ?? null : existing.aspire,
     source: input.source !== undefined ? input.source ?? null : existing.source,
+    oidcProvider:
+      input.oidcProvider !== undefined
+        ? input.oidcProvider ?? null
+        : (existing.oidcProvider ?? null),
+    oidcTokenAudience:
+      input.oidcTokenAudience !== undefined
+        ? input.oidcTokenAudience ?? null
+        : (existing.oidcTokenAudience ?? null),
+    azureClientId:
+      input.azureClientId !== undefined
+        ? input.azureClientId ?? null
+        : (existing.azureClientId ?? null),
+    azureTenantId:
+      input.azureTenantId !== undefined
+        ? input.azureTenantId ?? null
+        : (existing.azureTenantId ?? null),
     updatedAt: now,
   };
   store.mutate((file) => ({
