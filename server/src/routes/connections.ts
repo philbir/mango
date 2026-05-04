@@ -125,12 +125,28 @@ connectionsRoute.delete("/:id", async (c) => {
   return c.body(null, 204);
 });
 
+// 3s end-to-end cap: includes connect (driver's serverSelectionTimeoutMS is
+// 5s by default — too long for a UI health badge that polls every 60s) plus
+// the ping itself. The UI calls this from useConnectionHealth on every row
+// in the picker dropdown, so a long timeout would freeze the UI when the
+// network is flaky.
+const HEALTH_CHECK_TIMEOUT_MS = 3000;
+
 connectionsRoute.post("/:id/test", async (c) => {
   const id = c.req.param("id");
   try {
-    const { client, defaultDatabase } = await getMongoClientFor(id);
-    const dbName = defaultDatabase ?? "admin";
-    const result = await client.db(dbName).command({ ping: 1 });
+    const work = (async () => {
+      const { client, defaultDatabase } = await getMongoClientFor(id);
+      const dbName = defaultDatabase ?? "admin";
+      return client.db(dbName).command({ ping: 1, maxTimeMS: HEALTH_CHECK_TIMEOUT_MS });
+    })();
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
+        HEALTH_CHECK_TIMEOUT_MS,
+      ),
+    );
+    const result = await Promise.race([work, timeout]);
     return c.json({ ok: true, ping: result });
   } catch (e) {
     return c.json({ ok: false, error: redactErrorMessage(e) }, 400);

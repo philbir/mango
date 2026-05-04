@@ -182,17 +182,20 @@ export const AiSettingsModal = ({ onClose }: Props) => {
 
           {provider === "copilot" && (
             <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
-              Copilot uses your <span className="font-mono">GITHUB_TOKEN</span>{" "}
-              env var or the existing Copilot CLI session — no key entry here.
+              Mango spawns your installed{" "}
+              <span className="font-mono">copilot</span> CLI per request, using
+              the existing login (or <span className="font-mono">GITHUB_TOKEN</span>).
+              Install the GitHub Copilot CLI if you haven't yet.
             </div>
           )}
 
           {provider === "claude-code" && (
             <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
-              Claude Code uses your{" "}
-              <span className="font-mono">ANTHROPIC_API_KEY</span> env var, or
-              the existing Claude Code CLI login (creds at{" "}
-              <span className="font-mono">~/.claude</span>) — no key entry here.
+              Mango spawns your installed{" "}
+              <span className="font-mono">claude</span> CLI per request, using
+              the existing login at <span className="font-mono">~/.claude</span>{" "}
+              (or <span className="font-mono">ANTHROPIC_API_KEY</span>). Install
+              Claude Code if you haven't yet.
             </div>
           )}
 

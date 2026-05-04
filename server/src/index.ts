@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { closeAllClients, config } from "./config.js";
 import { resolveServerConfig } from "./mode.js";
+import { redactErrorMessage } from "./security.js";
 import { getConnection } from "./store/connections.js";
 import { aiRoute } from "./routes/ai.js";
 import { collectionsRoute } from "./routes/collections.js";
@@ -65,6 +66,17 @@ app.use("/api/*", async (c, next) => {
 
   if (c.req.method === "OPTIONS") return c.body(null, 204);
   await next();
+});
+
+// Default: any uncaught exception in a route returns a usable JSON detail
+// instead of Hono's plain-text "Internal Server Error". Routes that want a
+// different status (400, 404, etc.) should still catch and return their own
+// response — this is the safety net.
+app.onError((err, c) => {
+  const message = redactErrorMessage(err);
+  console.error(`[mango] unhandled error on ${c.req.method} ${c.req.path}: ${message}`);
+  if (err instanceof Error && err.stack) console.error(err.stack);
+  return c.json({ error: message }, 500);
 });
 
 app.get("/api/health", (c) => {

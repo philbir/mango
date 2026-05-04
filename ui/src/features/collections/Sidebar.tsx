@@ -3,6 +3,7 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconDatabase,
+  IconPlugConnectedX,
   IconPlus,
   IconRefresh,
   IconSearch,
@@ -17,6 +18,7 @@ import { useResize } from "../../components/useResize";
 import { ConnectionPicker } from "../connections/ConnectionPicker";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import { useConnectionHealth } from "../connections/useConnectionHealth";
 import { useTabs } from "../tabs/TabsContext";
 
 export const Sidebar = () => {
@@ -24,6 +26,7 @@ export const Sidebar = () => {
     import.meta.env.VITE_MANGO_DOCS_URL ?? "https://philbir.github.io/mango/";
   const version = import.meta.env.VITE_MANGO_VERSION ?? "v0.1.0";
   const { activeId } = useActiveConnection();
+  const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
   const { activeTab, openCollection, openConsole, openShell } = useTabs();
   const { size: sidebarWidth, onMouseDown: onResizeStart } = useResize({
@@ -34,16 +37,22 @@ export const Sidebar = () => {
     max: 520,
   });
 
+  // Gate Mongo metadata fetches on a successful ping. Without this, a
+  // disconnected connection (bad URI, server down) would surface as a 500
+  // toast on every refetch tick — instead we render a "Not connected" panel
+  // and let the user click Retry once they've fixed things.
+  const canQuery = !!activeId && health.status === "ok";
+
   const databasesQuery = useQuery({
     queryKey: ["databases", activeId],
     queryFn: () => api.listDatabases(activeId!),
-    enabled: !!activeId && !database,
+    enabled: canQuery && !database,
   });
 
   const collectionsQuery = useQuery({
     queryKey: ["collections", activeId, database],
     queryFn: () => api.listCollections(activeId!, database ?? undefined),
-    enabled: !!activeId && !!database,
+    enabled: canQuery && !!database,
   });
 
   const [search, setSearch] = useState("");
@@ -58,6 +67,11 @@ export const Sidebar = () => {
   }, [collectionsQuery.data, search]);
 
   const onRefresh = () => {
+    // Always re-ping first. If the connection is currently dead, that's the
+    // useful action — running listDatabases / listCollections against a dead
+    // server just produces a 500 toast on top of the "Not connected" panel.
+    health.refetch();
+    if (health.status !== "ok") return;
     if (database) collectionsQuery.refetch();
     else databasesQuery.refetch();
   };
@@ -90,7 +104,7 @@ export const Sidebar = () => {
         <SettingsMenu />
       </div>
 
-      {activeId && database && (
+      {canQuery && database && (
         <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1 dark:border-slate-800">
           <button
             type="button"
@@ -111,7 +125,7 @@ export const Sidebar = () => {
         </div>
       )}
 
-      {activeId && database && (
+      {canQuery && database && (
         <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
           <div className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950">
             <IconSearch size={12} className="text-slate-400" />
@@ -133,7 +147,21 @@ export const Sidebar = () => {
           </div>
         )}
 
-        {activeId && !database && (
+        {activeId && health.status === "loading" && (
+          <div className="px-2 py-2 text-xs text-slate-400">
+            Connecting…
+          </div>
+        )}
+
+        {activeId && health.status === "error" && (
+          <NotConnectedPanel
+            error={health.error}
+            onRetry={() => health.refetch()}
+            isFetching={health.isFetching}
+          />
+        )}
+
+        {canQuery && !database && (
           <DatabaseList
             data={databasesQuery.data}
             isLoading={databasesQuery.isLoading}
@@ -143,7 +171,7 @@ export const Sidebar = () => {
           />
         )}
 
-        {activeId && database && (
+        {canQuery && database && (
           <>
             {collectionsQuery.isLoading && (
               <div className="px-2 py-1.5 text-xs text-slate-400">Loading…</div>
@@ -350,6 +378,41 @@ const DatabaseList = ({
         ))}
       </ul>
     </>
+  );
+};
+
+interface NotConnectedPanelProps {
+  error: string | null;
+  onRetry: () => void;
+  isFetching: boolean;
+}
+
+const NotConnectedPanel = ({
+  error,
+  onRetry,
+  isFetching,
+}: NotConnectedPanelProps) => {
+  return (
+    <div className="m-2 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+      <div className="mb-1 flex items-center gap-1.5 font-medium">
+        <IconPlugConnectedX size={13} />
+        Not connected
+      </div>
+      {error && (
+        <div className="mb-2 break-words text-[11px] text-red-700/80 dark:text-red-300/80">
+          {error}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isFetching}
+        className="flex items-center gap-1 rounded border border-red-300 bg-white px-2 py-1 text-[11px] text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/40"
+      >
+        <IconRefresh size={11} className={isFetching ? "animate-spin" : ""} />
+        {isFetching ? "Retrying…" : "Retry"}
+      </button>
+    </div>
   );
 };
 

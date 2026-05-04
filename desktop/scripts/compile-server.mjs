@@ -72,21 +72,12 @@ console.log(`         entry  : ${serverEntry}`);
 console.log(`         target : ${bunTarget}`);
 console.log(`         output : ${outFile}`);
 
-// Packages we explicitly do NOT bundle into the standalone binary:
-//
-// - @github/copilot-sdk + @github/copilot: ship native Windows .node addons
-//   (keytar, win32, conpty, pty) that crash the bundled binary at startup
-//   on Windows with STATUS_ACCESS_VIOLATION. Loaded via `await import().catch()`
-//   in providers/copilot.ts, so missing-at-runtime degrades to a clear error
-//   message when the user picks the copilot provider.
-//
-// - @anthropic-ai/claude-agent-sdk: same pattern — lazy-loaded with catch.
-//   Externalized for symmetry and to keep binary size sane.
-const externals = [
-  "@github/copilot-sdk",
-  "@github/copilot",
-  "@anthropic-ai/claude-agent-sdk",
-];
+// The Claude Code and GitHub Copilot providers shell out to the user's
+// installed `claude` / `copilot` CLIs (see server/src/providers/*.ts) instead
+// of importing the JS SDKs — that keeps the desktop sidecar binary lean and
+// avoids the SDKs' platform-native addons that crash bun-compile on Windows.
+// As a result, we no longer need to mark them as external.
+const externals = [];
 
 const r = spawnSync(
   "bun",
@@ -110,10 +101,14 @@ if (r.status !== 0) {
   process.exit(r.status ?? 1);
 }
 
-// On macOS, `bun build --compile` emits an ad-hoc signature that `codesign`
-// later refuses to overwrite ("invalid or unsupported format for signature"),
-// breaking tauri's bundle step on signed builds. Strip it so tauri can apply
-// the real Developer ID signature cleanly. No-op on non-macOS hosts.
+// On macOS, `bun build --compile` emits a non-standard signature that
+// `codesign` later refuses to overwrite ("invalid or unsupported format for
+// signature"), breaking tauri's bundle step on signed builds. Strip it and
+// re-apply a standard ad-hoc signature so:
+//   - tauri's bundle step can overwrite cleanly with `codesign --force --sign <Developer ID>`
+//   - local `tauri:dev` runs (no signing step) get a launchable binary;
+//     a fully unsigned binary is SIGKILLed by the macOS kernel at exec.
+// No-op on non-macOS hosts.
 if (process.platform === "darwin" && triple.includes("apple-darwin")) {
   const strip = spawnSync("codesign", ["--remove-signature", outFile], {
     stdio: "inherit",
@@ -124,5 +119,17 @@ if (process.platform === "darwin" && triple.includes("apple-darwin")) {
         `tauri-action's signing step may fail with "invalid or unsupported format for signature".`,
     );
     process.exit(strip.status ?? 1);
+  }
+  const adhoc = spawnSync(
+    "codesign",
+    ["--sign", "-", "--force", outFile],
+    { stdio: "inherit" },
+  );
+  if (adhoc.status !== 0) {
+    console.error(
+      `[mango] ad-hoc codesign failed (exit ${adhoc.status}). ` +
+        `The unsigned sidecar will be SIGKILLed at launch on macOS.`,
+    );
+    process.exit(adhoc.status ?? 1);
   }
 }

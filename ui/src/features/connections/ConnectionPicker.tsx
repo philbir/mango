@@ -1,17 +1,61 @@
 import {
   IconChevronDown,
+  IconCircleCheckFilled,
   IconCircleDot,
   IconCopy,
   IconList,
+  IconLoader2,
+  IconPlugConnectedX,
   IconPlus,
   IconSettings,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { type ConnectionPublic } from "../../api/client";
 import { useActiveConnection } from "./useActiveConnection";
+import {
+  type ConnectionHealthStatus,
+  useConnectionHealth,
+} from "./useConnectionHealth";
 import { useServerConfig } from "./useServerConfig";
 import { ConnectionFormModal } from "./ConnectionFormModal";
 import { ConnectionsManagerModal } from "./ConnectionsManagerModal";
+
+interface HealthIconProps {
+  status: ConnectionHealthStatus;
+  size?: number;
+  title?: string;
+}
+
+const HealthIcon = ({ status, size = 12, title }: HealthIconProps) => {
+  if (status === "ok") {
+    return (
+      <IconCircleCheckFilled
+        size={size}
+        className="flex-shrink-0 text-emerald-500"
+        title={title ?? "Connected"}
+      />
+    );
+  }
+  if (status === "error") {
+    return (
+      <IconPlugConnectedX
+        size={size}
+        className="flex-shrink-0 text-red-500"
+        title={title ?? "Disconnected"}
+      />
+    );
+  }
+  if (status === "loading") {
+    return (
+      <IconLoader2
+        size={size}
+        className="flex-shrink-0 animate-spin text-slate-400"
+        title={title ?? "Checking…"}
+      />
+    );
+  }
+  return null;
+};
 
 /**
  * Extract a "host:port" (or "host") label from a Mongo URI for compact display.
@@ -34,6 +78,7 @@ const hostLabelFromUri = (uri: string | null | undefined): string | null => {
 
 export const ConnectionPicker = () => {
   const { active, connections, setActiveId } = useActiveConnection();
+  const activeHealth = useConnectionHealth(active?.id ?? null);
   const { mode } = useServerConfig();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<
@@ -76,6 +121,16 @@ export const ConnectionPicker = () => {
               {active?.name ?? "No connection"}
             </div>
           </div>
+          {active && (
+            <HealthIcon
+              status={activeHealth.status}
+              title={
+                activeHealth.status === "error"
+                  ? `Disconnected: ${activeHealth.error ?? ""}`
+                  : undefined
+              }
+            />
+          )}
           {active && <SourceBadge conn={active} />}
           <IconChevronDown size={14} className="text-slate-400" />
         </button>
@@ -111,9 +166,6 @@ export const ConnectionPicker = () => {
                       {c.name}
                     </span>
                     <SourceBadge conn={c} />
-                    {active?.id === c.id && (
-                      <IconCircleDot size={12} className="text-sky-500" />
-                    )}
                   </button>
                   <button
                     type="button"

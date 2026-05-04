@@ -73,6 +73,28 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error, query) => {
+      const head = query.queryKey[0];
+      // Connection-health failures are already surfaced by the picker's red
+      // icon and the sidebar's "Not connected" panel. Toasts on top would
+      // flood the screen on every retry tick.
+      if (head === "connection-health") return;
+      // Sidebar database/collection lists render their own inline error
+      // panel — a parallel toast is duplicate noise. When these fail with
+      // a connection-style error (ECONNREFUSED, timeout, network unreachable)
+      // we also invalidate the health query so the picker flips to red and
+      // the "Not connected" panel replaces the inline message on the next
+      // tick.
+      if (head === "databases" || head === "collections") {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|timed out|server selection/i.test(message)) {
+          // queryKey is ["databases", cid] or ["collections", cid, db].
+          const cid = query.queryKey[1];
+          if (typeof cid === "string") {
+            queryClient.invalidateQueries({ queryKey: ["connection-health", cid] });
+          }
+        }
+        return;
+      }
       reportError(error, describeQueryKey(query.queryKey));
     },
   }),

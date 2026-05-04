@@ -12,41 +12,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@anthropic-ai/claude-agent-sdk@npm:^0.1.10":
-  version: 0.1.77
-  resolution: "@anthropic-ai/claude-agent-sdk@npm:0.1.77"
-  dependencies:
-    "@img/sharp-darwin-arm64": "npm:^0.33.5"
-    "@img/sharp-darwin-x64": "npm:^0.33.5"
-    "@img/sharp-linux-arm": "npm:^0.33.5"
-    "@img/sharp-linux-arm64": "npm:^0.33.5"
-    "@img/sharp-linux-x64": "npm:^0.33.5"
-    "@img/sharp-linuxmusl-arm64": "npm:^0.33.5"
-    "@img/sharp-linuxmusl-x64": "npm:^0.33.5"
-    "@img/sharp-win32-x64": "npm:^0.33.5"
-  peerDependencies:
-    zod: ^3.25.0 || ^4.0.0
-  dependenciesMeta:
-    "@img/sharp-darwin-arm64":
-      optional: true
-    "@img/sharp-darwin-x64":
-      optional: true
-    "@img/sharp-linux-arm":
-      optional: true
-    "@img/sharp-linux-arm64":
-      optional: true
-    "@img/sharp-linux-x64":
-      optional: true
-    "@img/sharp-linuxmusl-arm64":
-      optional: true
-    "@img/sharp-linuxmusl-x64":
-      optional: true
-    "@img/sharp-win32-x64":
-      optional: true
-  checksum: 10c0/baa70f1bb3692cc4a3432692e3d92731c00744899ed64a0325611c40a1009aca999ddcfb8f3b4c1f5e07116388da94ab73a4f60b2fd59215d140c7e5dd0a3737
-  languageName: node
-  linkType: hard
-
 "@babel/code-frame@npm:^7.28.6, @babel/code-frame@npm:^7.29.0":
   version: 7.29.0
   resolution: "@babel/code-frame@npm:7.29.0"
@@ -874,246 +839,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@github/copilot-darwin-arm64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-darwin-arm64@npm:1.0.40"
-  bin:
-    copilot-darwin-arm64: copilot
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@github/copilot-darwin-x64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-darwin-x64@npm:1.0.40"
-  bin:
-    copilot-darwin-x64: copilot
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@github/copilot-linux-arm64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-linux-arm64@npm:1.0.40"
-  bin:
-    copilot-linux-arm64: copilot
-  conditions: os=linux & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@github/copilot-linux-x64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-linux-x64@npm:1.0.40"
-  bin:
-    copilot-linux-x64: copilot
-  conditions: os=linux & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@github/copilot-sdk@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@github/copilot-sdk@npm:0.3.0"
-  dependencies:
-    "@github/copilot": "npm:^1.0.36-0"
-    vscode-jsonrpc: "npm:^8.2.1"
-    zod: "npm:^4.3.6"
-  checksum: 10c0/d8ca7637530a71ab89518430c2771ef219ea2021484b14f6076f3310873842611d08e08b5294990f29904c584a6ccc7fa8f1eb47d0f4650f6d419a5c84a2c484
-  languageName: node
-  linkType: hard
-
-"@github/copilot-win32-arm64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-win32-arm64@npm:1.0.40"
-  bin:
-    copilot-win32-arm64: copilot.exe
-  conditions: os=win32 & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@github/copilot-win32-x64@npm:1.0.40":
-  version: 1.0.40
-  resolution: "@github/copilot-win32-x64@npm:1.0.40"
-  bin:
-    copilot-win32-x64: copilot.exe
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@github/copilot@npm:^1.0.36-0":
-  version: 1.0.40
-  resolution: "@github/copilot@npm:1.0.40"
-  dependencies:
-    "@github/copilot-darwin-arm64": "npm:1.0.40"
-    "@github/copilot-darwin-x64": "npm:1.0.40"
-    "@github/copilot-linux-arm64": "npm:1.0.40"
-    "@github/copilot-linux-x64": "npm:1.0.40"
-    "@github/copilot-win32-arm64": "npm:1.0.40"
-    "@github/copilot-win32-x64": "npm:1.0.40"
-  dependenciesMeta:
-    "@github/copilot-darwin-arm64":
-      optional: true
-    "@github/copilot-darwin-x64":
-      optional: true
-    "@github/copilot-linux-arm64":
-      optional: true
-    "@github/copilot-linux-x64":
-      optional: true
-    "@github/copilot-win32-arm64":
-      optional: true
-    "@github/copilot-win32-x64":
-      optional: true
-  bin:
-    copilot: npm-loader.js
-  checksum: 10c0/b00cd7263c7c80960055a4e52c10bd8925583368565cb2abf8edc2492288dd145199e7bc43c0cb41e6b7aef8587989f2ee853b3b0896019fd8a3a08d78c265c9
-  languageName: node
-  linkType: hard
-
 "@hono/node-server@npm:^1.13.7":
   version: 1.19.14
   resolution: "@hono/node-server@npm:1.19.14"
   peerDependencies:
     hono: ^4
   checksum: 10c0/41a099bb3705d96aac44b7a8db8805f2a22ce8a0f767a27b6d10b74a9964925df01c5f35d3631e882f8bcdeee3518884c30f40588ac8c960d88bf71048ba0df3
-  languageName: node
-  linkType: hard
-
-"@img/sharp-darwin-arm64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-darwin-arm64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-darwin-arm64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-darwin-arm64":
-      optional: true
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@img/sharp-darwin-x64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-darwin-x64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-darwin-x64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-darwin-x64":
-      optional: true
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-darwin-arm64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-darwin-arm64@npm:1.0.4"
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-darwin-x64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-darwin-x64@npm:1.0.4"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-linux-arm64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-linux-arm64@npm:1.0.4"
-  conditions: os=linux & cpu=arm64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-linux-arm@npm:1.0.5":
-  version: 1.0.5
-  resolution: "@img/sharp-libvips-linux-arm@npm:1.0.5"
-  conditions: os=linux & cpu=arm & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-linux-x64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-linux-x64@npm:1.0.4"
-  conditions: os=linux & cpu=x64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-linuxmusl-arm64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-linuxmusl-arm64@npm:1.0.4"
-  conditions: os=linux & cpu=arm64 & libc=musl
-  languageName: node
-  linkType: hard
-
-"@img/sharp-libvips-linuxmusl-x64@npm:1.0.4":
-  version: 1.0.4
-  resolution: "@img/sharp-libvips-linuxmusl-x64@npm:1.0.4"
-  conditions: os=linux & cpu=x64 & libc=musl
-  languageName: node
-  linkType: hard
-
-"@img/sharp-linux-arm64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-linux-arm64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-linux-arm64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-linux-arm64":
-      optional: true
-  conditions: os=linux & cpu=arm64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-linux-arm@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-linux-arm@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-linux-arm": "npm:1.0.5"
-  dependenciesMeta:
-    "@img/sharp-libvips-linux-arm":
-      optional: true
-  conditions: os=linux & cpu=arm & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-linux-x64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-linux-x64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-linux-x64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-linux-x64":
-      optional: true
-  conditions: os=linux & cpu=x64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"@img/sharp-linuxmusl-arm64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-linuxmusl-arm64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-linuxmusl-arm64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-linuxmusl-arm64":
-      optional: true
-  conditions: os=linux & cpu=arm64 & libc=musl
-  languageName: node
-  linkType: hard
-
-"@img/sharp-linuxmusl-x64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-linuxmusl-x64@npm:0.33.5"
-  dependencies:
-    "@img/sharp-libvips-linuxmusl-x64": "npm:1.0.4"
-  dependenciesMeta:
-    "@img/sharp-libvips-linuxmusl-x64":
-      optional: true
-  conditions: os=linux & cpu=x64 & libc=musl
-  languageName: node
-  linkType: hard
-
-"@img/sharp-win32-x64@npm:^0.33.5":
-  version: 0.33.5
-  resolution: "@img/sharp-win32-x64@npm:0.33.5"
-  conditions: os=win32 & cpu=x64
   languageName: node
   linkType: hard
 
@@ -1231,8 +962,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@mango/server@workspace:server"
   dependencies:
-    "@anthropic-ai/claude-agent-sdk": "npm:^0.1.10"
-    "@github/copilot-sdk": "npm:^0.3.0"
     "@hono/node-server": "npm:^1.13.7"
     "@types/node": "npm:^22.10.2"
     "@types/uuid": "npm:^10.0.0"
@@ -4355,13 +4084,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vscode-jsonrpc@npm:^8.2.1":
-  version: 8.2.1
-  resolution: "vscode-jsonrpc@npm:8.2.1"
-  checksum: 10c0/595e07f779112d979d9cd37a00e4b973c39da09dd7c35b149f9fb7857c87db00d0ece7772c5a6f65cc19e38afc4fc64f8130d2f0e6b5f7fc160a0fc6b94e8c07
-  languageName: node
-  linkType: hard
-
 "w3c-keyname@npm:^2.2.4":
   version: 2.2.8
   resolution: "w3c-keyname@npm:2.2.8"
@@ -4501,12 +4223,5 @@ __metadata:
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.3.6":
-  version: 4.4.1
-  resolution: "zod@npm:4.4.1"
-  checksum: 10c0/55714c4bea81f7851ac46bf9edfde7c63ed6677a6cc8971ed3a526a079de3ffbe2bd56160327d22e070f72854fc4485b98ab7373255b6b69d64d9067caec864e
   languageName: node
   linkType: hard
