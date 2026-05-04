@@ -56,6 +56,8 @@ export interface AiConfig {
   provider: AiProviderId | null;
   baseUrl: string | null;
   model: string | null;
+  copilotCliPath: string | null;
+  claudeCliPath: string | null;
   apiKeySet: boolean;
   allowDataSampling: boolean;
   persisted: boolean;
@@ -528,6 +530,8 @@ export const api = {
     apiKey?: string | null;
     baseUrl?: string | null;
     model?: string | null;
+    copilotCliPath?: string | null;
+    claudeCliPath?: string | null;
     allowDataSampling?: boolean;
   }): Promise<AiConfig> {
     const res = await fetch("/api/ai/config", {
@@ -546,16 +550,61 @@ export const api = {
     }
   },
 
+  async detectCopilotCli(input?: { path?: string | null }): Promise<{
+    ok: boolean;
+    path: string | null;
+    source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+    version: string | null;
+    error?: string;
+  }> {
+    const res = await fetch("/api/ai/copilot-cli/detect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: input?.path ?? null }),
+    });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      path: string | null;
+      source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+      version: string | null;
+      error?: string;
+    }>;
+  },
+
+  async detectClaudeCli(input?: { path?: string | null }): Promise<{
+    ok: boolean;
+    path: string | null;
+    source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+    version: string | null;
+    error?: string;
+  }> {
+    const res = await fetch("/api/ai/claude-cli/detect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: input?.path ?? null }),
+    });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      path: string | null;
+      source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+      version: string | null;
+      error?: string;
+    }>;
+  },
+
   async testAiConfig(input: {
     provider: AiProviderId;
     apiKey?: string | null;
     baseUrl?: string | null;
     model?: string | null;
+    copilotCliPath?: string | null;
+    claudeCliPath?: string | null;
   }): Promise<{
     ok: boolean;
     provider?: AiProviderId;
     modelCount?: number;
     sample?: string[];
+    diagnostics?: Record<string, string | number | boolean | null>;
     error?: string;
   }> {
     const res = await fetch("/api/ai/test", {
@@ -568,6 +617,7 @@ export const api = {
       provider?: AiProviderId;
       modelCount?: number;
       sample?: string[];
+      diagnostics?: Record<string, string | number | boolean | null>;
       error?: string;
     }>;
   },

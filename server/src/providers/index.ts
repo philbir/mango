@@ -21,6 +21,8 @@ export interface ProviderOverrides {
   apiKey?: string | null;
   baseUrl?: string | null;
   model?: string | null;
+  copilotCliPath?: string | null;
+  claudeCliPath?: string | null;
 }
 
 /**
@@ -31,10 +33,16 @@ export const buildProviderFromConfig = (
   overrides: ProviderOverrides,
 ): AiProvider => {
   if (overrides.provider === "copilot") {
-    return buildCopilotProvider({ model: overrides.model ?? undefined });
+    return buildCopilotProvider({
+      model: overrides.model ?? undefined,
+      cliPath: overrides.copilotCliPath ?? undefined,
+    });
   }
   if (overrides.provider === "claude-code") {
-    return buildClaudeCodeProvider({ model: overrides.model ?? undefined });
+    return buildClaudeCodeProvider({
+      model: overrides.model ?? undefined,
+      cliPath: overrides.claudeCliPath ?? undefined,
+    });
   }
   return buildOpenAiProvider({
     apiKey: overrides.apiKey ?? undefined,
@@ -54,6 +62,8 @@ export const getProvider = (): AiProvider => {
     apiKey: stored?.apiKey ?? null,
     baseUrl: stored?.baseUrl ?? null,
     model: stored?.model ?? null,
+    copilotCliPath: stored?.copilotCliPath ?? null,
+    claudeCliPath: stored?.claudeCliPath ?? null,
   });
   return cachedProvider;
 };

@@ -124,6 +124,8 @@ All modes read the same env vars:
 | `AI_API_KEY` | Provider key. OpenAI / GitHub Models / Azure / Ollama. |
 | `AI_BASE_URL` | OpenAI provider only — point at GitHub Models, Azure, Ollama, etc. |
 | `GITHUB_TOKEN` | Copilot provider — falls back to logged-in Copilot CLI session if unset. |
+| `MANGO_COPILOT_CLI` | Optional full path to the Copilot CLI when it is not on `PATH` (for example `~/.npm-global/bin/copilot`). You can also set this in the UI. |
+| `MANGO_CLAUDE_CLI` | Optional full path to the Claude Code CLI when it is not on `PATH` (for example `~/.claude/local/claude`). You can also set this in the UI. |
 
 You can also configure the assistant from the UI (Settings menu); it'll be persisted (encrypted) in `ai-settings.json` under `MANGO_DATA_DIR`.
 

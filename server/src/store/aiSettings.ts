@@ -8,6 +8,8 @@ export interface AiSettings {
   apiKey: string | null;
   baseUrl: string | null;
   model: string | null;
+  copilotCliPath: string | null;
+  claudeCliPath: string | null;
   allowDataSampling: boolean;
 }
 
@@ -42,6 +44,8 @@ export const readAiSettings = (): AiSettings | null => {
       apiKey: parsed.apiKey ?? null,
       baseUrl: parsed.baseUrl ?? null,
       model: parsed.model ?? null,
+      copilotCliPath: parsed.copilotCliPath ?? null,
+      claudeCliPath: parsed.claudeCliPath ?? null,
       allowDataSampling: parsed.allowDataSampling === true,
     };
   } catch (e) {

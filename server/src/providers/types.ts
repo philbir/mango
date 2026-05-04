@@ -31,6 +31,7 @@ export interface AiProvider {
   model: string;
   baseUrl?: string;
   setupHint: string;
+  validate?(): Promise<Record<string, string | number | boolean | null>>;
   chat(input: AiChatInput): Promise<AiChatResult>;
   listModels(): Promise<ModelOption[]>;
 }

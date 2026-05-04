@@ -6,6 +6,8 @@ import {
   getProvider,
   invalidateProvider,
 } from "../providers/index.js";
+import { detectClaudeCli } from "../providers/claudeCode.js";
+import { detectCopilotCli } from "../providers/copilot.js";
 import { buildChatSystemPrompt } from "../providers/types.js";
 import { redactErrorMessage, validateAiBaseUrl } from "../security.js";
 import {
@@ -27,7 +29,17 @@ const configBody = z.object({
   apiKey: z.string().nullable().optional(),
   baseUrl: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
+  copilotCliPath: z.string().nullable().optional(),
+  claudeCliPath: z.string().nullable().optional(),
   allowDataSampling: z.boolean().optional(),
+});
+
+const copilotCliDetectBody = z.object({
+  path: z.string().nullable().optional(),
+});
+
+const claudeCliDetectBody = z.object({
+  path: z.string().nullable().optional(),
 });
 
 aiRoute.get("/status", (c) => {
@@ -47,6 +59,8 @@ aiRoute.get("/config", (c) => {
     provider: stored?.provider ?? null,
     baseUrl: stored?.baseUrl ?? null,
     model: stored?.model ?? null,
+    copilotCliPath: stored?.copilotCliPath ?? null,
+    claudeCliPath: stored?.claudeCliPath ?? null,
     apiKeySet: !!stored?.apiKey,
     allowDataSampling: stored?.allowDataSampling ?? false,
     persisted: !!stored,
@@ -65,11 +79,21 @@ aiRoute.put("/config", async (c) => {
     parsed.data.apiKey === undefined
       ? (existing?.apiKey ?? null)
       : parsed.data.apiKey;
+  const copilotCliPath =
+    parsed.data.copilotCliPath === undefined
+      ? (existing?.copilotCliPath ?? null)
+      : parsed.data.copilotCliPath;
+  const claudeCliPath =
+    parsed.data.claudeCliPath === undefined
+      ? (existing?.claudeCliPath ?? null)
+      : parsed.data.claudeCliPath;
   writeAiSettings({
     provider: parsed.data.provider,
     apiKey: apiKey === "" ? null : apiKey,
     baseUrl: parsed.data.baseUrl?.trim() || null,
     model: parsed.data.model?.trim() || null,
+    copilotCliPath: copilotCliPath?.trim() || null,
+    claudeCliPath: claudeCliPath?.trim() || null,
     allowDataSampling:
       parsed.data.allowDataSampling ?? existing?.allowDataSampling ?? false,
   });
@@ -79,6 +103,8 @@ aiRoute.put("/config", async (c) => {
     provider: next?.provider ?? null,
     baseUrl: next?.baseUrl ?? null,
     model: next?.model ?? null,
+    copilotCliPath: next?.copilotCliPath ?? null,
+    claudeCliPath: next?.claudeCliPath ?? null,
     apiKeySet: !!next?.apiKey,
     allowDataSampling: next?.allowDataSampling ?? false,
     persisted: !!next,
@@ -89,6 +115,36 @@ aiRoute.delete("/config", (c) => {
   clearAiSettings();
   invalidateProvider();
   return c.body(null, 204);
+});
+
+aiRoute.post("/copilot-cli/detect", async (c) => {
+  const parsed = copilotCliDetectBody.safeParse(
+    await c.req.json().catch(() => ({})),
+  );
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" },
+      400,
+    );
+  }
+
+  const result = await detectCopilotCli(parsed.data.path ?? null);
+  return c.json(result);
+});
+
+aiRoute.post("/claude-cli/detect", async (c) => {
+  const parsed = claudeCliDetectBody.safeParse(
+    await c.req.json().catch(() => ({})),
+  );
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" },
+      400,
+    );
+  }
+
+  const result = await detectClaudeCli(parsed.data.path ?? null);
+  return c.json(result);
 });
 
 /**
@@ -118,6 +174,8 @@ aiRoute.post("/test", async (c) => {
     apiKey,
     baseUrl: parsed.data.baseUrl ?? null,
     model: parsed.data.model ?? null,
+    copilotCliPath: parsed.data.copilotCliPath ?? null,
+    claudeCliPath: parsed.data.claudeCliPath ?? null,
   });
 
   if (!provider.configured) {
@@ -129,12 +187,14 @@ aiRoute.post("/test", async (c) => {
   }
 
   try {
+    const diagnostics = await provider.validate?.();
     const models = await provider.listModels();
     return c.json({
       ok: true,
       provider: provider.name,
       modelCount: models.length,
       sample: models.slice(0, 5).map((m) => m.id),
+      diagnostics,
     });
   } catch (e) {
     return c.json({
