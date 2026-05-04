@@ -36,17 +36,34 @@ const TRIPLE_TO_BUN_TARGET = {
   "x86_64-pc-windows-msvc": "windows-x64",
 };
 
+const detectHostTripleFromNode = () => {
+  if (process.platform === "darwin") {
+    if (process.arch === "arm64") return "aarch64-apple-darwin";
+    if (process.arch === "x64") return "x86_64-apple-darwin";
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "x86_64-unknown-linux-gnu";
+  }
+  if (process.platform === "win32" && process.arch === "x64") {
+    return "x86_64-pc-windows-msvc";
+  }
+  return null;
+};
+
 const detectHostTriple = () => {
   const r = spawnSync("rustc", ["-vV"], { encoding: "utf8" });
-  if (r.status !== 0) {
-    throw new Error(
-      "Could not detect host triple via `rustc -vV`. Install rustup, or pass the triple explicitly: " +
-        Object.keys(TRIPLE_TO_BUN_TARGET).join(", "),
-    );
+  if (r.status === 0) {
+    const m = r.stdout.match(/^host:\s*(\S+)/m);
+    if (m) return m[1];
   }
-  const m = r.stdout.match(/^host:\s*(\S+)/m);
-  if (!m) throw new Error("`rustc -vV` did not include a host triple.");
-  return m[1];
+
+  const nodeTriple = detectHostTripleFromNode();
+  if (nodeTriple) return nodeTriple;
+
+  throw new Error(
+    "Could not detect host triple from `rustc -vV` or Node.js platform info. Pass the triple explicitly: " +
+      Object.keys(TRIPLE_TO_BUN_TARGET).join(", "),
+  );
 };
 
 const triple = process.argv[2] ?? detectHostTriple();

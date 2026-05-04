@@ -292,7 +292,7 @@ export const api = {
     const res = await fetch(`/api/connections/${encodeURIComponent(id)}/test`, {
       method: "POST",
     });
-    const data = (await handleJson(res)) as { ok: boolean; error?: string };
+    const data = (await handlePlainJson(res)) as { ok: boolean; error?: string };
     return data;
   },
 
@@ -312,7 +312,7 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ uri }),
     });
-    return handleJson(res) as Promise<{ ok: boolean; error?: string }>;
+    return handlePlainJson(res) as Promise<{ ok: boolean; error?: string }>;
   },
 
   async listDatabases(cid: string): Promise<{

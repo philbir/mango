@@ -129,6 +129,15 @@ You can also configure the assistant from the UI (Settings menu); it'll be persi
 
 ## Development
 
+### Prerequisites
+
+- Node.js 22+ with Corepack enabled for Yarn 4 (`corepack enable`).
+- Bun on `PATH` for `yarn compile-server` (`curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`).
+- Rust via rustup for Tauri desktop development and packaging (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
+- Platform WebView/build tools required by Tauri. On macOS this usually means Xcode Command Line Tools; Windows and Linux need the normal Tauri prerequisites for WebView2/WebKitGTK.
+
+`yarn compile-server` auto-detects the sidecar target from Rust when available, then falls back to Node's platform/architecture info. You can also pass a target explicitly, for example `yarn compile-server aarch64-apple-darwin`.
+
 ```bash
 yarn install
 yarn dev                # server (5180) + Vite (5173) concurrently

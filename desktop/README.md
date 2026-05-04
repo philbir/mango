@@ -30,6 +30,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Bun (sidecar compiler)
 curl -fsSL https://bun.sh/install | bash
 
+# Or with Homebrew
+brew install oven-sh/bun/bun
+
 # Tauri CLI is pulled in by `yarn install` in this workspace
 yarn install
 ```
@@ -95,7 +98,7 @@ desktop/bin/mango-server-x86_64-pc-windows-msvc.exe
 desktop/bin/mango-server-x86_64-unknown-linux-gnu
 ```
 
-`yarn compile-server` produces the file named for **your** host triple (auto-detected from `rustc -vV`). To build for a non-host triple, pass it: `yarn compile-server x86_64-pc-windows-msvc`.
+`yarn compile-server` produces the file named for **your** host triple. It auto-detects from `rustc -vV` when Rust is installed, then falls back to Node's platform/architecture info for the supported host targets. To build for a non-host triple, pass it explicitly: `yarn compile-server x86_64-pc-windows-msvc`.
 
 ## Auth mode
 

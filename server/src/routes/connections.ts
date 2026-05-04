@@ -146,8 +146,8 @@ connectionsRoute.post("/:id/test", async (c) => {
         HEALTH_CHECK_TIMEOUT_MS,
       ),
     );
-    const result = await Promise.race([work, timeout]);
-    return c.json({ ok: true, ping: result });
+    await Promise.race([work, timeout]);
+    return c.json({ ok: true });
   } catch (e) {
     return c.json({ ok: false, error: redactErrorMessage(e) }, 400);
   }
@@ -171,8 +171,8 @@ connectionsRoute.post("/test-uri", async (c) => {
   });
   try {
     await client.connect();
-    const result = await client.db("admin").command({ ping: 1 });
-    return c.json({ ok: true, ping: result });
+    await client.db("admin").command({ ping: 1 });
+    return c.json({ ok: true });
   } catch (e) {
     return c.json({ ok: false, error: redactErrorMessage(e) }, 400);
   } finally {
