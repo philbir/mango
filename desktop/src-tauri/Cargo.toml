@@ -1,6 +1,6 @@
 [package]
 name = "mango-desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "Mango — MongoDB workbench desktop app"
 authors = ["Mango contributors"]
 edition = "2021"
