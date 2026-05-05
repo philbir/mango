@@ -143,7 +143,10 @@ export const ChatBox = () => {
       const history = [...messages, userMsg]
         .filter(
           (m): m is ChatMessage =>
-            !m.pending && (m.role === "user" || m.role === "assistant"),
+            !m.pending &&
+            !m.error &&
+            !!m.content &&
+            (m.role === "user" || m.role === "assistant"),
         )
         .map((m) => ({ role: m.role, content: m.content }));
       const result = await api.chatAi({

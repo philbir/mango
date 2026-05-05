@@ -34,6 +34,7 @@ obj/
 artifacts/
 *.nupkg
 *.snupkg
+*.csproj.lscache
 
 # ── OS / editor ─────────────────────────────────────────────────────────────
 .DS_Store
