@@ -44,5 +44,16 @@
     "resources": {
       "../../server/public/": "ui/"
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/philbir/mango/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY_FROM_tauri_signer_generate",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

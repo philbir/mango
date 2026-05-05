@@ -13,6 +13,7 @@ import { ConsoleView } from "./features/documents/ConsoleView";
 import { ShellView } from "./features/shell/ShellView";
 import { TabBar } from "./features/tabs/TabBar";
 import { useTabs } from "./features/tabs/TabsContext";
+import { UpdateBanner } from "./features/updater/UpdateBanner";
 import { useSettings } from "./settings";
 
 export const App = () => {
@@ -79,6 +80,7 @@ export const App = () => {
 
   return (
     <div className="flex h-full flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <UpdateBanner />
       <KeyHealthBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
