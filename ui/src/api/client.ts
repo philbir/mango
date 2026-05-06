@@ -69,6 +69,38 @@ export interface ServerConfig {
   mode: ServerMode;
   standaloneConnectionId: string | null;
   logsAvailable: boolean;
+  workspacesEnabled: boolean;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  folderPath: string;
+  color: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastOpenedAt: number | null;
+}
+
+export interface WorkspaceTreeEntry {
+  name: string;
+  kind: "file" | "dir";
+  size: number | null;
+  mtime: number | null;
+}
+
+export interface WorkspaceFile {
+  path: string;
+  raw: string;
+  mtime: number;
+  size: number;
+}
+
+export interface WorkspaceGitInfo {
+  rootIsRepo: boolean;
+  branch?: string;
+  shortSha?: string;
+  dirty?: boolean;
 }
 
 export interface CollectionStats {
@@ -780,6 +812,148 @@ export const api = {
       collection: string;
       explain: Record<string, unknown>;
     }>;
+  },
+
+  // ── Workspaces ──────────────────────────────────────────────────────────────
+  async listWorkspaces(): Promise<{ enabled: boolean; workspaces: Workspace[] }> {
+    const res = await fetch("/api/workspaces");
+    return handlePlainJson(res) as Promise<{
+      enabled: boolean;
+      workspaces: Workspace[];
+    }>;
+  },
+
+  async listFsDirectory(targetPath?: string): Promise<{
+    path: string;
+    parent: string | null;
+    home: string;
+    entries: Array<{ name: string; hidden: boolean }>;
+    readError: string | null;
+  }> {
+    const qs = targetPath
+      ? `?path=${encodeURIComponent(targetPath)}`
+      : "";
+    const res = await fetch(`/api/workspaces/fs${qs}`);
+    return handlePlainJson(res) as Promise<{
+      path: string;
+      parent: string | null;
+      home: string;
+      entries: Array<{ name: string; hidden: boolean }>;
+      readError: string | null;
+    }>;
+  },
+
+  async createWorkspace(input: {
+    name: string;
+    folderPath: string;
+    color?: string | null;
+    createIfMissing?: boolean;
+  }): Promise<Workspace> {
+    const res = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handlePlainJson(res) as Promise<Workspace>;
+  },
+
+  async updateWorkspace(
+    id: string,
+    input: { name?: string; color?: string | null },
+  ): Promise<Workspace> {
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handlePlainJson(res) as Promise<Workspace>;
+  },
+
+  async deleteWorkspace(id: string): Promise<void> {
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
+  },
+
+  async listWorkspaceTree(
+    id: string,
+    relPath: string,
+  ): Promise<{ path: string; entries: WorkspaceTreeEntry[] }> {
+    const qs = `?path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/tree${qs}`);
+    return handlePlainJson(res) as Promise<{
+      path: string;
+      entries: WorkspaceTreeEntry[];
+    }>;
+  },
+
+  async readWorkspaceFile(id: string, relPath: string): Promise<WorkspaceFile> {
+    const qs = `?path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`);
+    return handlePlainJson(res) as Promise<WorkspaceFile>;
+  },
+
+  async writeWorkspaceFile(
+    id: string,
+    relPath: string,
+    raw: string,
+    expectedMtime?: number | null,
+  ): Promise<{ path: string; mtime: number; size: number }> {
+    const qs = `?path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ raw, expectedMtime: expectedMtime ?? null }),
+    });
+    return handlePlainJson(res) as Promise<{
+      path: string;
+      mtime: number;
+      size: number;
+    }>;
+  },
+
+  async deleteWorkspacePath(id: string, relPath: string): Promise<void> {
+    const qs = `?path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
+  },
+
+  async createWorkspaceFolder(
+    id: string,
+    relPath: string,
+  ): Promise<{ path: string }> {
+    const qs = `?path=${encodeURIComponent(relPath)}`;
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/folder${qs}`, {
+      method: "POST",
+    });
+    return handlePlainJson(res) as Promise<{ path: string }>;
+  },
+
+  async moveWorkspacePath(
+    id: string,
+    from: string,
+    to: string,
+  ): Promise<{ from: string; to: string }> {
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/move`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ from, to }),
+    });
+    return handlePlainJson(res) as Promise<{ from: string; to: string }>;
+  },
+
+  async getWorkspaceGit(id: string): Promise<WorkspaceGitInfo> {
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/git`);
+    return handlePlainJson(res) as Promise<WorkspaceGitInfo>;
   },
 
   async listAiModels(): Promise<{

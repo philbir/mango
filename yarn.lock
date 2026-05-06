@@ -989,6 +989,7 @@ __metadata:
     "@tabler/icons-react": "npm:^3.41.1"
     "@tanstack/react-query": "npm:^5.95.2"
     "@tanstack/react-table": "npm:^8.20.6"
+    "@tauri-apps/plugin-dialog": "npm:^2.0.0"
     "@types/react": "npm:^19.0.2"
     "@types/react-dom": "npm:^19.0.2"
     "@uiw/react-json-view": "npm:^2.0.0-alpha.30"
@@ -1287,6 +1288,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tauri-apps/api@npm:^2.11.0":
+  version: 2.11.0
+  resolution: "@tauri-apps/api@npm:2.11.0"
+  checksum: 10c0/70c9f692d14ef7a5f69aa56d474e993f2c25f393e30a26099cca198040ccd33724e4978cefd455c73ecb169b36ca9b7ee010db88b05b0a8bd4a85801caa317d6
+  languageName: node
+  linkType: hard
+
 "@tauri-apps/cli-darwin-arm64@npm:2.11.0":
   version: 2.11.0
   resolution: "@tauri-apps/cli-darwin-arm64@npm:2.11.0"
@@ -1405,6 +1413,15 @@ __metadata:
   bin:
     tauri: tauri.js
   checksum: 10c0/8970f0c4aa5d6aa5839634382832497a2fd140f12abd56dd841d3cedfecf119698de4446623de22df853f61928b0c896627c50d02183a20d2176c113bcc91947
+  languageName: node
+  linkType: hard
+
+"@tauri-apps/plugin-dialog@npm:^2.0.0":
+  version: 2.7.1
+  resolution: "@tauri-apps/plugin-dialog@npm:2.7.1"
+  dependencies:
+    "@tauri-apps/api": "npm:^2.11.0"
+  checksum: 10c0/ae441f1fa34ef0c1494e4e4ee1d7e91ce7d140a1d6f7282c844c52fc5a021676570be4472473a8d3cfb404e42c2570caf4567d535f02bbeaf11da903c224c576
   languageName: node
   linkType: hard
 

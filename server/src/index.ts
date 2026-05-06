@@ -24,6 +24,7 @@ import { infoRoute } from "./routes/info.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
 import { systemRoute } from "./routes/system.js";
+import { workspacesRoute } from "./routes/workspaces.js";
 import { isAllowedOrigin } from "./security.js";
 import {
   seedFromEnvIfEmpty,
@@ -109,6 +110,7 @@ app.route("/api/connections/:cid", connectionScoped);
 app.route("/api/ai", aiRoute);
 app.route("/api/system", systemRoute);
 app.route("/api/discovery", discoveryRoute);
+app.route("/api/workspaces", workspacesRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {

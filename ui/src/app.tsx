@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import { useAssistant } from "./features/assistant/AssistantContext";
 import { AssistantPanel } from "./features/assistant/AssistantPanel";
 import { AssistantToggle } from "./features/assistant/AssistantToggle";
-import { Sidebar } from "./features/collections/Sidebar";
+import { SidebarShell } from "./features/sidebar/SidebarShell";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
+import { WorkspaceFileView } from "./features/workspaces/WorkspaceFileView";
 import {
   ViewConnectionContext,
   useActiveConnection,
@@ -83,7 +84,7 @@ export const App = () => {
       <UpdateBanner />
       <KeyHealthBanner />
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
+        <SidebarShell />
         <main className="relative flex flex-1 flex-col overflow-hidden">
           {tabMode && <TabBar />}
           <div className="flex flex-1 flex-col overflow-hidden">
@@ -102,6 +103,9 @@ export const App = () => {
                 )}
                 {activeTab.kind === "shell" && (
                   <ShellView key={activeTab.id} tabId={activeTab.id} />
+                )}
+                {activeTab.kind === "workspace-file" && (
+                  <WorkspaceFileView key={activeTab.id} tabId={activeTab.id} />
                 )}
               </ViewConnectionContext.Provider>
             )}

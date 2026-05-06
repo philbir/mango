@@ -1,11 +1,17 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   IconBraces,
+  IconDeviceFloppy,
   IconLoader2,
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString } from "../../api/client";
+import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
+import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
+import { WorkspaceFileHeader } from "../workspaces/WorkspaceFileHeader";
+import { useServerConfig } from "../connections/useServerConfig";
+import { useTabs } from "../tabs/TabsContext";
 import {
   MonacoShellInput,
   type MonacoShellInputHandle,
@@ -30,17 +36,76 @@ interface Props {
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 
 export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
-  const { activeId } = useActiveConnection();
+  const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
   const { pageSize, setPageSize } = useSettings();
+  const config = useServerConfig();
+  const { tabs, closeTab } = useTabs();
+  const tab = tabId ? tabs.find((t) => t.id === tabId) ?? null : null;
+  const fileBinding = useWorkspaceFileBinding({
+    workspaceId: tab?.workspaceId,
+    filePath: tab?.workspaceFilePath,
+  });
   const [code, setCode] = useState(initialCommand);
   const [resultView, setResultView] = useState<ResultFormat>("table");
   const editorRef = useRef<MonacoShellInputHandle | null>(null);
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Pin the command for paging — we re-run the same command across page changes
   // until the user presses Run, which re-pins.
   const [pinned, setPinned] = useState<string | null>(null);
+
+  // Seed editor from the bound file once it loads (or when external changes
+  // are reloaded). We only overwrite while not dirty so an in-progress edit
+  // isn't clobbered by a re-fetch.
+  const [seededMtime, setSeededMtime] = useState<number | null>(null);
+  useEffect(() => {
+    if (!fileBinding.bound) return;
+    if (fileBinding.mtime === null) return;
+    if (seededMtime === fileBinding.mtime && !dirty) return;
+    if (dirty) return;
+    setCode(fileBinding.script || "");
+    setSeededMtime(fileBinding.mtime);
+    setDirty(false);
+    setSaveError(null);
+  }, [fileBinding.bound, fileBinding.mtime, fileBinding.script, dirty, seededMtime]);
+
+  const onCodeChange = (next: string) => {
+    setCode(next);
+    if (fileBinding.bound) setDirty(next !== fileBinding.script);
+  };
+
+  const saveBound = async () => {
+    if (!fileBinding.bound) return;
+    setSaveError(null);
+    try {
+      await fileBinding.save({
+        frontmatter: {
+          ...fileBinding.frontmatter,
+          kind: fileBinding.frontmatter.kind ?? "console",
+          connectionId: activeId ?? fileBinding.frontmatter.connectionId,
+          connection: active?.name ?? fileBinding.frontmatter.connection,
+          database: database ?? fileBinding.frontmatter.database,
+        },
+        description: fileBinding.description,
+        script: code,
+      });
+      setDirty(false);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setSaveError(
+          e.status === 409
+            ? "File changed on disk. Reload to see changes, then save again."
+            : e.message,
+        );
+      } else {
+        setSaveError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  };
 
   const { size: editorHeight, onMouseDown: onEditorResize } = useResize({
     storageKey: "mango:console-editor-height",
@@ -130,6 +195,28 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
     },
   });
 
+  // Cmd/Ctrl+S → save back to the bound file when one is bound, otherwise
+  // open the "save to workspace" dialog. No-op when nothing's pending or
+  // workspaces are off.
+  useEffect(() => {
+    if (!config.workspacesEnabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        if (fileBinding.bound) {
+          e.preventDefault();
+          if (dirty) void saveBound();
+          return;
+        }
+        if (!code.trim()) return;
+        e.preventDefault();
+        setShowSaveDialog(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.workspacesEnabled, code, fileBinding.bound, dirty]);
+
   // Pick up commands sent from other views (e.g. CollectionView routing a
   // `mango-console` block from the assistant into the active console tab).
   useEffect(() => {
@@ -165,6 +252,30 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath && (
+        <WorkspaceFileHeader
+          workspaceId={tab.workspaceId}
+          filePath={tab.workspaceFilePath}
+          dirty={dirty}
+          saving={fileBinding.saving}
+          externallyChangedAt={fileBinding.externallyChangedAt}
+          deleted={fileBinding.deleted}
+          onSave={saveBound}
+          onReload={() => fileBinding.reload()}
+          onAfterDelete={() => tabId && closeTab(tabId)}
+          onClose={tabId ? () => closeTab(tabId) : undefined}
+        />
+      )}
+      {fileBinding.bound && saveError && (
+        <div className="border-b border-red-200 bg-red-50 px-3 py-1 text-[11.5px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+          {saveError}
+        </div>
+      )}
+      {fileBinding.bound && fileBinding.loadError && (
+        <div className="border-b border-red-200 bg-red-50 px-3 py-1 text-[11.5px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+          {fileBinding.loadError}
+        </div>
+      )}
       <div
         className="relative flex flex-shrink-0 flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: editorHeight }}
@@ -183,6 +294,18 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
             <IconBraces size={11} />
             Format
           </button>
+          {config.workspacesEnabled && !fileBinding.bound && (
+            <button
+              type="button"
+              onClick={() => setShowSaveDialog(true)}
+              disabled={!code.trim()}
+              className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              title="Save to workspace (⌘/Ctrl + S)"
+            >
+              <IconDeviceFloppy size={11} />
+              Save…
+            </button>
+          )}
           <kbd className="mr-12 rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
             ⌘/Ctrl + Enter
           </kbd>
@@ -193,7 +316,7 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
             <MonacoShellInput
               ref={editorRef}
               value={code}
-              onChange={setCode}
+              onChange={onCodeChange}
               collections={collections}
               onSubmit={onRun}
               showLineNumbers
@@ -262,6 +385,15 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
           document={selectedDoc}
           onClose={() => setSelectedId(null)}
           readOnly
+        />
+      )}
+
+      {showSaveDialog && (
+        <SaveToWorkspaceDialog
+          connectionId={activeId}
+          kind="console"
+          script={code}
+          onClose={() => setShowSaveDialog(false)}
         />
       )}
     </div>

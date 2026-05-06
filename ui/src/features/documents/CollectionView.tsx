@@ -1,13 +1,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   IconBraces,
+  IconDeviceFloppy,
   IconInfoCircle,
   IconPlayerPlayFilled,
   IconTable,
   IconTerminal2,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, extractIdString } from "../../api/client";
+import { ApiError, api, extractIdString } from "../../api/client";
 import {
   MonacoJsonInput,
   type MonacoJsonInputHandle,
@@ -20,8 +21,13 @@ import {
 } from "../assistant/AssistantContext";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import { useTabs } from "../tabs/TabsContext";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { InfoView } from "../info/InfoView";
+import { useServerConfig } from "../connections/useServerConfig";
+import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
+import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
+import { WorkspaceFileHeader } from "../workspaces/WorkspaceFileHeader";
 import { ConsoleView } from "./ConsoleView";
 import { FieldPicker, buildProjectionJson } from "./FieldPicker";
 import { QueryBuilder } from "./QueryBuilder";
@@ -39,6 +45,8 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   const { pageSize, setPageSize, defaultCollectionMode } = useSettings();
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
+  const { tabs, closeTab } = useTabs();
+  const tab = tabId ? tabs.find((t) => t.id === tabId) ?? null : null;
 
   const [filterDraft, setFilterDraft] = useState(EMPTY_FILTER_TEMPLATE);
   const [filter, setFilter] = useState("");
@@ -47,11 +55,106 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   );
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ResultFormat>("table");
+  // Initial page mode honors the tab's pinned mode (set when opening from
+  // a workspace file with `kind: console` / `kind: query`); otherwise we
+  // fall back to the user's preference.
   const [pageMode, setPageMode] = useState<"query" | "console" | "info">(
-    defaultCollectionMode,
+    tab?.initialPageMode ?? defaultCollectionMode,
   );
   const [queryMode, setQueryMode] = useState<"raw" | "builder">("raw");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const config = useServerConfig();
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Workspace-file binding: when this tab was opened from a workspace file,
+  // we seed the filter from the file's stored script and Save writes it back.
+  const fileBinding = useWorkspaceFileBinding({
+    workspaceId: tab?.workspaceId,
+    filePath: tab?.workspaceFilePath,
+  });
+  const [seededMtime, setSeededMtime] = useState<number | null>(null);
+  const [filterDirty, setFilterDirty] = useState(false);
+
+  /**
+   * Build the runnable script for this query — `db.<col>.find(<filter>)`.
+   * Projection is intentionally excluded; the selected fields are persisted
+   * in frontmatter (`fields:`) so the script body stays focused on the
+   * filter and remains a clean, copy-pasteable shell command.
+   */
+  const buildQueryScript = (filterJson: string): string => {
+    const filterPart = filterJson.trim() || "{}";
+    return `db.${name}.find(${filterPart})`;
+  };
+
+  /**
+   * Best-effort extractor that reads the first `find(<filter>, <projection>?)`
+   * call out of a stored script. We keep the brace-matched substring rather
+   * than parsing JSON so MongoDB Extended JSON (`$oid`, `$date`, etc.) and
+   * comments survive the round-trip into the editor.
+   */
+  const extractFindArgs = (
+    script: string,
+  ): { filter: string | null; projection: string | null } => {
+    const m = /\bdb\.[\w$]+\.find\s*\(/.exec(script);
+    if (!m) return { filter: null, projection: null };
+    let i = m.index + m[0].length;
+    const args: string[] = [];
+    let depth = 0;
+    let buf = "";
+    let inString: '"' | "'" | "`" | null = null;
+    while (i < script.length) {
+      const ch = script[i]!;
+      if (inString) {
+        buf += ch;
+        if (ch === "\\" && i + 1 < script.length) {
+          buf += script[i + 1];
+          i += 2;
+          continue;
+        }
+        if (ch === inString) inString = null;
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = ch;
+        buf += ch;
+        i++;
+        continue;
+      }
+      if (ch === "{" || ch === "[" || ch === "(") {
+        depth++;
+        buf += ch;
+        i++;
+        continue;
+      }
+      if (ch === "}" || ch === "]") {
+        depth--;
+        buf += ch;
+        i++;
+        continue;
+      }
+      if (ch === ")") {
+        if (depth === 0) {
+          if (buf.trim()) args.push(buf.trim());
+          break;
+        }
+        depth--;
+        buf += ch;
+        i++;
+        continue;
+      }
+      if (ch === "," && depth === 0) {
+        if (buf.trim()) args.push(buf.trim());
+        buf = "";
+        i++;
+        continue;
+      }
+      buf += ch;
+      i++;
+    }
+    return { filter: args[0] ?? null, projection: args[1] ?? null };
+  };
 
   const { size: filterHeight, onMouseDown: onFilterResize } = useResize({
     storageKey: "mango:filter-height",
@@ -69,11 +172,108 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
     setSelectedFields(new Set());
   }, [name]);
 
+  // Seed the filter from the bound workspace file. Only fires when the file's
+  // mtime advances and the user hasn't started editing — otherwise an
+  // in-flight query would be clobbered on the next refetch.
+  useEffect(() => {
+    if (!fileBinding.bound || fileBinding.mtime === null) return;
+    if (seededMtime === fileBinding.mtime && !filterDirty) return;
+    if (filterDirty) return;
+    const args = extractFindArgs(fileBinding.script);
+    if (args.filter) {
+      setFilterDraft(args.filter);
+      setFilter(args.filter);
+    }
+    // Seed projection field selection from frontmatter — this replaces the
+    // older inline-projection encoding inside the find() call.
+    const fmFields = fileBinding.frontmatter.fields;
+    if (fmFields && fmFields.length > 0) {
+      setSelectedFields(new Set(fmFields));
+    } else {
+      setSelectedFields(new Set());
+    }
+    setSeededMtime(fileBinding.mtime);
+    setFilterDirty(false);
+    setSaveError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileBinding.bound, fileBinding.mtime, fileBinding.script]);
+
+  const saveBoundQuery = async (currentFields: Set<string>) => {
+    if (!fileBinding.bound) return;
+    setSaveError(null);
+    try {
+      const fieldList = [...currentFields];
+      await fileBinding.save({
+        frontmatter: {
+          ...fileBinding.frontmatter,
+          kind: "query",
+          collection: name,
+          connectionId: activeId ?? fileBinding.frontmatter.connectionId,
+          connection: active?.name ?? fileBinding.frontmatter.connection,
+          database: database ?? fileBinding.frontmatter.database,
+          fields: fieldList.length > 0 ? fieldList : null,
+        },
+        description: fileBinding.description,
+        script: buildQueryScript(filterDraft),
+      });
+      setFilterDirty(false);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setSaveError(
+          e.status === 409
+            ? "File changed on disk. Reload to see changes, then save again."
+            : e.message,
+        );
+      } else {
+        setSaveError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  };
+
   const skip = page * pageSize;
   const projection = useMemo(
     () => buildProjectionJson(selectedFields),
     [selectedFields],
   );
+
+  // Mark the filter as dirty whenever the filter or selected-fields list
+  // diverges from the bound file's stored values.
+  useEffect(() => {
+    if (!fileBinding.bound) return;
+    const filterChanged = buildQueryScript(filterDraft) !== fileBinding.script;
+    const stored = fileBinding.frontmatter.fields ?? [];
+    const current = [...selectedFields].sort();
+    const fieldsChanged =
+      stored.length !== current.length ||
+      [...stored].sort().some((f, i) => f !== current[i]);
+    setFilterDirty(filterChanged || fieldsChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fileBinding.bound,
+    fileBinding.script,
+    fileBinding.frontmatter.fields,
+    filterDraft,
+    selectedFields,
+  ]);
+
+  // Cmd/Ctrl + S → save bound file or open the save dialog (query mode).
+  useEffect(() => {
+    if (pageMode !== "query") return;
+    if (!config.workspacesEnabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (fileBinding.bound) {
+          if (filterDirty) void saveBoundQuery(selectedFields);
+        } else if (filterDraft.trim()) {
+          setShowSaveDialog(true);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageMode, config.workspacesEnabled, fileBinding.bound, filterDirty, filterDraft, projection]);
 
   // Track query timing for the footer status.
   const queryStartRef = useRef<number | null>(null);
@@ -280,6 +480,20 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
       {pageMode === "query" && (
       <>
+      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath && (
+        <WorkspaceFileHeader
+          workspaceId={tab.workspaceId}
+          filePath={tab.workspaceFilePath}
+          dirty={filterDirty}
+          saving={fileBinding.saving}
+          externallyChangedAt={fileBinding.externallyChangedAt}
+          deleted={fileBinding.deleted}
+          onSave={() => void saveBoundQuery(selectedFields)}
+          onReload={() => fileBinding.reload()}
+          onAfterDelete={() => tabId && closeTab(tabId)}
+          onClose={tabId ? () => closeTab(tabId) : undefined}
+        />
+      )}
       <section
         className="relative flex flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: filterHeight }}
@@ -346,6 +560,35 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
                     <IconBraces size={11} />
                     Format
                   </button>
+                  {config.workspacesEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (fileBinding.bound) void saveBoundQuery(selectedFields);
+                        else setShowSaveDialog(true);
+                      }}
+                      disabled={
+                        fileBinding.bound
+                          ? !filterDirty || fileBinding.saving
+                          : !filterDraft.trim()
+                      }
+                      className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      title={
+                        fileBinding.bound
+                          ? "Save query (⌘/Ctrl + S)"
+                          : "Save query to workspace (⌘/Ctrl + S)"
+                      }
+                    >
+                      <IconDeviceFloppy size={11} />
+                      {fileBinding.bound
+                        ? fileBinding.saving
+                          ? "Saving…"
+                          : filterDirty
+                            ? "Save"
+                            : "Saved"
+                        : "Save…"}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -413,6 +656,23 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           document={selectedDoc}
           onClose={() => setSelectedId(null)}
         />
+      )}
+
+      {showSaveDialog && (
+        <SaveToWorkspaceDialog
+          connectionId={activeId}
+          kind="query"
+          script={buildQueryScript(filterDraft)}
+          collection={name}
+          fields={[...selectedFields]}
+          onClose={() => setShowSaveDialog(false)}
+        />
+      )}
+
+      {pageMode === "query" && saveError && (
+        <div className="border-t border-red-200 bg-red-50 px-3 py-1 text-[11.5px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+          {saveError}
+        </div>
       )}
     </div>
   );

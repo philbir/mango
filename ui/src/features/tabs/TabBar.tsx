@@ -4,11 +4,16 @@ import {
   IconTerminal2,
   IconX,
 } from "@tabler/icons-react";
+import { mangoFileDisplayName } from "../workspaces/markdownDoc";
 import { type Tab, useTabs } from "./TabsContext";
 
 const labelFor = (tab: Tab, index: number): string => {
   if (tab.kind === "collection") return tab.collection ?? "(collection)";
   if (tab.kind === "console") return `console ${index}`;
+  if (tab.kind === "workspace-file") {
+    const base = (tab.workspaceFilePath ?? "").split("/").pop() ?? "(file)";
+    return mangoFileDisplayName(base);
+  }
   return `shell ${index}`;
 };
 

@@ -279,6 +279,10 @@ export const setMongoShellSchemas = (
 
 export interface MonacoShellInputHandle {
   format: () => void;
+  /** Currently selected text, or "" if the selection is empty. */
+  getSelectedText: () => string;
+  /** Move keyboard focus into the editor. */
+  focus: () => void;
 }
 
 export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
@@ -313,6 +317,15 @@ export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
           if (!editor) return;
           formatShellExpression(editor);
         },
+        getSelectedText: () => {
+          const editor = editorRef.current;
+          if (!editor) return "";
+          const sel = editor.getSelection();
+          const model = editor.getModel();
+          if (!sel || !model || sel.isEmpty()) return "";
+          return model.getValueInRange(sel);
+        },
+        focus: () => editorRef.current?.focus(),
       }),
       [],
     );

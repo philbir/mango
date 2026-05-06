@@ -13,29 +13,16 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
-import { SettingsMenu } from "../../components/SettingsMenu";
-import { useResize } from "../../components/useResize";
-import { ConnectionPicker } from "../connections/ConnectionPicker";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { useConnectionHealth } from "../connections/useConnectionHealth";
 import { useTabs } from "../tabs/TabsContext";
 
-export const Sidebar = () => {
-  const docsUrl =
-    import.meta.env.VITE_MANGO_DOCS_URL ?? "https://philbir.github.io/mango/";
-  const version = import.meta.env.VITE_MANGO_VERSION ?? "v0.1.0";
+export const CollectionsPane = () => {
   const { activeId } = useActiveConnection();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
   const { activeTab, openCollection, openConsole, openShell } = useTabs();
-  const { size: sidebarWidth, onMouseDown: onResizeStart } = useResize({
-    storageKey: "mango:sidebar-width",
-    axis: "x",
-    initial: 256,
-    min: 200,
-    max: 520,
-  });
 
   // Gate Mongo metadata fetches on a successful ping. Without this, a
   // disconnected connection (bad URI, server down) would surface as a 500
@@ -67,9 +54,6 @@ export const Sidebar = () => {
   }, [collectionsQuery.data, search]);
 
   const onRefresh = () => {
-    // Always re-ping first. If the connection is currently dead, that's the
-    // useful action — running listDatabases / listCollections against a dead
-    // server just produces a 500 toast on top of the "Not connected" panel.
     health.refetch();
     if (health.status !== "ok") return;
     if (database) collectionsQuery.refetch();
@@ -81,49 +65,43 @@ export const Sidebar = () => {
     : databasesQuery.isFetching;
 
   return (
-    <aside
-      className="relative flex h-full flex-shrink-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60"
-      style={{ width: sidebarWidth }}
-    >
-      <div className="flex items-center gap-1.5 border-b border-slate-200 px-2 py-2 dark:border-slate-800">
-        <div className="flex-1">
-          <ConnectionPicker />
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1 dark:border-slate-800">
+        {canQuery && database && (
+          <>
+            <button
+              type="button"
+              onClick={() => setDatabase(null)}
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              title="Switch database"
+            >
+              <IconChevronLeft size={12} />
+            </button>
+            <IconDatabase size={11} className="text-slate-400" />
+            <span className="flex-1 truncate font-mono text-[11px] text-slate-700 dark:text-slate-200">
+              {database}
+            </span>
+            <NewMenu
+              onNewConsole={() => openConsole(activeId!)}
+              onNewShell={() => openShell(activeId!)}
+            />
+          </>
+        )}
+        {!(canQuery && database) && (
+          <span className="flex-1 text-[10.5px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Collections
+          </span>
+        )}
         <button
           type="button"
           onClick={onRefresh}
           disabled={!activeId}
-          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           title="Refresh"
         >
-          <IconRefresh
-            size={14}
-            className={isFetching ? "animate-spin" : ""}
-          />
+          <IconRefresh size={12} className={isFetching ? "animate-spin" : ""} />
         </button>
-        <SettingsMenu />
       </div>
-
-      {canQuery && database && (
-        <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={() => setDatabase(null)}
-            className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            title="Switch database"
-          >
-            <IconChevronLeft size={12} />
-          </button>
-          <IconDatabase size={11} className="text-slate-400" />
-          <span className="flex-1 truncate font-mono text-[11px] text-slate-700 dark:text-slate-200">
-            {database}
-          </span>
-          <NewMenu
-            onNewConsole={() => openConsole(activeId)}
-            onNewShell={() => openShell(activeId)}
-          />
-        </div>
-      )}
 
       {canQuery && database && (
         <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
@@ -148,9 +126,7 @@ export const Sidebar = () => {
         )}
 
         {activeId && health.status === "loading" && (
-          <div className="px-2 py-2 text-xs text-slate-400">
-            Connecting…
-          </div>
+          <div className="px-2 py-2 text-xs text-slate-400">Connecting…</div>
         )}
 
         {activeId && health.status === "error" && (
@@ -216,34 +192,7 @@ export const Sidebar = () => {
           </>
         )}
       </div>
-
-      <a
-        href={docsUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center gap-2 border-t border-slate-200 px-3 py-1.5 text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-800 dark:text-slate-500 dark:hover:bg-slate-800/70 dark:hover:text-slate-300"
-        title="Open Mango docs"
-      >
-        <img
-          src="/assets/mango-mark.svg"
-          alt=""
-          className="h-4 w-4 shrink-0 dark:hidden"
-          draggable={false}
-        />
-        <img
-          src="/assets/mango-mark-dark.svg"
-          alt=""
-          className="hidden h-4 w-4 shrink-0 dark:block"
-          draggable={false}
-        />
-        <span>Mango · {version}</span>
-      </a>
-      <div
-        onMouseDown={onResizeStart}
-        className="absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-sky-500/40"
-        title="Drag to resize"
-      />
-    </aside>
+    </div>
   );
 };
 
