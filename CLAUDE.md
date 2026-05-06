@@ -18,6 +18,12 @@ yarn workspace @mango/server test -- ejson    # single test file
 yarn workspace @mango/ui typecheck     # tsc -b --noEmit (UI has no test runner)
 yarn aspire                            # what Aspire's WithMango() invokes: install + UI build + server dev
 
+# Local TypeScript Aspire AppHost (apphost.ts) — orchestrates server + UI under
+# the Aspire dashboard with auto-injected OTLP. Bootstrapped via `aspire init`.
+aspire run                             # launch dashboard, mango-server, mango-ui
+yarn aspire:build                      # tsc -p tsconfig.apphost.json — typecheck the apphost
+yarn aspire:lint                       # eslint apphost.ts
+
 # Desktop (Tauri 2)
 yarn compile-server                    # bun build --compile → desktop/bin/mango-server-<triple>
 yarn tauri:dev                         # native shell + Vite HMR (sidecar NOT used here)
@@ -62,6 +68,23 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 `yarn compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by `tauri:build` and `tauri:dev`** — when you change server code, re-run `yarn compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
 
 The bundled UI is shipped as a Tauri resource (`bundle.resources` maps `server/public` → `Resources/ui`). `lib.rs` reads `app.path().resource_dir()` and passes its `ui` subpath to the sidecar via the `STATIC_DIR` env var, so the same Hono server that serves `/api/*` also serves `index.html`. After the sidecar's `/api/health` probe succeeds, lib.rs redirects the WebView from `tauri://` to `http://127.0.0.1:<picked-port>` so all relative `/api/...` fetches share an origin with the UI.
+
+### Local TypeScript Aspire AppHost (`apphost.ts`)
+
+`apphost.ts` at the repo root is a TypeScript Aspire AppHost (scaffolded via `aspire init --language typescript`). Running `aspire run` boots the Aspire dashboard, the Hono server (via `yarn dev` → `tsx watch`), and the Vite UI, all wired together:
+
+- `addJavaScriptApp("mango-server", "./server", { runScriptName: "dev" })` — starts the server's `dev` script. `withHttpEndpoint({ env: "PORT" })` allocates a port and exposes it via `PORT`, which `server/src/config.ts` reads. `withOtlpExporter()` makes Aspire inject `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the dashboard.
+- `addViteApp("mango-ui", "./ui")` — starts Vite. `withHttpEndpoint({ env: "VITE_PORT" })` matches what `ui/vite.config.ts` reads. `withReference(server)` plus `withEnvironment("VITE_MANGO_API", server.getEndpoint("http"))` points the Vite `/api` proxy at the server's allocated port. `withEnvironment("VITE_OTEL_ENABLED", "true")` turns on the browser OTel SDK.
+
+Because the root `package.json` has `"type": "module"` (required for top-level await in `apphost.ts`) — adding plain `.js` files at the repo root would now require a `"type": "commonjs"` override in their own folder; sub-workspaces are unaffected because each has its own `package.json`.
+
+### Server / UI OpenTelemetry instrumentation
+
+Telemetry is **opt-in** — without the env vars below, the OTel modules are loaded but never start, so it's a true no-op outside an Aspire run.
+
+- **Server** (`server/src/instrumentation.ts`) — imported as the very first line of `server/src/index.ts` so the Node SDK can install loader hooks before Hono / mongodb are required. Activates when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (gRPC). Auto-instruments HTTP, fetch, mongodb, etc.; `fs` is disabled because it's noise. Under Aspire, this env var is auto-injected by `withOtlpExporter()`.
+- **UI** (`ui/src/telemetry.ts`) — imported first in `ui/src/main.tsx`. Activates when `VITE_OTEL_ENABLED=true`. Posts spans (OTLP/HTTP+JSON) to a same-origin endpoint (default `/api/otlp`) so the browser bundle is endpoint-agnostic.
+- **Browser → dashboard proxy** (`server/src/routes/otlp.ts`) — `/api/otlp/v1/{traces,metrics,logs}` forwards browser telemetry to `OTEL_EXPORTER_OTLP_HTTP_ENDPOINT` (defaults to the gRPC endpoint with port `4317` swapped to `4318`). Avoids needing CORS configured on the dashboard.
 
 ### Aspire integration
 

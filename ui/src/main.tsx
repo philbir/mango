@@ -1,3 +1,6 @@
+// Must be the first import so spans cover document-load and instrumentations
+// are installed before fetch/XHR are first used.
+import "./telemetry";
 import {
   MutationCache,
   QueryCache,

@@ -3,6 +3,9 @@
 // desktop/src-tauri tauri logs).
 process.stderr.write("[mango] boot start\n");
 
+// MUST be the first import: the OTel SDK has to install loader hooks before
+// any instrumented module (http, hono, mongodb…) is required.
+import "./instrumentation.js";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
@@ -21,6 +24,7 @@ import { consoleRoute } from "./routes/console.js";
 import { discoveryRoute } from "./routes/discovery.js";
 import { documentsRoute } from "./routes/documents.js";
 import { infoRoute } from "./routes/info.js";
+import { otlpRoute } from "./routes/otlp.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
 import { systemRoute } from "./routes/system.js";
@@ -109,6 +113,7 @@ app.route("/api/connections/:cid", connectionScoped);
 app.route("/api/ai", aiRoute);
 app.route("/api/system", systemRoute);
 app.route("/api/discovery", discoveryRoute);
+app.route("/api/otlp", otlpRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {
