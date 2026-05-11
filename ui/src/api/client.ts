@@ -857,19 +857,11 @@ const bytesToUuid = (bytes: number[]): string => {
 
 /** Rearrange CSUUID (C# Guid, little-endian) bytes to standard UUID byte order. */
 const csUuidToStandard = (b: number[]): number[] => [
-  b[3], b[2], b[1], b[0],
-  b[5], b[4],
-  b[7], b[6],
-  b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+  b[3]!, b[2]!, b[1]!, b[0]!,
+  b[5]!, b[4]!,
+  b[7]!, b[6]!,
+  b[8]!, b[9]!, b[10]!, b[11]!, b[12]!, b[13]!, b[14]!, b[15]!,
 ];
-
-const binaryToCanonicalUuid = (value: unknown): string | null => {
-  const info = extractBinaryInfo(value);
-  if (!info || info.subType !== "04") return null;
-  const bytes = base64ToUuidBytes(info.base64);
-  if (!bytes) return null;
-  return bytesToUuid(bytes);
-};
 
 export const extractIdString = (id: unknown): string => {
   if (typeof id === "string") return id;
