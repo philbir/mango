@@ -18,7 +18,9 @@ import {
 import { AiSettingsModal } from "../features/connections/AiSettingsModal";
 
 const UUID_LABELS: Record<UuidFormat, string> = {
-  canonical: "Canonical (8-4-4-4-12)",
+  canonical: "UUID (standard)",
+  csuuid: "CSUUID (.NET / C#)",
+  juuid: "JUUID (Java)",
   short: "Short (first 8)",
   compact: "No dashes",
   raw: "Raw (base64)",

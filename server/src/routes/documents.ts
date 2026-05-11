@@ -174,6 +174,18 @@ documentsRoute.put("/:name/document/:id", async (c) => {
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/** Rearrange standard UUID bytes to CSUUID (C# Guid) byte order. */
+const uuidToCsUuidBytes = (uuidStr: string): Buffer => {
+  const hex = uuidStr.replace(/-/g, "");
+  const b = Buffer.from(hex, "hex");
+  return Buffer.from([
+    b[3], b[2], b[1], b[0],
+    b[5], b[4],
+    b[7], b[6],
+    b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+  ]);
+};
+
 const buildIdCandidates = (id: string): Array<Record<string, unknown>> => {
   const candidates: Array<Record<string, unknown>> = [{ _id: id }];
   if (ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id)) {
@@ -181,7 +193,21 @@ const buildIdCandidates = (id: string): Array<Record<string, unknown>> => {
   }
   if (UUID_RE.test(id)) {
     try {
+      // subType 04 — standard UUID
       candidates.push({ _id: new UUID(id) });
+    } catch {
+      /* ignore */
+    }
+    try {
+      // subType 03 — CSUUID (C# byte order)
+      candidates.push({ _id: new Binary(uuidToCsUuidBytes(id), Binary.SUBTYPE_UUID_OLD) });
+    } catch {
+      /* ignore */
+    }
+    try {
+      // subType 03 — standard byte order (JUUID / PyUUID)
+      const stdBytes = Buffer.from(id.replace(/-/g, ""), "hex");
+      candidates.push({ _id: new Binary(stdBytes, Binary.SUBTYPE_UUID_OLD) });
     } catch {
       /* ignore */
     }
@@ -190,16 +216,32 @@ const buildIdCandidates = (id: string): Array<Record<string, unknown>> => {
 };
 
 const binaryToUuidString = (bin: Binary): string | null => {
-  if (bin.sub_type !== Binary.SUBTYPE_UUID && bin.sub_type !== 4) return null;
   const hex = bin.toString("hex");
   if (hex.length !== 32) return null;
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join("-");
+  if (bin.sub_type === Binary.SUBTYPE_UUID || bin.sub_type === 4) {
+    // subType 04 — standard byte order
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      hex.slice(12, 16),
+      hex.slice(16, 20),
+      hex.slice(20, 32),
+    ].join("-");
+  }
+  if (bin.sub_type === Binary.SUBTYPE_UUID_OLD || bin.sub_type === 3) {
+    // subType 03 — return the CSUUID-decoded UUID (matches what the client sends)
+    const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
+    const cs = [bytes[3], bytes[2], bytes[1], bytes[0], bytes[5], bytes[4], bytes[7], bytes[6], ...bytes.slice(8)];
+    const csHex = cs.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return [
+      csHex.slice(0, 8),
+      csHex.slice(8, 12),
+      csHex.slice(12, 16),
+      csHex.slice(16, 20),
+      csHex.slice(20, 32),
+    ].join("-");
+  }
+  return null;
 };
 
 const matchesId = (value: unknown, urlId: string): boolean => {
@@ -207,8 +249,23 @@ const matchesId = (value: unknown, urlId: string): boolean => {
   if (value instanceof ObjectId) return value.toHexString() === urlId;
   if (value instanceof UUID) return value.toString() === urlId.toLowerCase();
   if (value instanceof Binary) {
-    const asUuid = binaryToUuidString(value);
-    return asUuid !== null && asUuid === urlId.toLowerCase();
+    const lc = urlId.toLowerCase();
+    if (value.sub_type === Binary.SUBTYPE_UUID || value.sub_type === 4) {
+      const asUuid = binaryToUuidString(value);
+      return asUuid !== null && asUuid === lc;
+    }
+    if (value.sub_type === Binary.SUBTYPE_UUID_OLD || value.sub_type === 3) {
+      // Accept either CSUUID-decoded or standard-byte-order UUID string from client
+      const hex = value.toString("hex");
+      if (hex.length !== 32) return false;
+      const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
+      const cs = [bytes[3], bytes[2], bytes[1], bytes[0], bytes[5], bytes[4], bytes[7], bytes[6], ...bytes.slice(8)];
+      const csHex = cs.map((b) => b.toString(16).padStart(2, "0")).join("");
+      const csUuid = [csHex.slice(0, 8), csHex.slice(8, 12), csHex.slice(12, 16), csHex.slice(16, 20), csHex.slice(20, 32)].join("-");
+      const jUuid = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join("-");
+      return csUuid === lc || jUuid === lc;
+    }
+    return false;
   }
   if (value !== null && typeof value === "object") {
     const obj = value as Record<string, unknown>;
