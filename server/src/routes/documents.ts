@@ -179,10 +179,10 @@ const uuidToCsUuidBytes = (uuidStr: string): Buffer => {
   const hex = uuidStr.replace(/-/g, "");
   const b = Buffer.from(hex, "hex");
   return Buffer.from([
-    b[3], b[2], b[1], b[0],
-    b[5], b[4],
-    b[7], b[6],
-    b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+    b.readUInt8(3), b.readUInt8(2), b.readUInt8(1), b.readUInt8(0),
+    b.readUInt8(5), b.readUInt8(4),
+    b.readUInt8(7), b.readUInt8(6),
+    b.readUInt8(8), b.readUInt8(9), b.readUInt8(10), b.readUInt8(11), b.readUInt8(12), b.readUInt8(13), b.readUInt8(14), b.readUInt8(15),
   ]);
 };
 
@@ -231,7 +231,7 @@ const binaryToUuidString = (bin: Binary): string | null => {
   if (bin.sub_type === Binary.SUBTYPE_UUID_OLD || bin.sub_type === 3) {
     // subType 03 — return the CSUUID-decoded UUID (matches what the client sends)
     const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
-    const cs = [bytes[3], bytes[2], bytes[1], bytes[0], bytes[5], bytes[4], bytes[7], bytes[6], ...bytes.slice(8)];
+    const cs = [bytes[3]!, bytes[2]!, bytes[1]!, bytes[0]!, bytes[5]!, bytes[4]!, bytes[7]!, bytes[6]!, ...bytes.slice(8)];
     const csHex = cs.map((b) => b.toString(16).padStart(2, "0")).join("");
     return [
       csHex.slice(0, 8),
@@ -259,7 +259,7 @@ const matchesId = (value: unknown, urlId: string): boolean => {
       const hex = value.toString("hex");
       if (hex.length !== 32) return false;
       const bytes = hex.match(/.{2}/g)!.map((h) => parseInt(h, 16));
-      const cs = [bytes[3], bytes[2], bytes[1], bytes[0], bytes[5], bytes[4], bytes[7], bytes[6], ...bytes.slice(8)];
+      const cs = [bytes[3]!, bytes[2]!, bytes[1]!, bytes[0]!, bytes[5]!, bytes[4]!, bytes[7]!, bytes[6]!, ...bytes.slice(8)];
       const csHex = cs.map((b) => b.toString(16).padStart(2, "0")).join("");
       const csUuid = [csHex.slice(0, 8), csHex.slice(8, 12), csHex.slice(12, 16), csHex.slice(16, 20), csHex.slice(20, 32)].join("-");
       const jUuid = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join("-");
