@@ -16,7 +16,7 @@ interface Props {
 
 const formatCell = (
   value: unknown,
-  uuidFormat: "canonical" | "short" | "compact" | "raw",
+  uuidFormat: "canonical" | "csuuid" | "juuid" | "short" | "compact" | "raw",
 ): string => {
   if (value === null || value === undefined) return "—";
   const uuid = formatUuid(value, uuidFormat);
