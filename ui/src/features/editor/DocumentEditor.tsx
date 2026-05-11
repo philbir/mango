@@ -11,12 +11,14 @@ import {
   ApiError,
   api,
   extractIdString,
+  formatDocumentId,
   parseEJSON,
   stringifyEJSON,
 } from "../../api/client";
 import { MonacoJsonInput } from "../../components/MonacoJsonInput";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import { useSettings } from "../../settings";
 
 interface Props {
   collectionName: string;
@@ -40,9 +42,11 @@ export const DocumentEditor = ({
 }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
+  const { uuidFormat } = useSettings();
   const queryClient = useQueryClient();
 
   const id = extractIdString(doc._id);
+  const idDisplay = formatDocumentId(doc._id, uuidFormat);
   const fullJson = useMemo(() => stringifyEJSON(doc), [doc]);
   const editJson = useMemo(() => stringifyEJSON(stripId(doc)), [doc]);
 
@@ -153,7 +157,7 @@ export const DocumentEditor = ({
               )}
             </div>
             <div className="truncate font-mono text-sm text-slate-900 dark:text-slate-100">
-              {id}
+              {idDisplay}
             </div>
           </div>
 

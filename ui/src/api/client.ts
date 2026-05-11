@@ -804,13 +804,89 @@ export const stringifyEJSON = (value: unknown, pretty = true): string =>
 export const parseEJSON = (text: string): unknown =>
   EJSON.parse(text, { relaxed: false });
 
+/** Extract { base64, subType } from either a plain EJSON binary object
+ *  or a BSON Binary class instance (bson >= 5 returns class instances). */
+const extractBinaryInfo = (
+  value: unknown,
+): { base64: string; subType: string } | null => {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  // Plain EJSON object: { $binary: { base64: "...", subType: "03" } }
+  if ("$binary" in v) {
+    const b = v.$binary as { base64?: string; subType?: string } | undefined;
+    if (b && typeof b.base64 === "string" && typeof b.subType === "string") {
+      return { base64: b.base64, subType: b.subType };
+    }
+  }
+  // BSON Binary class instance: has sub_type (number), buffer, and toString("base64")
+  if ("sub_type" in v && typeof v.sub_type === "number" && "buffer" in v) {
+    try {
+      const base64 = (v as { toString(enc: string): string }).toString("base64");
+      if (typeof base64 === "string" && base64.length > 0) {
+        return { base64, subType: v.sub_type.toString(16).padStart(2, "0") };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+};
+
+/** Decode base64 → 16 bytes, or null if length ≠ 16. */
+const base64ToUuidBytes = (b64: string): number[] | null => {
+  try {
+    const bin = atob(b64);
+    if (bin.length !== 16) return null;
+    return Array.from({ length: 16 }, (_, i) => bin.charCodeAt(i));
+  } catch {
+    return null;
+  }
+};
+
+/** Format 16 bytes as a UUID string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). */
+const bytesToUuid = (bytes: number[]): string => {
+  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join("-");
+};
+
+/** Rearrange CSUUID (C# Guid, little-endian) bytes to standard UUID byte order. */
+const csUuidToStandard = (b: number[]): number[] => [
+  b[3], b[2], b[1], b[0],
+  b[5], b[4],
+  b[7], b[6],
+  b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+];
+
+const binaryToCanonicalUuid = (value: unknown): string | null => {
+  const info = extractBinaryInfo(value);
+  if (!info || info.subType !== "04") return null;
+  const bytes = base64ToUuidBytes(info.base64);
+  if (!bytes) return null;
+  return bytesToUuid(bytes);
+};
+
 export const extractIdString = (id: unknown): string => {
   if (typeof id === "string") return id;
   if (id && typeof id === "object" && "$oid" in (id as Record<string, unknown>)) {
     return String((id as Record<string, unknown>).$oid);
   }
-  const binaryUuid = binaryToCanonicalUuid(id);
-  if (binaryUuid) return binaryUuid;
+  const info = extractBinaryInfo(id);
+  if (info) {
+    const bytes = base64ToUuidBytes(info.base64);
+    if (bytes) {
+      if (info.subType === "04") return bytesToUuid(bytes);
+      // subType 03: always decode as CSUUID for a stable API key.
+      // The server's buildIdCandidates tries both CSUUID and standard byte orderings.
+      if (info.subType === "03") return bytesToUuid(csUuidToStandard(bytes));
+    }
+    return info.base64; // non-UUID binary: return base64 as stable fallback
+  }
   if (id && typeof id === "object" && "toHexString" in (id as { toHexString?: () => string })) {
     const f = (id as { toHexString?: () => string }).toHexString;
     if (typeof f === "function") return f.call(id);
@@ -818,53 +894,58 @@ export const extractIdString = (id: unknown): string => {
   return String(id);
 };
 
-const binaryToCanonicalUuid = (value: unknown): string | null => {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("$binary" in (value as Record<string, unknown>))
-  ) {
-    return null;
+/** Format a document _id for display using the user's UUID format preference. */
+export const formatDocumentId = (
+  id: unknown,
+  format: "canonical" | "csuuid" | "juuid" | "short" | "compact" | "raw",
+): string => {
+  if (typeof id === "string") return id;
+  if (id && typeof id === "object" && "$oid" in (id as Record<string, unknown>)) {
+    return String((id as Record<string, unknown>).$oid);
   }
-  const b = (value as Record<string, unknown>).$binary as
-    | { base64?: string; subType?: string }
-    | undefined;
-  if (!b || b.subType !== "04" || typeof b.base64 !== "string") return null;
-  try {
-    const bin = atob(b.base64);
-    let hex = "";
-    for (let i = 0; i < bin.length; i++) {
-      hex += bin.charCodeAt(i).toString(16).padStart(2, "0");
-    }
-    if (hex.length !== 32) return null;
-    return [
-      hex.slice(0, 8),
-      hex.slice(8, 12),
-      hex.slice(12, 16),
-      hex.slice(16, 20),
-      hex.slice(20, 32),
-    ].join("-");
-  } catch {
-    return null;
+  const info = extractBinaryInfo(id);
+  if (!info) return extractIdString(id);
+  if (format === "raw") return info.base64;
+  const bytes = base64ToUuidBytes(info.base64);
+  if (!bytes) return info.base64;
+  if (info.subType === "04") {
+    const canonical = bytesToUuid(bytes);
+    if (format === "short") return canonical.slice(0, 8);
+    if (format === "compact") return canonical.replace(/-/g, "");
+    return canonical;
   }
+  if (info.subType === "03") {
+    if (format === "csuuid") return bytesToUuid(csUuidToStandard(bytes));
+    if (format === "juuid") return bytesToUuid(bytes);
+    return info.base64;
+  }
+  return info.base64;
 };
 
-export const isBsonUuid = (value: unknown): boolean =>
-  binaryToCanonicalUuid(value) !== null;
+export const isBsonUuid = (value: unknown): boolean => {
+  const info = extractBinaryInfo(value);
+  return info !== null && (info.subType === "04" || info.subType === "03");
+};
 
 export const formatUuid = (
   value: unknown,
-  format: "canonical" | "short" | "compact" | "raw",
+  format: "canonical" | "csuuid" | "juuid" | "short" | "compact" | "raw",
 ): string | null => {
-  const canonical = binaryToCanonicalUuid(value);
-  if (!canonical) return null;
-  if (format === "canonical") return canonical;
-  if (format === "short") return canonical.slice(0, 8);
-  if (format === "compact") return canonical.replace(/-/g, "");
-  if (format === "raw") {
-    return String(
-      (value as { $binary: { base64: string } }).$binary.base64,
-    );
+  const info = extractBinaryInfo(value);
+  if (!info) return null;
+  const bytes = base64ToUuidBytes(info.base64);
+  if (!bytes) return null;
+  if (format === "raw") return info.base64;
+  if (info.subType === "04") {
+    const canonical = bytesToUuid(bytes);
+    if (format === "short") return canonical.slice(0, 8);
+    if (format === "compact") return canonical.replace(/-/g, "");
+    return canonical;
   }
-  return canonical;
+  if (info.subType === "03") {
+    if (format === "csuuid") return bytesToUuid(csUuidToStandard(bytes));
+    if (format === "juuid") return bytesToUuid(bytes);
+    return null;
+  }
+  return null;
 };

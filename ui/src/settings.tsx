@@ -8,7 +8,7 @@ import {
 } from "react";
 
 export type Theme = "dark" | "light";
-export type UuidFormat = "canonical" | "short" | "compact" | "raw";
+export type UuidFormat = "canonical" | "csuuid" | "juuid" | "short" | "compact" | "raw";
 export type PageSize = 50 | 100 | 200 | 500;
 export type CollectionMode = "query" | "console";
 
