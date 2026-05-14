@@ -3,6 +3,9 @@
 // desktop/src-tauri tauri logs).
 process.stderr.write("[mango] boot start\n");
 
+// MUST be the first import: the OTel SDK has to install loader hooks before
+// any instrumented module (http, hono, mongodb…) is required.
+import "./instrumentation.js";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
@@ -18,15 +21,17 @@ import { aiRoute } from "./routes/ai.js";
 import { collectionsRoute } from "./routes/collections.js";
 import { connectionsRoute } from "./routes/connections.js";
 import { consoleRoute } from "./routes/console.js";
+import { databasesRoute } from "./routes/databases.js";
 import { discoveryRoute } from "./routes/discovery.js";
 import { documentsRoute } from "./routes/documents.js";
 import { infoRoute } from "./routes/info.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
 import { systemRoute } from "./routes/system.js";
+import { workspacesRoute } from "./routes/workspaces.js";
 import { isAllowedOrigin } from "./security.js";
 import {
-  seedFromEnvIfEmpty,
+  upsertEnvConnection,
   upsertStandaloneConnection,
 } from "./store/connections.js";
 
@@ -39,8 +44,9 @@ if (serverConfig.mode === "standalone" && serverConfig.standaloneConnectionId) {
   );
   console.log("[mango] standalone mode — connection pinned from MONGO_URL");
 } else {
-  // Multi mode — keep the legacy "seed from MONGO_URL when empty" behavior.
-  seedFromEnvIfEmpty();
+  // Multi mode — keep a fixed-ID "Default" connection in sync with MONGO_URL
+  // on every boot. Other user-created connections are left alone.
+  upsertEnvConnection();
 }
 
 const app = new Hono();
@@ -102,6 +108,7 @@ connectionScoped.route("/collections", collectionsRoute);
 connectionScoped.route("/collections", documentsRoute);
 connectionScoped.route("/collections", schemaRoute);
 connectionScoped.route("/collections", infoRoute);
+connectionScoped.route("/databases", databasesRoute);
 connectionScoped.route("/shell", shellRoute);
 connectionScoped.route("/console", consoleRoute);
 app.route("/api/connections/:cid", connectionScoped);
@@ -109,6 +116,7 @@ app.route("/api/connections/:cid", connectionScoped);
 app.route("/api/ai", aiRoute);
 app.route("/api/system", systemRoute);
 app.route("/api/discovery", discoveryRoute);
+app.route("/api/workspaces", workspacesRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {

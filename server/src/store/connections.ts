@@ -342,23 +342,78 @@ export const upsertStandaloneConnection = (
   });
 };
 
+/** Stable ID for the env-tracking "Default" connection in multi mode. Lets us
+ *  upsert (not just bootstrap-once) so MONGO_URL changes — e.g. Aspire's
+ *  dynamic port allocation between boots — are picked up automatically. */
+export const ENV_DEFAULT_CONNECTION_ID = "env-default";
+
 /**
- * Bootstrap a "Default" connection from MONGO_URL env when the table is empty.
- * Lets existing Aspire / Docker users keep working with no migration step.
+ * Multi-mode counterpart to {@link upsertStandaloneConnection}: when
+ * `MONGO_URL` is set, keep an "Default" connection (fixed ID) in sync with
+ * the env on every boot. Other user-created connections in the store are
+ * untouched. Name/color are only set on the initial create — once it's in
+ * the store, the user can rename or recolor without it being clobbered on
+ * the next boot.
+ *
+ * If `MONGO_URL` is unset (typical desktop / standalone-CLI use without a
+ * pre-wired Mongo), removes any previously-seeded row so the connection
+ * picker doesn't keep a dead "Default" around.
  */
-export const seedFromEnvIfEmpty = (): void => {
-  if (store.read().connections.length > 0) return;
+export const upsertEnvConnection = (): void => {
   const uri = process.env.MONGO_URL;
-  if (!uri) return;
-  const defaultDb = process.env.MONGO_DB || extractDbFromUri(uri) || null;
-  createConnection({
-    name: "Default",
-    uri,
-    defaultDatabase: defaultDb,
-    color: "#38bdf8",
+  if (!uri) {
+    store.mutate((file) => ({
+      ...file,
+      connections: file.connections.filter(
+        (c) => c.id !== ENV_DEFAULT_CONNECTION_ID,
+      ),
+    }));
+    return;
+  }
+  const now = Date.now();
+  const resolvedDb = process.env.MONGO_DB || extractDbFromUri(uri) || null;
+  const uriEncrypted = encryptString(uri);
+  store.mutate((file) => {
+    const existing = file.connections.find(
+      (c) => c.id === ENV_DEFAULT_CONNECTION_ID,
+    );
+    const next: StoredConnection = existing
+      ? {
+          ...existing,
+          uriEncrypted,
+          defaultDatabase: resolvedDb,
+          updatedAt: now,
+        }
+      : {
+          id: ENV_DEFAULT_CONNECTION_ID,
+          name: "Default",
+          uriEncrypted,
+          defaultDatabase: resolvedDb,
+          color: "#38bdf8",
+          createdAt: now,
+          updatedAt: now,
+          lastUsedAt: null,
+          aspire: null,
+          source: null,
+          oidcProvider: null,
+          oidcTokenAudience: null,
+          azureClientId: null,
+          azureTenantId: null,
+        };
+    return {
+      ...file,
+      connections: existing
+        ? file.connections.map((c) =>
+            c.id === ENV_DEFAULT_CONNECTION_ID ? next : c,
+          )
+        : [...file.connections, next],
+    };
   });
-  console.log("[mango] seeded Default connection from MONGO_URL");
+  console.log(
+    "[mango] upserted Default connection from MONGO_URL (multi mode)",
+  );
 };
+
 
 const extractDbFromUri = (uri: string): string | null => {
   try {

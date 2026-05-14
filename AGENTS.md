@@ -50,7 +50,7 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 
 ### Desktop sidecar
 
-`yarn compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by `tauri:build` and `tauri:dev`** — when you change server code, re-run `yarn compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
+`yarn compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by ****`tauri:build`**** and ****`tauri:dev`** — when you change server code, re-run `yarn compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
 
 ### Aspire integration
 

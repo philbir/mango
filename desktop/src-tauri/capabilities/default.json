@@ -7,6 +7,7 @@
     "core:default",
     "opener:default",
     "updater:allow-check",
-    "updater:allow-download-and-install"
+    "updater:allow-download-and-install",
+    "dialog:allow-open"
   ]
 }

@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -9,8 +10,9 @@ const apiTarget = process.env.VITE_MANGO_API ?? "http://localhost:5180";
 
 // Tauri's default devUrl is http://localhost:5173 — keep Vite on that port so
 // `yarn tauri:dev` finds it. Override with VITE_PORT for browser-only dev if
-// you have a port collision.
-const port = Number(process.env.VITE_PORT ?? 5173);
+// you have a port collision. PORT is honored too so the Aspire AppHost's
+// default-allocated endpoint (apphost.ts) just works.
+const port = Number(process.env.PORT ?? process.env.VITE_PORT ?? 5173);
 
 const resolveVersion = () => {
   if (process.env.GITHUB_REF_TYPE === "tag" && process.env.GITHUB_REF_NAME) {
@@ -30,7 +32,7 @@ const resolveVersion = () => {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_MANGO_VERSION": JSON.stringify(resolveVersion()),
     "import.meta.env.VITE_MANGO_DOCS_URL": JSON.stringify(

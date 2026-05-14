@@ -1,6 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink-50: #f8fafc;
+  --color-ink-100: #f1f5f9;
+  --color-ink-200: #e2e8f0;
+  --color-ink-300: #cbd5e1;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+}
 
 html,
 body,
@@ -47,14 +63,14 @@ html.dark {
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: theme("fontFamily.sans");
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 .cm-editor {
   background: var(--cm-bg);
   color: var(--cm-fg);
-  font-family: theme("fontFamily.mono");
+  font-family: var(--font-mono);
   font-size: 12.5px;
 }
 
@@ -117,6 +133,6 @@ html.dark .thin-scrollbar::-webkit-scrollbar-thumb:hover {
 
 /* @uiw/react-json-view tweaks */
 .w-rjv {
-  font-family: theme("fontFamily.mono") !important;
+  font-family: var(--font-mono) !important;
   font-size: 12.5px !important;
 }

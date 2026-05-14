@@ -12,18 +12,17 @@ import {
   type CollectionMode,
   type PageSize,
   type Theme,
-  type UuidFormat,
+  type UuidRepresentation,
   useSettings,
 } from "../settings";
 import { AiSettingsModal } from "../features/connections/AiSettingsModal";
 
-const UUID_LABELS: Record<UuidFormat, string> = {
-  canonical: "UUID (standard)",
-  csuuid: "CSUUID (.NET / C#)",
-  juuid: "JUUID (Java)",
-  short: "Short (first 8)",
-  compact: "No dashes",
-  raw: "Raw (base64)",
+const UUID_REPRESENTATION_LABELS: Record<UuidRepresentation, string> = {
+  standard: "Standard (subtype 4, RFC 4122)",
+  csharpLegacy: "CSharpLegacy (subtype 3, .NET byte order)",
+  javaLegacy: "JavaLegacy (subtype 3, Java byte order)",
+  pythonLegacy: "PythonLegacy (subtype 3, standard order)",
+  unspecified: "Unspecified (subtype 3, no swap)",
 };
 
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
@@ -81,15 +80,21 @@ export const SettingsMenu = () => {
             />
           </Section>
 
-          <Section label="UUID display">
+          <Section label="UUID representation">
             <select
-              value={settings.uuidFormat}
-              onChange={(e) => settings.setUuidFormat(e.target.value as UuidFormat)}
+              value={settings.uuidRepresentation}
+              onChange={(e) =>
+                settings.setUuidRepresentation(
+                  e.target.value as UuidRepresentation,
+                )
+              }
               className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
-              {(Object.keys(UUID_LABELS) as UuidFormat[]).map((f) => (
-                <option key={f} value={f}>
-                  {UUID_LABELS[f]}
+              {(
+                Object.keys(UUID_REPRESENTATION_LABELS) as UuidRepresentation[]
+              ).map((r) => (
+                <option key={r} value={r}>
+                  {UUID_REPRESENTATION_LABELS[r]}
                 </option>
               ))}
             </select>

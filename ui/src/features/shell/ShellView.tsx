@@ -48,6 +48,10 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
   const [result, setResult] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const onTextChange = (next: string) => {
+    setText(next);
+  };
+
   const shellCompletion = useMemo(() => ({ commandKeywords: true }), []);
   const editorRef = useRef<MonacoJsonInputHandle | null>(null);
 
@@ -128,7 +132,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
             <MonacoJsonInput
               ref={editorRef}
               value={text}
-              onChange={setText}
+              onChange={onTextChange}
               minHeight="140px"
               showLineNumbers
               completion={shellCompletion}

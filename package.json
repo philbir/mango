@@ -1,6 +1,7 @@
 {
   "name": "mango",
   "private": true,
+  "type": "module",
   "version": "0.3.2",
   "description": "Mango — a friendly MongoDB workbench. Browser, editor, AI query assistant, and shell. Runs as Aspire extension, Docker container, or desktop app.",
   "homepage": "https://philbir.github.io/mango/",
@@ -28,10 +29,32 @@
     "tauri": "yarn workspace @mango/desktop tauri",
     "tauri:dev": "yarn workspace @mango/desktop dev",
     "tauri:build": "yarn workspace @mango/desktop build",
-    "compile-server": "yarn workspace @mango/desktop compile-server"
+    "compile-server": "yarn workspace @mango/desktop compile-server",
+    "aspire:lint": "eslint apphost.ts",
+    "aspire:start": "aspire run",
+    "aspire:build": "tsc -p tsconfig.apphost.json",
+    "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
+    "lint": "npm run aspire:lint"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@types/node": "^25.7.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.3.0",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.22.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.3"
   },
-  "packageManager": "yarn@4.5.0"
+  "packageManager": "yarn@4.5.0",
+  "dependencies": {
+    "vscode-jsonrpc": "^8.2.0"
+  },
+  "resolutions": {
+    "dompurify": "^3.4.3",
+    "protobufjs": "^7.5.8",
+    "vite": "^8.0.13"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  }
 }

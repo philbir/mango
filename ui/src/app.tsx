@@ -2,14 +2,16 @@ import { useEffect, useRef } from "react";
 import { useAssistant } from "./features/assistant/AssistantContext";
 import { AssistantPanel } from "./features/assistant/AssistantPanel";
 import { AssistantToggle } from "./features/assistant/AssistantToggle";
-import { Sidebar } from "./features/collections/Sidebar";
+import { SidebarShell } from "./features/sidebar/SidebarShell";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
+import { NotebookView } from "./features/workspaces/NotebookView";
 import {
   ViewConnectionContext,
   useActiveConnection,
 } from "./features/connections/useActiveConnection";
 import { CollectionView } from "./features/documents/CollectionView";
 import { ConsoleView } from "./features/documents/ConsoleView";
+import { DatabaseView } from "./features/database/DatabaseView";
 import { ShellView } from "./features/shell/ShellView";
 import { TabBar } from "./features/tabs/TabBar";
 import { useTabs } from "./features/tabs/TabsContext";
@@ -83,25 +85,49 @@ export const App = () => {
       <UpdateBanner />
       <KeyHealthBanner />
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
+        <SidebarShell />
         <main className="relative flex flex-1 flex-col overflow-hidden">
           {tabMode && <TabBar />}
           <div className="flex flex-1 flex-col overflow-hidden">
             {!activeTab && <EmptyState />}
             {activeTab && (
               <ViewConnectionContext.Provider value={activeTab.connectionId}>
+                {/*
+                  Include the bound workspace file path in the React `key`
+                  so single-tab navigation (which mutates the tab in place
+                  rather than creating a new one) force-remounts the view
+                  when switching between workspace files. Otherwise the
+                  view's local state — pageMode, filter draft, selected
+                  fields — sticks to the previous file's values.
+                */}
                 {activeTab.kind === "collection" && activeTab.collection && (
                   <CollectionView
-                    key={activeTab.id}
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
                     tabId={activeTab.id}
                     name={activeTab.collection}
                   />
                 )}
                 {activeTab.kind === "console" && (
-                  <ConsoleView key={activeTab.id} tabId={activeTab.id} />
+                  <ConsoleView
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
+                    tabId={activeTab.id}
+                  />
                 )}
                 {activeTab.kind === "shell" && (
                   <ShellView key={activeTab.id} tabId={activeTab.id} />
+                )}
+                {activeTab.kind === "notebook" && (
+                  <NotebookView
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
+                    tabId={activeTab.id}
+                  />
+                )}
+                {activeTab.kind === "database" && activeTab.database && (
+                  <DatabaseView
+                    key={`${activeTab.id}:${activeTab.database}`}
+                    cid={activeTab.connectionId}
+                    database={activeTab.database}
+                  />
                 )}
               </ViewConnectionContext.Provider>
             )}

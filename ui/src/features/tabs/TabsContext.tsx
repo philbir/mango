@@ -8,7 +8,12 @@ import {
 } from "react";
 import { useSettings } from "../../settings";
 
-export type TabKind = "collection" | "console" | "shell";
+export type TabKind =
+  | "collection"
+  | "console"
+  | "shell"
+  | "notebook"
+  | "database";
 
 export interface Tab {
   id: string;
@@ -16,22 +21,53 @@ export interface Tab {
   /** Connection this tab is bound to. Doesn't change after creation. */
   connectionId: string;
   collection?: string;
+  /** Database name — set for `database` kind, and on `collection` tabs that
+   * were opened from a non-default db (existing behavior uses activeDatabase). */
+  database?: string;
+  /**
+   * When set, this tab is bound to a workspace file: edits flow through the
+   * matching view (CollectionView for query/console, NotebookView for
+   * notebooks) but Save writes back to the file at this path.
+   */
+  workspaceId?: string;
+  workspaceFilePath?: string;
+  /** Initial pageMode for collection tabs opened from a workspace file. */
+  initialPageMode?: "query" | "console" | "info";
+}
+
+export interface OpenCollectionOptions {
+  workspaceFile?: { workspaceId: string; filePath: string };
+  initialPageMode?: "query" | "console" | "info";
+}
+
+export interface OpenConsoleOptions {
+  workspaceFile?: { workspaceId: string; filePath: string };
 }
 
 interface TabsContextValue {
   tabs: Tab[];
   activeId: string | null;
   activeTab: Tab | null;
-  openCollection: (connectionId: string, name: string) => void;
-  openConsole: (connectionId: string) => void;
+  openCollection: (
+    connectionId: string,
+    name: string,
+    options?: OpenCollectionOptions,
+  ) => void;
+  openConsole: (connectionId: string, options?: OpenConsoleOptions) => void;
   openShell: (connectionId: string) => void;
+  openDatabase: (connectionId: string, database: string) => void;
+  openNotebook: (
+    connectionId: string,
+    workspaceId: string,
+    filePath: string,
+  ) => void;
   closeTab: (id: string) => void;
   activate: (id: string) => void;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
 
-const STORAGE_KEY = "mango:tabs:v3";
+const STORAGE_KEY = "mango:tabs:v6";
 
 const genId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -81,13 +117,130 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
   }, [state]);
 
   const openCollection = useCallback(
-    (connectionId: string, name: string) => {
+    (
+      connectionId: string,
+      name: string,
+      options?: OpenCollectionOptions,
+    ) => {
+      const wsId = options?.workspaceFile?.workspaceId;
+      const wsPath = options?.workspaceFile?.filePath;
       setState((prev) => {
         const existing = prev.tabs.find(
           (t) =>
             t.kind === "collection" &&
             t.collection === name &&
-            t.connectionId === connectionId,
+            t.connectionId === connectionId &&
+            t.workspaceId === wsId &&
+            t.workspaceFilePath === wsPath,
+        );
+        if (existing) return { ...prev, activeId: existing.id };
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "collection",
+          connectionId,
+          collection: name,
+          ...(wsId && wsPath
+            ? { workspaceId: wsId, workspaceFilePath: wsPath }
+            : {}),
+          ...(options?.initialPageMode
+            ? { initialPageMode: options.initialPageMode }
+            : {}),
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
+  const openConsole = useCallback(
+    (connectionId: string, options?: OpenConsoleOptions) => {
+      const wsId = options?.workspaceFile?.workspaceId;
+      const wsPath = options?.workspaceFile?.filePath;
+      setState((prev) => {
+        const existing =
+          wsId && wsPath
+            ? prev.tabs.find(
+                (t) =>
+                  t.kind === "console" &&
+                  t.workspaceId === wsId &&
+                  t.workspaceFilePath === wsPath,
+              )
+            : null;
+        if (existing) return { ...prev, activeId: existing.id };
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "console",
+          connectionId,
+          ...(wsId && wsPath
+            ? { workspaceId: wsId, workspaceFilePath: wsPath }
+            : {}),
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
+  const openShell = useCallback(
+    (connectionId: string) => {
+      setState((prev) => {
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "shell",
+          connectionId,
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
+  const openDatabase = useCallback(
+    (connectionId: string, database: string) => {
+      setState((prev) => {
+        const existing = prev.tabs.find(
+          (t) =>
+            t.kind === "database" &&
+            t.connectionId === connectionId &&
+            t.database === database,
+        );
+        if (existing) return { ...prev, activeId: existing.id };
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "database",
+          connectionId,
+          database,
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
+  const openNotebook = useCallback(
+    (connectionId: string, workspaceId: string, filePath: string) => {
+      setState((prev) => {
+        const existing = prev.tabs.find(
+          (t) =>
+            t.kind === "notebook" &&
+            t.workspaceId === workspaceId &&
+            t.workspaceFilePath === filePath,
         );
         if (existing) return { ...prev, activeId: existing.id };
         if (!tabMode && prev.activeId) {
@@ -95,9 +248,10 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
             t.id === prev.activeId
               ? {
                   id: t.id,
-                  kind: "collection" as const,
+                  kind: "notebook" as const,
                   connectionId,
-                  collection: name,
+                  workspaceId,
+                  workspaceFilePath: filePath,
                 }
               : t,
           );
@@ -107,50 +261,14 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
         return {
           tabs: [
             ...prev.tabs,
-            { id, kind: "collection", connectionId, collection: name },
+            {
+              id,
+              kind: "notebook",
+              connectionId,
+              workspaceId,
+              workspaceFilePath: filePath,
+            },
           ],
-          activeId: id,
-        };
-      });
-    },
-    [tabMode],
-  );
-
-  const openConsole = useCallback(
-    (connectionId: string) => {
-      setState((prev) => {
-        if (!tabMode && prev.activeId) {
-          const tabs = prev.tabs.map((t) =>
-            t.id === prev.activeId
-              ? { id: t.id, kind: "console" as const, connectionId }
-              : t,
-          );
-          return { tabs, activeId: prev.activeId };
-        }
-        const id = genId();
-        return {
-          tabs: [...prev.tabs, { id, kind: "console", connectionId }],
-          activeId: id,
-        };
-      });
-    },
-    [tabMode],
-  );
-
-  const openShell = useCallback(
-    (connectionId: string) => {
-      setState((prev) => {
-        if (!tabMode && prev.activeId) {
-          const tabs = prev.tabs.map((t) =>
-            t.id === prev.activeId
-              ? { id: t.id, kind: "shell" as const, connectionId }
-              : t,
-          );
-          return { tabs, activeId: prev.activeId };
-        }
-        const id = genId();
-        return {
-          tabs: [...prev.tabs, { id, kind: "shell", connectionId }],
           activeId: id,
         };
       });
@@ -189,6 +307,8 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
+      openDatabase,
+      openNotebook,
       closeTab,
       activate,
     }),
@@ -199,6 +319,8 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
+      openDatabase,
+      openNotebook,
       closeTab,
       activate,
     ],

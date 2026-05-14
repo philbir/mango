@@ -25,8 +25,9 @@ export const isAllowedOrigin = (origin: string, requestUrl: string): boolean => 
 
   try {
     const originUrl = new URL(normalized);
+    if (isLocalHost(originUrl.hostname)) return true;
     const reqUrl = new URL(requestUrl);
-    return originUrl.origin === reqUrl.origin && isLocalHost(originUrl.hostname);
+    return originUrl.origin === reqUrl.origin;
   } catch {
     return false;
   }

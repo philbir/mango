@@ -26,6 +26,11 @@ ENV PORT=5180
 ENV HOST=0.0.0.0
 ENV STATIC_DIR=/app/public
 ENV MANGO_DATA_DIR=/data
+# MongoDB Database Tools (mongoexport, mongoimport, mongodump, mongorestore)
+# powers the Database Info page's import/export panel. Without these binaries
+# on PATH, the server's boot-time probe leaves `dbToolsAvailable: false` and
+# the UI hides the section.
+RUN apk add --no-cache mongodb-tools
 COPY --from=build-server /app/server/dist ./dist
 COPY --from=build-server /app/server/package.json ./package.json
 # Yarn 4 (`nodeLinker: node-modules`) hoists deps to the workspace root —

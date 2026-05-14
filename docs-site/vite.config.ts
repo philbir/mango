@@ -20,6 +20,10 @@ const resolveVersion = () => {
   }
 };
 
+// Honor Aspire-injected PORT so the Aspire AppHost can run docs alongside the
+// UI without a 5173 collision. VITE_PORT also accepted for manual overrides.
+const port = Number(process.env.PORT ?? process.env.VITE_PORT ?? 5174);
+
 export default defineConfig({
   base: "./",
   plugins: [react()],
@@ -28,6 +32,11 @@ export default defineConfig({
     "import.meta.env.VITE_MANGO_REPO_URL": JSON.stringify(
       "https://github.com/philbir/mango",
     ),
+  },
+  server: {
+    host: "127.0.0.1",
+    port,
+    strictPort: true,
   },
   build: {
     outDir: "dist",

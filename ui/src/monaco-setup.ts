@@ -1,7 +1,5 @@
 import * as monaco from "monaco-editor";
-// @ts-expect-error - Vite-specific worker import suffix
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-// @ts-expect-error - Vite-specific worker import suffix
 import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 
 const env: monaco.Environment = {

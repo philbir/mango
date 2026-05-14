@@ -34,6 +34,12 @@ public static class MangoExtensions
     /// the wired-up Mongo container is the only connection and the connection
     /// manager UI is hidden. Pass <c>false</c> to expose the full multi-connection UI.
     /// </param>
+    /// <param name="devMode">
+    /// When true, Mango exposes destructive database-level actions in the UI
+    /// ("Clear all collections", "Delete database"). Off by default so
+    /// production deployments do not accidentally surface them; turn on for
+    /// dev/test stacks.
+    /// </param>
     public static IResourceBuilder<MongoDBServerResource> WithMango(
         this IResourceBuilder<MongoDBServerResource> builder,
         string? databaseName = null,
@@ -41,7 +47,8 @@ public static class MangoExtensions
         string name = DefaultName,
         string image = DefaultImage,
         string tag = DefaultTag,
-        bool standalone = true)
+        bool standalone = true,
+        bool devMode = false)
     {
         var mango = builder.ApplicationBuilder
             .AddContainer(name, image, tag)
@@ -63,6 +70,11 @@ public static class MangoExtensions
         if (standalone)
         {
             mango.WithEnvironment("MANGO_MODE", "standalone");
+        }
+
+        if (devMode)
+        {
+            mango.WithEnvironment("MANGO_DEV_MODE", "true");
         }
 
         if (!string.IsNullOrWhiteSpace(databaseName))
