@@ -24,7 +24,6 @@ import { consoleRoute } from "./routes/console.js";
 import { discoveryRoute } from "./routes/discovery.js";
 import { documentsRoute } from "./routes/documents.js";
 import { infoRoute } from "./routes/info.js";
-import { otlpRoute } from "./routes/otlp.js";
 import { schemaRoute } from "./routes/schema.js";
 import { shellRoute } from "./routes/shell.js";
 import { systemRoute } from "./routes/system.js";
@@ -115,7 +114,6 @@ app.route("/api/ai", aiRoute);
 app.route("/api/system", systemRoute);
 app.route("/api/discovery", discoveryRoute);
 app.route("/api/workspaces", workspacesRoute);
-app.route("/api/otlp", otlpRoute);
 
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {

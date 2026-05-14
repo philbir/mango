@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-table";
 import { useMemo } from "react";
 import { extractIdString, formatUuid } from "../../api/client";
-import { useSettings } from "../../settings";
+import { useSettings, type UuidRepresentation } from "../../settings";
 
 interface Props {
   documents: Array<Record<string, unknown>>;
@@ -16,10 +16,10 @@ interface Props {
 
 const formatCell = (
   value: unknown,
-  uuidFormat: "canonical" | "short" | "compact" | "raw",
+  uuidRepresentation: UuidRepresentation,
 ): string => {
   if (value === null || value === undefined) return "—";
-  const uuid = formatUuid(value, uuidFormat);
+  const uuid = formatUuid(value, uuidRepresentation);
   if (uuid !== null) return uuid;
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean")
@@ -67,7 +67,7 @@ const formatCell = (
 const COLUMN_LIMIT = 12;
 
 export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
-  const { uuidFormat } = useSettings();
+  const { uuidRepresentation } = useSettings();
 
   const columnNames = useMemo(() => {
     const seen = new Set<string>();
@@ -93,11 +93,11 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
         maxSize: 800,
         cell: (ctx) => (
           <span className="font-mono text-[12px] text-slate-700 dark:text-slate-200">
-            {formatCell(ctx.getValue(), uuidFormat)}
+            {formatCell(ctx.getValue(), uuidRepresentation)}
           </span>
         ),
       })),
-    [columnNames, uuidFormat],
+    [columnNames, uuidRepresentation],
   );
 
   const table = useReactTable({

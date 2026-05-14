@@ -1,13 +1,13 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   IconBraces,
-  IconDeviceFloppy,
   IconLoader2,
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString } from "../../api/client";
 import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
+import { UnboundSaveHeader } from "../workspaces/UnboundSaveHeader";
 import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
 import { WorkspaceFileHeader } from "../workspaces/WorkspaceFileHeader";
 import { useServerConfig } from "../connections/useServerConfig";
@@ -31,11 +31,27 @@ import { ResultPanel, type ResultFormat } from "./ResultPanel";
 interface Props {
   initialCommand?: string;
   tabId?: string;
+  /**
+   * Collection this console is scoped to. Set when ConsoleView is mounted
+   * inside CollectionView's console tab. Console files always carry a
+   * collection in their frontmatter, so we only allow Save-to-workspace
+   * when one is known (either passed in here or inferred from the script).
+   */
+  collection?: string;
 }
 
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 
-export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
+const inferCollection = (script: string): string | null => {
+  const m = /\bdb\.([\w$]+)\b/.exec(script);
+  return m?.[1] ?? null;
+};
+
+export const ConsoleView = ({
+  initialCommand = "db.\n",
+  tabId,
+  collection: collectionProp,
+}: Props) => {
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
   const { pageSize, setPageSize } = useSettings();
@@ -85,7 +101,10 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
       await fileBinding.save({
         frontmatter: {
           ...fileBinding.frontmatter,
-          kind: fileBinding.frontmatter.kind ?? "console",
+          collection:
+            collectionProp ??
+            fileBinding.frontmatter.collection ??
+            inferCollection(code),
           connectionId: activeId ?? fileBinding.frontmatter.connectionId,
           connection: active?.name ?? fileBinding.frontmatter.connection,
           database: database ?? fileBinding.frontmatter.database,
@@ -252,7 +271,7 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath && (
+      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath ? (
         <WorkspaceFileHeader
           workspaceId={tab.workspaceId}
           filePath={tab.workspaceFilePath}
@@ -265,7 +284,12 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
           onAfterDelete={() => tabId && closeTab(tabId)}
           onClose={tabId ? () => closeTab(tabId) : undefined}
         />
-      )}
+      ) : config.workspacesEnabled && (collectionProp || inferCollection(code)) ? (
+        <UnboundSaveHeader
+          canSave={!!code.trim()}
+          onSave={() => setShowSaveDialog(true)}
+        />
+      ) : null}
       {fileBinding.bound && saveError && (
         <div className="border-b border-red-200 bg-red-50 px-3 py-1 text-[11.5px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
           {saveError}
@@ -294,18 +318,6 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
             <IconBraces size={11} />
             Format
           </button>
-          {config.workspacesEnabled && !fileBinding.bound && (
-            <button
-              type="button"
-              onClick={() => setShowSaveDialog(true)}
-              disabled={!code.trim()}
-              className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              title="Save to workspace (⌘/Ctrl + S)"
-            >
-              <IconDeviceFloppy size={11} />
-              Save…
-            </button>
-          )}
           <kbd className="mr-12 rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
             ⌘/Ctrl + Enter
           </kbd>
@@ -393,6 +405,7 @@ export const ConsoleView = ({ initialCommand = "db.\n", tabId }: Props) => {
           connectionId={activeId}
           kind="console"
           script={code}
+          collection={collectionProp ?? inferCollection(code)}
           onClose={() => setShowSaveDialog(false)}
         />
       )}

@@ -1,12 +1,23 @@
-import { IconFolderPlus, IconRefresh } from "@tabler/icons-react";
+import { IconFolderPlus } from "@tabler/icons-react";
 import { useState } from "react";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 import { WorkspaceRoot } from "./WorkspaceRoot";
-import { useWorkspaces } from "./useWorkspaces";
+import { useActiveWorkspace } from "./useActiveWorkspace";
 
 export const WorkspacesPane = () => {
-  const { workspaces, enabled, isLoading, error, refetch } = useWorkspaces();
+  const { workspaces, active, enabled, isLoading, error } = useActiveWorkspace();
   const [showNew, setShowNew] = useState(false);
+
+  // When workspaces are enabled and at least one exists, WorkspaceRoot owns the
+  // entire pane chrome (selector + actions + tree) — no outer header here, so
+  // the workspace name only appears once.
+  if (enabled && active) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <WorkspaceRoot key={active.id} workspace={active} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -14,24 +25,17 @@ export const WorkspacesPane = () => {
         <span className="flex-1 text-[10.5px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Workspaces
         </span>
-        <button
-          type="button"
-          onClick={() => setShowNew(true)}
-          disabled={!enabled}
-          className="flex items-center gap-1 rounded px-1 py-0.5 text-[10.5px] text-slate-500 hover:bg-slate-200 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-          title="New workspace"
-        >
-          <IconFolderPlus size={11} />
-          New
-        </button>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          title="Refresh list"
-        >
-          <IconRefresh size={12} />
-        </button>
+        {enabled && (
+          <button
+            type="button"
+            onClick={() => setShowNew(true)}
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-[10.5px] text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            title="New workspace"
+          >
+            <IconFolderPlus size={11} />
+            New
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -64,8 +68,6 @@ export const WorkspacesPane = () => {
             </button>
           </div>
         )}
-        {enabled &&
-          workspaces.map((w) => <WorkspaceRoot key={w.id} workspace={w} />)}
       </div>
 
       {showNew && <NewWorkspaceDialog onClose={() => setShowNew(false)} />}

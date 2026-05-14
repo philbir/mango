@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertTriangle,
   IconBraces,
@@ -6,7 +6,8 @@ import {
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
+import { ApiError, api, extractIdString } from "../../api/client";
+import { DocumentEditor } from "../editor/DocumentEditor";
 import {
   MonacoShellInput,
   type MonacoShellInputHandle,
@@ -36,7 +37,6 @@ interface Props {
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 
 const EMPTY_FM: MangoFrontmatter = {
-  kind: "notebook",
   collection: null,
   connection: null,
   connectionId: null,
@@ -74,7 +74,7 @@ export const NotebookView = ({ tabId }: Props) => {
     if (!parsed || !fileQuery.data) return;
     setCode(parsed.script);
     setDescription(parsed.description);
-    setFrontmatter(parsed.frontmatter.kind ? parsed.frontmatter : EMPTY_FM);
+    setFrontmatter(parsed.frontmatter);
     setMtime(fileQuery.data.mtime);
     setSaveError(null);
   }, [parsed, fileQuery.data?.mtime]);
@@ -115,7 +115,9 @@ export const NotebookView = ({ tabId }: Props) => {
   const [resultView, setResultView] = useState<ResultFormat>("table");
   const [page, setPage] = useState(0);
   const [pinned, setPinned] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const skip = page * pageSize;
+  const queryClient = useQueryClient();
 
   const run = useQuery({
     queryKey: ["nb-run", activeId, database, pinned, skip, pageSize],
@@ -137,7 +139,41 @@ export const NotebookView = ({ tabId }: Props) => {
     if (!trimmed) return;
     setPage(0);
     setPinned(trimmed);
+    setSelectedId(null);
   };
+
+  // Same detection ResultPanel uses for the table view — if the result is an
+  // array of plain objects, each row becomes a clickable detail-view target.
+  const resultDocs = useMemo<Array<Record<string, unknown>> | null>(() => {
+    const v = run.data?.result;
+    if (!Array.isArray(v) || v.length === 0) return null;
+    for (const r of v) {
+      if (r === null || typeof r !== "object" || Array.isArray(r)) return null;
+    }
+    return v as Array<Record<string, unknown>>;
+  }, [run.data?.result]);
+
+  const selectedDoc = useMemo(() => {
+    if (!selectedId || !resultDocs) return null;
+    return (
+      resultDocs.find((d) => extractIdString(d._id) === selectedId) ?? null
+    );
+  }, [selectedId, resultDocs]);
+
+  // Update needs to know which collection a row came from. Prefer the explicit
+  // frontmatter binding; otherwise infer from the script if it references
+  // exactly one collection (e.g. `db.users.find()` → "users"). Anything more
+  // ambiguous than that drops the panel into read-only mode.
+  const inferredCollection = useMemo(() => {
+    if (frontmatter.collection) return frontmatter.collection;
+    const matches = code.matchAll(/\bdb\.([A-Za-z_$][\w$]*)\./g);
+    const names = new Set<string>();
+    for (const m of matches) names.add(m[1]!);
+    return names.size === 1 ? [...names][0]! : null;
+  }, [frontmatter.collection, code]);
+
+  const canEditSelected =
+    !!inferredCollection && !!selectedDoc && selectedDoc._id !== undefined;
 
   // Cmd+Enter (and the Run button) — selection if there is one, else whole file.
   const onRunSmart = () => {
@@ -152,7 +188,6 @@ export const NotebookView = ({ tabId }: Props) => {
     setSaveError(null);
     const refreshedFm: MangoFrontmatter = {
       ...frontmatter,
-      kind: "notebook",
       connectionId: activeId ?? frontmatter.connectionId,
       connection: active?.name ?? frontmatter.connection,
       database: database ?? frontmatter.database,
@@ -348,6 +383,7 @@ export const NotebookView = ({ tabId }: Props) => {
         isLoading={run.isFetching}
         errorMessage={errorMessage}
         elapsedMs={run.data?.elapsedMs ?? null}
+        onRowClick={(id) => setSelectedId(id)}
         paging={
           run.data && run.data.paged
             ? {
@@ -367,6 +403,18 @@ export const NotebookView = ({ tabId }: Props) => {
         }
         emptyHint="Select a fragment or press ⌘/Ctrl + Enter to run."
       />
+
+      {selectedDoc && (
+        <DocumentEditor
+          collectionName={inferredCollection ?? "(result)"}
+          document={selectedDoc}
+          readOnly={!canEditSelected}
+          onClose={() => setSelectedId(null)}
+          onSaved={() =>
+            queryClient.invalidateQueries({ queryKey: ["nb-run"] })
+          }
+        />
+      )}
     </div>
   );
 };

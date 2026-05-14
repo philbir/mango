@@ -4,7 +4,7 @@ import { AssistantPanel } from "./features/assistant/AssistantPanel";
 import { AssistantToggle } from "./features/assistant/AssistantToggle";
 import { SidebarShell } from "./features/sidebar/SidebarShell";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
-import { WorkspaceFileView } from "./features/workspaces/WorkspaceFileView";
+import { NotebookView } from "./features/workspaces/NotebookView";
 import {
   ViewConnectionContext,
   useActiveConnection,
@@ -91,21 +91,35 @@ export const App = () => {
             {!activeTab && <EmptyState />}
             {activeTab && (
               <ViewConnectionContext.Provider value={activeTab.connectionId}>
+                {/*
+                  Include the bound workspace file path in the React `key`
+                  so single-tab navigation (which mutates the tab in place
+                  rather than creating a new one) force-remounts the view
+                  when switching between workspace files. Otherwise the
+                  view's local state — pageMode, filter draft, selected
+                  fields — sticks to the previous file's values.
+                */}
                 {activeTab.kind === "collection" && activeTab.collection && (
                   <CollectionView
-                    key={activeTab.id}
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
                     tabId={activeTab.id}
                     name={activeTab.collection}
                   />
                 )}
                 {activeTab.kind === "console" && (
-                  <ConsoleView key={activeTab.id} tabId={activeTab.id} />
+                  <ConsoleView
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
+                    tabId={activeTab.id}
+                  />
                 )}
                 {activeTab.kind === "shell" && (
                   <ShellView key={activeTab.id} tabId={activeTab.id} />
                 )}
-                {activeTab.kind === "workspace-file" && (
-                  <WorkspaceFileView key={activeTab.id} tabId={activeTab.id} />
+                {activeTab.kind === "notebook" && (
+                  <NotebookView
+                    key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
+                    tabId={activeTab.id}
+                  />
                 )}
               </ViewConnectionContext.Provider>
             )}

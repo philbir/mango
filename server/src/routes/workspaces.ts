@@ -126,6 +126,7 @@ const updateBody = z
   .object({
     name: z.string().min(1).max(120),
     color: z.string().nullable(),
+    folderPath: z.string().min(1),
   })
   .partial();
 
@@ -244,7 +245,16 @@ workspacesRoute.patch("/:id", async (c) => {
   if (!parsed.success) {
     return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
   }
-  const updated = updateWorkspace(id, parsed.data);
+  const input = { ...parsed.data };
+  if (input.folderPath !== undefined) {
+    input.folderPath = path.resolve(input.folderPath);
+    try {
+      await validateWorkspaceFolder(input.folderPath);
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+    }
+  }
+  const updated = updateWorkspace(id, input);
   if (!updated) return c.json({ error: "Workspace not found" }, 404);
   return c.json(updated);
 });
@@ -294,15 +304,21 @@ workspacesRoute.get("/:id/tree", async (c) => {
       }
       return { name: d.name, kind, size, mtime };
     })
-    // Surface only Mango notebook files (`*.mng.md`) and directories. The
-    // workspace folder may live alongside `.git`, `README.md`, scratch
-    // files, etc. — we don't want to clutter the sidebar with anything
-    // Mango can't open. Hidden dotfiles are also filtered.
+    // Surface only Mango files (one of the three kind extensions) and
+    // directories. The workspace folder may live alongside `.git`,
+    // `README.md`, scratch files, etc. — we don't want to clutter the
+    // sidebar with anything Mango can't open. Hidden dotfiles are also
+    // filtered.
     .filter((e) => {
       if (e.kind === "other") return false;
       if (e.name.startsWith(".")) return false;
       if (e.kind === "dir") return true;
-      return e.name.toLowerCase().endsWith(".mng.md");
+      const lower = e.name.toLowerCase();
+      return (
+        lower.endsWith(".mnq.md") ||
+        lower.endsWith(".mnc.md") ||
+        lower.endsWith(".mnn.md")
+      );
     })
     .sort((a, b) => {
       if (a.kind !== b.kind) return a.kind === "dir" ? -1 : 1;

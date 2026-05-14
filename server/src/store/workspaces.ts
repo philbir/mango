@@ -47,6 +47,7 @@ export interface CreateWorkspaceInput {
 export interface UpdateWorkspaceInput {
   name?: string;
   color?: string | null;
+  folderPath?: string;
 }
 
 /**
@@ -99,6 +100,7 @@ export const updateWorkspace = (
     ...existing,
     name: input.name ?? existing.name,
     color: input.color !== undefined ? input.color : existing.color,
+    folderPath: input.folderPath ?? existing.folderPath,
     updatedAt: Date.now(),
   };
   store.mutate((file) => ({

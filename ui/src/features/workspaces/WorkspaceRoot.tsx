@@ -1,34 +1,45 @@
 import {
-  IconChevronDown,
-  IconChevronRight,
   IconFilePlus,
   IconFolderPlus,
+  IconPencil,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { useTabs } from "../tabs/TabsContext";
 import { TreeNode } from "./TreeNode";
+import { useActiveWorkspace } from "./useActiveWorkspace";
 import { useDeleteWorkspace } from "./useWorkspaces";
 import { useWorkspaceGit } from "./useWorkspaceGit";
 import { useWorkspaceMutations, useWorkspaceTree } from "./useWorkspaceTree";
 import { api, type Workspace } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EditWorkspaceDialog } from "./EditWorkspaceDialog";
+import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
+import { WorkspaceSelector } from "./WorkspaceSelector";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { OpenFileConnectionDialog } from "./OpenFileConnectionDialog";
-import { type MangoFrontmatter, parseMd } from "./markdownDoc";
+import {
+  type MangoFrontmatter,
+  ensureMangoFileExt,
+  kindFromFilename,
+  parseMd,
+  serializeMd,
+} from "./markdownDoc";
+import { useSaveWorkspaceFile } from "./useWorkspaceFile";
 
 interface Props {
   workspace: Workspace;
 }
 
 export const WorkspaceRoot = ({ workspace }: Props) => {
-  const [open, setOpen] = useState(true);
-  const tree = useWorkspaceTree(workspace.id, "", open);
-  const git = useWorkspaceGit(workspace.id, open);
+  const tree = useWorkspaceTree(workspace.id, "", true);
+  const git = useWorkspaceGit(workspace.id, true);
   const muts = useWorkspaceMutations(workspace.id);
+  const saveFile = useSaveWorkspaceFile(workspace.id);
   const del = useDeleteWorkspace();
+  const { workspaces, setActiveId: setActiveWorkspaceId } = useActiveWorkspace();
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [pendingChildOf, setPendingChildOf] = useState<string | null>(null);
   const [pendingKind, setPendingKind] = useState<"file" | "dir">("file");
@@ -36,13 +47,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
 
   const { activeId, connections, setActiveId } = useActiveConnection();
   const { setDatabase } = useActiveDatabase();
-  const {
-    activeTab,
-    openCollection,
-    openConsole,
-    openShell,
-    openWorkspaceFile,
-  } = useTabs();
+  const { activeTab, openCollection, openNotebook } = useTabs();
   const [pendingOpen, setPendingOpen] = useState<{
     relPath: string;
     frontmatter: MangoFrontmatter;
@@ -50,14 +55,17 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
   } | null>(null);
   const [resolvingPath, setResolvingPath] = useState<string | null>(null);
   const [confirmingUnregister, setConfirmingUnregister] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [showNew, setShowNew] = useState(false);
 
   /**
-   * Open a workspace file in the matching runnable view rather than a
-   * separate "workspace-file" tab kind. The view (CollectionView,
-   * ConsoleView, or ShellView) detects the workspace binding via the tab
-   * and seeds itself from the file via `useWorkspaceFileBinding`. This is
-   * what makes a `kind: console` + `collection: …` file behave exactly
-   * like clicking the collection in the sidebar — same UI, same shortcuts.
+   * Open a workspace file in the matching runnable view, picked entirely
+   * from the on-disk extension. Query / console files route into
+   * CollectionView (with the collection from the file's frontmatter); a
+   * notebook routes into a dedicated notebook tab. The view picks up the
+   * workspace binding via `useWorkspaceFileBinding` and seeds itself from
+   * the file — same UI, same shortcuts as clicking a collection in the
+   * sidebar.
    */
   const routeToView = (
     connectionId: string,
@@ -65,31 +73,21 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
     fm: MangoFrontmatter,
   ) => {
     const ws = { workspaceId: workspace.id, filePath: relPath };
-    const kind = fm.kind ?? "console";
-    // Free-form notebook → workspace-file tab; WorkspaceFileView delegates
-    // to NotebookView once it parses the frontmatter.
+    const kind = kindFromFilename(relPath);
     if (kind === "notebook") {
-      openWorkspaceFile(connectionId, workspace.id, relPath);
+      openNotebook(connectionId, workspace.id, relPath);
       return;
     }
-    if ((kind === "console" || kind === "query" || kind === "aggregation") && fm.collection) {
+    if ((kind === "query" || kind === "console") && fm.collection) {
       openCollection(connectionId, fm.collection, {
         workspaceFile: ws,
-        initialPageMode: kind === "console" ? "console" : "query",
+        initialPageMode: kind,
       });
       return;
     }
-    if (kind === "shell") {
-      openShell(connectionId, { workspaceFile: ws });
-      return;
-    }
-    if (kind === "console") {
-      openConsole(connectionId, { workspaceFile: ws });
-      return;
-    }
-    // Unknown / legacy kind without a collection — fall back to the dedicated
-    // workspace-file view so the user can edit the script and pick a kind.
-    openWorkspaceFile(connectionId, workspace.id, relPath);
+    // No collection in a query/console file (or unknown extension): drop
+    // into a notebook tab so the user can still see and edit the body.
+    openNotebook(connectionId, workspace.id, relPath);
   };
 
   /**
@@ -140,7 +138,6 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
     }
   };
 
-  const dotColor = workspace.color ?? "#94a3b8";
   // Workspace-file binding may live on any tab kind now that files route
   // to the matching view — match on workspaceId/filePath, not tab.kind.
   const activePath =
@@ -151,31 +148,17 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
   const startNew = (kind: "file" | "dir") => {
     setPendingKind(kind);
     setPendingChildOf("");
-    setOpen(true);
   };
 
   return (
     <div className="border-b border-slate-200 last:border-b-0 dark:border-slate-800">
       <div className="flex items-center gap-1 px-2 py-1">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-          title={open ? "Collapse" : "Expand"}
-        >
-          {open ? (
-            <IconChevronDown size={12} />
-          ) : (
-            <IconChevronRight size={12} />
-          )}
-        </button>
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ background: dotColor }}
+        <WorkspaceSelector
+          workspaces={workspaces}
+          active={workspace}
+          onPick={setActiveWorkspaceId}
+          onNew={() => setShowNew(true)}
         />
-        <span className="flex-1 truncate text-[11.5px] font-medium text-slate-700 dark:text-slate-200">
-          {workspace.name}
-        </span>
         {git.data?.rootIsRepo && (
           <span
             title={`${git.data.branch ?? "(detached)"} @ ${git.data.shortSha ?? "?"}${git.data.dirty ? " · dirty" : ""}`}
@@ -215,6 +198,14 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         </button>
         <button
           type="button"
+          onClick={() => setEditing(true)}
+          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          title="Edit workspace"
+        >
+          <IconPencil size={12} />
+        </button>
+        <button
+          type="button"
           onClick={() => setConfirmingUnregister(true)}
           className="rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-300"
           title="Unregister workspace"
@@ -223,9 +214,8 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         </button>
       </div>
 
-      {open && (
-        <div className="px-1 pb-1">
-          {tree.isLoading && (
+      <div className="px-1 pb-1">
+        {tree.isLoading && (
             <div className="px-2 py-1 text-[11px] text-slate-400">Loading…</div>
           )}
           {tree.isError && (
@@ -242,10 +232,8 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
                 if (pendingKind === "dir") {
                   await muts.createFolder.mutateAsync(name);
                 } else {
-                  const { serializeMd, ensureMangoFileExt } = await import("./markdownDoc");
                   const raw = serializeMd({
                     frontmatter: {
-                      kind: "notebook",
                       collection: null,
                       connection: null,
                       connectionId: null,
@@ -255,12 +243,9 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
                     description: "",
                     script: "db.\n",
                   });
-                  const { api } = await import("../../api/client");
-                  await api.writeWorkspaceFile(
-                    workspace.id,
-                    ensureMangoFileExt(name),
-                    raw,
-                  );
+                  const path = ensureMangoFileExt(name, "notebook");
+                  await saveFile.mutateAsync({ path, raw });
+                  await onOpenFile(path);
                 }
               }}
               onCancel={() => setPendingChildOf(null)}
@@ -290,7 +275,6 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
             </div>
           )}
         </div>
-      )}
 
       {pendingOpen && (
         <OpenFileConnectionDialog
@@ -307,6 +291,15 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
           }}
         />
       )}
+
+      {editing && (
+        <EditWorkspaceDialog
+          workspace={workspace}
+          onClose={() => setEditing(false)}
+        />
+      )}
+
+      {showNew && <NewWorkspaceDialog onClose={() => setShowNew(false)} />}
 
       {confirmingUnregister && (
         <ConfirmDialog

@@ -2,18 +2,31 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconFile,
+  IconFilter,
   IconFolder,
   IconFolderOpen,
-  IconLeaf,
+  IconNotebook,
+  IconTerminal2,
 } from "@tabler/icons-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { WorkspaceTreeEntry } from "../../api/client";
 import {
   ensureMangoFileExt,
   isMangoFile,
+  kindFromFilename,
+  type MangoKind,
   mangoFileDisplayName,
+  serializeMd,
 } from "./markdownDoc";
+import { useSaveWorkspaceFile } from "./useWorkspaceFile";
 import { useWorkspaceMutations, useWorkspaceTree } from "./useWorkspaceTree";
+
+const FileKindIcon = ({ kind }: { kind: MangoKind }) => {
+  if (kind === "query") return <IconFilter size={13} className="text-sky-500" />;
+  if (kind === "console")
+    return <IconTerminal2 size={13} className="text-emerald-500" />;
+  return <IconNotebook size={13} className="text-violet-500" />;
+};
 
 interface Props {
   workspaceId: string;
@@ -55,7 +68,9 @@ export const TreeNode = ({
 
   const child = useWorkspaceTree(workspaceId, fullPath, isDir && open);
   const muts = useWorkspaceMutations(workspaceId);
+  const saveFile = useSaveWorkspaceFile(workspaceId);
 
+  const fileKind = !isDir ? kindFromFilename(entry.name) : null;
   const isMd = !isDir && isMangoFile(entry.name);
   const renaming = renamingPath === fullPath;
 
@@ -153,8 +168,8 @@ export const TreeNode = ({
           ) : (
             <IconFolder size={13} className="text-amber-500" />
           )
-        ) : isMd ? (
-          <IconLeaf size={13} className="text-emerald-500" />
+        ) : fileKind ? (
+          <FileKindIcon kind={fileKind} />
         ) : (
           <IconFile size={13} className="text-slate-400" />
         )}
@@ -164,7 +179,14 @@ export const TreeNode = ({
             onCommit={(next) => {
               setRenamingPath(null);
               if (!next) return;
-              const finalName = isDir ? next : ensureMangoFileExt(next);
+              // Preserve the file's existing kind on rename — the user is
+              // typing a new stem, not changing the file type.
+              const finalName =
+                isDir
+                  ? next
+                  : fileKind
+                    ? ensureMangoFileExt(next, fileKind)
+                    : next;
               if (finalName === entry.name) return;
               const to = parentPath ? `${parentPath}/${finalName}` : finalName;
               muts.move.mutate({ from: fullPath, to });
@@ -212,14 +234,10 @@ export const TreeNode = ({
                   await muts.createFolder.mutateAsync(`${fullPath}/${name}`);
                 } else {
                   // file — we don't have a "create empty file" endpoint, so
-                  // write a notebook skeleton. Imported lazily to keep this
-                  // module light.
-                  const { serializeMd, ensureMangoFileExt } = await import(
-                    "./markdownDoc"
-                  );
+                  // write a notebook skeleton. New files default to notebook;
+                  // query/console files come from saving from their views.
                   const raw = serializeMd({
                     frontmatter: {
-                      kind: "notebook",
                       collection: null,
                       connection: null,
                       connectionId: null,
@@ -229,9 +247,9 @@ export const TreeNode = ({
                     description: "",
                     script: "db.\n",
                   });
-                  const childPath = `${fullPath}/${ensureMangoFileExt(name)}`;
-                  const { api } = await import("../../api/client");
-                  await api.writeWorkspaceFile(workspaceId, childPath, raw);
+                  const childPath = `${fullPath}/${ensureMangoFileExt(name, "notebook")}`;
+                  await saveFile.mutateAsync({ path: childPath, raw });
+                  await onOpenFile(childPath);
                 }
               }}
               onCancel={() => setPendingChildOf(null)}
@@ -321,7 +339,7 @@ const NewChildInput = ({
       {kind === "dir" ? (
         <IconFolder size={13} className="text-amber-500" />
       ) : (
-        <IconLeaf size={13} className="text-emerald-500" />
+        <IconNotebook size={13} className="text-violet-500" />
       )}
       <input
         ref={ref}

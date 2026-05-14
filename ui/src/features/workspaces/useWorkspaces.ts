@@ -34,9 +34,25 @@ export const useCreateWorkspace = () => {
 export const useUpdateWorkspace = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; name?: string; color?: string | null }) =>
-      api.updateWorkspace(input.id, { name: input.name, color: input.color }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+    mutationFn: (input: {
+      id: string;
+      name?: string;
+      color?: string | null;
+      folderPath?: string;
+    }) =>
+      api.updateWorkspace(input.id, {
+        name: input.name,
+        color: input.color,
+        folderPath: input.folderPath,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY });
+      // folderPath change re-roots every tree query and invalidates open file
+      // contents; safest to nuke the whole workspace-scoped cache so views
+      // refetch against the new root.
+      qc.invalidateQueries({ queryKey: ["ws-tree"] });
+      qc.invalidateQueries({ queryKey: ["ws-file"] });
+    },
   });
 };
 

@@ -9,8 +9,9 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { useMemo } from "react";
+import { prettifyUuids } from "../../api/client";
 import { InteractiveJsonView } from "../../components/JsonView";
-import type { PageSize } from "../../settings";
+import { type PageSize, useSettings } from "../../settings";
 import { DocumentTable } from "./DocumentTable";
 
 export type ResultFormat = "table" | "json";
@@ -69,8 +70,13 @@ export const ResultPanel = ({
   onRowClick,
   emptyHint,
 }: Props) => {
+  const { uuidRepresentation } = useSettings();
   const documents = useMemo(() => asDocumentArray(rawValue), [rawValue]);
   const canTable = !!documents;
+  const jsonValue = useMemo(
+    () => prettifyUuids(rawValue, uuidRepresentation),
+    [rawValue, uuidRepresentation],
+  );
 
   // Effective format: if no tabular shape is available, force JSON.
   const effectiveFormat: ResultFormat = canTable ? format : "json";
@@ -151,7 +157,7 @@ export const ResultPanel = ({
         )}
         {hasResult && effectiveFormat === "json" && (
           <div className="p-3">
-            <InteractiveJsonView value={rawValue} collapsed={2} />
+            <InteractiveJsonView value={jsonValue} collapsed={2} />
           </div>
         )}
       </div>

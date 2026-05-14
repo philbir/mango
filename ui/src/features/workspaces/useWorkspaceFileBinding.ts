@@ -52,7 +52,6 @@ export interface WorkspaceFileBinding {
 }
 
 const EMPTY_FM: MangoFrontmatter = {
-  kind: null,
   collection: null,
   connection: null,
   connectionId: null,

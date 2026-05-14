@@ -6,15 +6,16 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { UuidRepresentation } from "./api/client";
 
+export type { UuidRepresentation };
 export type Theme = "dark" | "light";
-export type UuidFormat = "canonical" | "short" | "compact" | "raw";
 export type PageSize = 50 | 100 | 200 | 500;
 export type CollectionMode = "query" | "console";
 
 export interface Settings {
   theme: Theme;
-  uuidFormat: UuidFormat;
+  uuidRepresentation: UuidRepresentation;
   pageSize: PageSize;
   tabMode: boolean;
   defaultCollectionMode: CollectionMode;
@@ -22,7 +23,7 @@ export interface Settings {
 
 const DEFAULT: Settings = {
   theme: "dark",
-  uuidFormat: "canonical",
+  uuidRepresentation: "standard",
   pageSize: 50,
   tabMode: false,
   defaultCollectionMode: "query",
@@ -51,7 +52,7 @@ const applyTheme = (theme: Theme) => {
 
 interface SettingsContextValue extends Settings {
   setTheme: (t: Theme) => void;
-  setUuidFormat: (f: UuidFormat) => void;
+  setUuidRepresentation: (r: UuidRepresentation) => void;
   setPageSize: (n: PageSize) => void;
   setTabMode: (v: boolean) => void;
   setDefaultCollectionMode: (m: CollectionMode) => void;
@@ -78,8 +79,9 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     (theme: Theme) => setSettings((s) => ({ ...s, theme })),
     [],
   );
-  const setUuidFormat = useCallback(
-    (uuidFormat: UuidFormat) => setSettings((s) => ({ ...s, uuidFormat })),
+  const setUuidRepresentation = useCallback(
+    (uuidRepresentation: UuidRepresentation) =>
+      setSettings((s) => ({ ...s, uuidRepresentation })),
     [],
   );
   const setPageSize = useCallback(
@@ -100,7 +102,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     () => ({
       ...settings,
       setTheme,
-      setUuidFormat,
+      setUuidRepresentation,
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,
@@ -108,7 +110,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     [
       settings,
       setTheme,
-      setUuidFormat,
+      setUuidRepresentation,
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,

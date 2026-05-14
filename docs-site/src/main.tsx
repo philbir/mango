@@ -3,14 +3,19 @@ import { createRoot } from "react-dom/client";
 import {
   IconBolt,
   IconBrandGithub,
+  IconBrandGit,
   IconBrandOpenai,
   IconBrandWindows,
   IconChevronRight,
   IconCloudCode,
   IconDatabase,
   IconDeviceDesktop,
+  IconDeviceFloppy,
   IconFileCode,
+  IconFolders,
   IconLock,
+  IconNotebook,
+  IconPencil,
   IconPlugConnected,
   IconRocket,
   IconSearch,
@@ -54,6 +59,12 @@ const docs: DocSection[] = [
     title: "Aspire integration",
     eyebrow: "One line",
     body: "The Mango.Hosting package attaches the workbench to an Aspire MongoDB resource and forwards the connection string automatically.",
+  },
+  {
+    id: "workspaces",
+    title: "Workspaces",
+    eyebrow: "Save your work",
+    body: "Register a folder on disk as a workspace and Mango saves your queries, console scripts, and notebooks as plain Markdown files you can commit alongside your codebase.",
   },
   {
     id: "config",
@@ -104,6 +115,11 @@ const features = [
     title: "Multi-connection by design",
     icon: IconDatabase,
     text: "Save multiple MongoDB connections with color labels and encrypted URIs, or lock Mango to one standalone connection.",
+  },
+  {
+    title: "Workspaces on disk",
+    icon: IconFolders,
+    text: "Pick a folder, save your queries and notebooks as Markdown, and commit them alongside your code — Mango files are diff-friendly and Git-aware.",
   },
   {
     title: "Aspire-native",
@@ -168,6 +184,7 @@ const SiteNav = () => (
       <a href="#features">Features</a>
       <a href="#ai">AI</a>
       <a href="#aspire">Aspire</a>
+      <a href="#workspaces">Workspaces</a>
       <a href="#docs">Docs</a>
       <a className="nav-cta" href={repoUrl}>
         GitHub
@@ -407,6 +424,67 @@ const DocBlock = ({ doc }: { doc: DocSection }) => {
           </div>
         </div>
         <CodeBlock title="Install" code="dotnet add package Mango.Hosting" />
+      </section>
+    );
+  }
+
+  if (doc.id === "workspaces") {
+    return (
+      <section className="doc-block" id={doc.id}>
+        <DocHeader doc={doc} />
+        <div className="how-grid">
+          <MiniStep icon={IconFolders} title="1. Register a folder">
+            Pick any folder on your machine. The sidebar selector keeps one
+            workspace active at a time — switch in a click, no clutter.
+          </MiniStep>
+          <MiniStep icon={IconDeviceFloppy} title="2. Save as Markdown">
+            Queries, console scripts, and notebooks save as
+            <code> .mnq.md</code>, <code> .mnc.md</code>, and
+            <code> .mnn.md</code> files. Frontmatter carries the connection,
+            database, and collection; the script lives in a fenced code block.
+          </MiniStep>
+          <MiniStep icon={IconBrandGit} title="3. Commit alongside code">
+            Plain text in, plain text out — diff-friendly, reviewable in a PR,
+            and Mango shows the workspace's Git branch right in the sidebar.
+          </MiniStep>
+        </div>
+        <div className="callout">
+          <IconNotebook size={22} />
+          <div>
+            <strong>Notebooks with detail + update</strong>
+            <p>
+              Run a <code>db.collection.find(...)</code> in a notebook, click any
+              result row to inspect the document, then update or replace it in
+              place. Update uses a diffed <code>$set</code> / <code>$unset</code>;
+              Replace sends the full body. Both modes preview the equivalent
+              shell command before executing.
+            </p>
+          </div>
+        </div>
+        <div className="callout">
+          <IconPencil size={22} />
+          <div>
+            <strong>From any view</strong>
+            <p>
+              "Save to workspace" is available from the collection browser, the
+              console, and the notebook — bind a view to a file once and Cmd/Ctrl
+              + S updates it after every edit. The file kind determines the view
+              when you open it again.
+            </p>
+          </div>
+        </div>
+        <div className="callout warn">
+          <IconLock size={22} />
+          <div>
+            <strong>Availability</strong>
+            <p>
+              Workspaces are enabled when the server's filesystem is the user's
+              filesystem — the desktop app and the local dev server. They are
+              disabled in Docker and standalone Aspire deployments, where the
+              server runs in a different filesystem from the user.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }

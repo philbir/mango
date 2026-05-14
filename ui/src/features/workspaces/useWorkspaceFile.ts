@@ -29,8 +29,18 @@ export const useSaveWorkspaceFile = (workspaceId: string) => {
         input.raw,
         input.expectedMtime,
       ),
-    onSuccess: (_data, input) => {
-      qc.invalidateQueries({ queryKey: fileKey(workspaceId, input.path) });
+    onSuccess: (data, input) => {
+      // Write the just-saved raw + new mtime into the cache atomically.
+      // We MUST NOT just `invalidateQueries` here: the refetch races with
+      // the binding's mtime update — seeders observing `mtime` advance
+      // before the new `raw` arrives can overwrite the user's edit with
+      // the previously-cached body.
+      qc.setQueryData(fileKey(workspaceId, input.path), {
+        path: data.path,
+        raw: input.raw,
+        mtime: data.mtime,
+        size: data.size,
+      });
       // Tree of the parent dir may show a new file or a new mtime.
       const parent = input.path.includes("/")
         ? input.path.slice(0, input.path.lastIndexOf("/"))

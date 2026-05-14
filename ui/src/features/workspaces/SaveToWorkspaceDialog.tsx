@@ -17,16 +17,26 @@ import { useWorkspaces } from "./useWorkspaces";
 interface Props {
   /** Connection id this script ran against — saved as informational hint. */
   connectionId: string | null;
-  /** Initial script kind. */
+  /** File kind. Drives the on-disk extension and the view we open after save. */
   kind: MangoKind;
-  /** Script body (mongo command). */
+  /** Script body — filter JSON for query, full DB command for console. */
   script: string;
-  /** Optional initial collection — usually inferred from `script`. */
+  /**
+   * Collection this file is scoped to. Required for kind="console" (it's
+   * what we route to after save) and conventionally set for kind="query"
+   * too. Inferred from the script as a last resort.
+   */
   collection?: string | null;
-  /** Selected projection fields, persisted to frontmatter for `kind: query`. */
+  /** Selected projection fields, persisted to frontmatter for kind="query". */
   fields?: string[] | null;
-  /** Optional description (currently unused; reserved for future "Edit before save" form). */
+  /** Optional description (Markdown above the script fence). */
   description?: string;
+  /**
+   * Suggested filename stem (no extension). Used when the script body isn't
+   * a `db.<col>.<verb>(…)` call we can guess from — e.g. a query file whose
+   * body is just the filter JSON.
+   */
+  suggestedFilename?: string;
   onClose: () => void;
 }
 
@@ -37,17 +47,27 @@ export const SaveToWorkspaceDialog = ({
   collection,
   fields = null,
   description = "",
+  suggestedFilename,
   onClose,
 }: Props) => {
   const { workspaces, enabled } = useWorkspaces();
-  const { openWorkspaceFile } = useTabs();
+  const { openCollection, openNotebook } = useTabs();
   const { database } = useActiveDatabase();
   const [workspaceId, setWorkspaceId] = useState<string>(
     workspaces[0]?.id ?? "",
   );
+  // Workspaces load async — pick the first one as soon as it's available so
+  // the dropdown's visible default actually matches state on submit.
+  useEffect(() => {
+    if (!workspaceId && workspaces.length > 0) {
+      setWorkspaceId(workspaces[0]!.id);
+    }
+  }, [workspaceId, workspaces]);
   const [folder, setFolder] = useState("");
   const [filename, setFilename] = useState(() =>
-    mangoFileDisplayName(suggestFilenameFromScript(script)),
+    suggestedFilename
+      ? mangoFileDisplayName(ensureMangoFileExt(suggestedFilename, kind))
+      : mangoFileDisplayName(suggestFilenameFromScript(script, kind)),
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,12 +114,17 @@ export const SaveToWorkspaceDialog = ({
       setError("Name is required.");
       return;
     }
-    name = ensureMangoFileExt(name);
+    name = ensureMangoFileExt(name, kind);
     const folderClean = folder.trim().replace(/^\/+|\/+$/g, "");
     const relPath = folderClean ? `${folderClean}/${name}` : name;
+    const resolvedCollection =
+      collection ?? inferCollectionFromScript(script);
+    if ((kind === "query" || kind === "console") && !resolvedCollection) {
+      setError("This file needs a collection. Pick one before saving.");
+      return;
+    }
     const fm: MangoFrontmatter = {
-      kind,
-      collection: collection ?? inferCollectionFromScript(script),
+      collection: resolvedCollection,
       connection: connectionName,
       connectionId: connectionId ?? null,
       database: database ?? null,
@@ -113,7 +138,16 @@ export const SaveToWorkspaceDialog = ({
     setBusy(true);
     try {
       await api.writeWorkspaceFile(workspaceId, relPath, raw);
-      if (connectionId) openWorkspaceFile(connectionId, workspaceId, relPath);
+      if (connectionId) {
+        if (kind === "notebook") {
+          openNotebook(connectionId, workspaceId, relPath);
+        } else if (resolvedCollection) {
+          openCollection(connectionId, resolvedCollection, {
+            workspaceFile: { workspaceId, filePath: relPath },
+            initialPageMode: kind === "console" ? "console" : "query",
+          });
+        }
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));

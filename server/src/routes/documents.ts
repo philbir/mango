@@ -121,6 +121,59 @@ documentsRoute.delete("/:name/document/:id", async (c) => {
   return c.body(null, 204);
 });
 
+documentsRoute.patch("/:name/document/:id", async (c) => {
+  const cid = c.req.param("cid")!;
+  const name = c.req.param("name");
+  const id = c.req.param("id");
+
+  const rawText = await c.req.text();
+  let payload: unknown;
+  try {
+    payload = parseEJSON(rawText);
+  } catch (e) {
+    return c.json(
+      { error: `Invalid EJSON body: ${e instanceof Error ? e.message : String(e)}` },
+      400,
+    );
+  }
+
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return c.json({ error: "Body must be a JSON object." }, 400);
+  }
+
+  // MongoDB update documents are operator-keyed at the top level — every key
+  // must start with `$`. Reject mixed payloads up front so the user gets a
+  // clear error instead of Mongo's cryptic "Unknown modifier".
+  const obj = payload as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (keys.length === 0) {
+    return c.json({ error: "Update is empty." }, 400);
+  }
+  if (keys.some((k) => !k.startsWith("$"))) {
+    return c.json(
+      { error: "Update body must contain only operator keys ($set, $unset, …)." },
+      400,
+    );
+  }
+
+  const { client } = await getMongoClientFor(cid);
+  const dbName = databaseNameFor(cid, c.req.query("database"));
+  const db = client.db(dbName);
+  const collection = db.collection(name);
+
+  const idCandidates = buildIdCandidates(id);
+  const result = await collection.updateOne({ $or: idCandidates }, obj);
+
+  if (result.matchedCount === 0) {
+    return c.json({ error: "Document not found" }, 404);
+  }
+
+  const fresh = await collection.findOne({ $or: idCandidates });
+  return c.body(stringifyEJSON({ document: fresh }), 200, {
+    "content-type": "application/json; charset=utf-8",
+  });
+});
+
 documentsRoute.put("/:name/document/:id", async (c) => {
   const cid = c.req.param("cid")!;
   const name = c.req.param("name");

@@ -5,45 +5,36 @@
  *
  *   ---
  *   mango:
- *     kind: console                         # query | console | shell | aggregation
  *     collection: users
  *     connection: prod                      # display name (informational)
  *     connectionId: 4f3e1a-…                # opaque id; used for routing on open
  *     database: app                         # database name; also used to suggest
  *                                           # a connection when connectionId no
  *                                           # longer matches anything.
+ *     fields: _id, name                     # projection fields (query files only)
  *   ---
  *
  *   Free-form Markdown description.
  *
  *   ```mongo
- *   db.users.find({ ... })
+ *   <body — filter JSON for query, full command for console, freeform for notebook>
  *   ```
  *
  * The script lives in a ```mongo fenced code block so the file renders as a
  * normal Markdown document — pasting raw Mongo into the fence in any editor
- * Just Works. The Mango UI hides the fence markers from the user; only the
- * inner content is shown in the script editor.
+ * Just Works.
  *
- * Hand-rolled because the YAML subset we accept is trivial (one nested map
- * with up to five string keys). Avoids a multi-MB `gray-matter` + `js-yaml`
- * dep tree.
+ * The file's *kind* (query / console / notebook) is determined entirely by
+ * the on-disk extension (`.mnq.md` / `.mnc.md` / `.mnn.md`) — the frontmatter
+ * deliberately does not carry it. Extension is authoritative.
+ *
+ * Hand-rolled because the YAML subset we accept is trivial. Avoids a
+ * multi-MB `gray-matter` + `js-yaml` dep tree.
  */
 
-export type MangoKind =
-  | "query"
-  | "console"
-  | "shell"
-  | "aggregation"
-  /**
-   * Free-form Markdown notebook: raw `.md` shown in a Monaco editor with
-   * Code Lens "Run" actions on every ```mongo fence. No single bound
-   * script — the user authors arbitrary text + many runnable code blocks.
-   */
-  | "notebook";
+export type MangoKind = "query" | "console" | "notebook";
 
 export interface MangoFrontmatter {
-  kind: MangoKind | null;
   collection: string | null;
   /** Display name of the connection — informational; may be stale. */
   connection: string | null;
@@ -52,10 +43,10 @@ export interface MangoFrontmatter {
   /** Database the script was run against. Used as a fallback match. */
   database: string | null;
   /**
-   * Selected projection field names for `kind: query` files. Stored in
-   * frontmatter (as a comma-separated YAML string) rather than the script
-   * itself so the runnable `db.coll.find({…})` body stays focused on the
-   * filter. Null = no explicit projection (return whole documents).
+   * Selected projection field names for query files. Stored in frontmatter
+   * (as a comma-separated YAML string) rather than the script body so the
+   * runnable filter JSON in `` ```mongo `` stays focused on what changes
+   * most often. Null = no explicit projection (return whole documents).
    */
   fields: string[] | null;
 }
@@ -66,18 +57,11 @@ export interface ParsedMd {
   description: string;
   /** Raw script body below the sentinel. */
   script: string;
-  /** True iff the file had a `<!-- mango:script -->` sentinel. */
+  /** True iff the file had a ```mongo fence. */
   hasScript: boolean;
 }
 
 const SCRIPT_LANGS = new Set(["mongo", "mongodb", "mongo-shell"]);
-const KNOWN_KINDS: ReadonlySet<MangoKind> = new Set([
-  "query",
-  "console",
-  "shell",
-  "aggregation",
-  "notebook",
-]);
 
 const stripQuotes = (v: string): string => {
   const t = v.trim();
@@ -92,7 +76,6 @@ const stripQuotes = (v: string): string => {
 
 const parseFrontmatter = (block: string): MangoFrontmatter => {
   const out: MangoFrontmatter = {
-    kind: null,
     collection: null,
     connection: null,
     connectionId: null,
@@ -110,16 +93,12 @@ const parseFrontmatter = (block: string): MangoFrontmatter => {
     if (!inMango) continue;
     const m = /^\s+([\w-]+)\s*:\s*(.*?)\s*$/.exec(line);
     if (!m) {
-      // Indentation broke — assume we left the mango block.
       if (!/^\s/.test(line)) inMango = false;
       continue;
     }
     const key = m[1]!;
     const val = stripQuotes(m[2] ?? "");
-    if (key === "kind") {
-      const k = val.toLowerCase() as MangoKind;
-      if (KNOWN_KINDS.has(k)) out.kind = k;
-    } else if (key === "collection") {
+    if (key === "collection") {
       out.collection = val || null;
     } else if (key === "connection") {
       out.connection = val || null;
@@ -134,6 +113,8 @@ const parseFrontmatter = (block: string): MangoFrontmatter => {
         .filter((s) => s.length > 0);
       out.fields = list.length > 0 ? list : null;
     }
+    // Unknown keys (including legacy `kind`) are ignored — extension is the
+    // source of truth for kind now.
   }
   return out;
 };
@@ -164,7 +145,6 @@ const findFirstScriptFence = (
         return { lang, script: scriptLines.join("\n"), start, end };
       }
     }
-    // Unclosed fence — rest of the file is the script.
     const scriptLines = lines.slice(i + 1);
     const start = lines.slice(0, i).reduce((acc, l) => acc + l.length + 1, 0);
     return { lang, script: scriptLines.join("\n"), start, end: body.length };
@@ -174,7 +154,6 @@ const findFirstScriptFence = (
 
 export const parseMd = (raw: string): ParsedMd => {
   let frontmatter: MangoFrontmatter = {
-    kind: null,
     collection: null,
     connection: null,
     connectionId: null,
@@ -187,8 +166,6 @@ export const parseMd = (raw: string): ParsedMd => {
     frontmatter = parseFrontmatter(fmMatch[1] ?? "");
     body = raw.slice(fmMatch[0].length);
   }
-  // The script lives in a ```mongo fence. The description is everything
-  // outside that block.
   const fence = findFirstScriptFence(body);
   if (!fence) {
     return {
@@ -222,7 +199,6 @@ export const serializeMd = (input: SerializeInput): string => {
   const lines: string[] = [];
   lines.push("---");
   lines.push("mango:");
-  if (input.frontmatter.kind) lines.push(`  kind: ${input.frontmatter.kind}`);
   if (input.frontmatter.collection) {
     lines.push(`  collection: ${escapeYamlValue(input.frontmatter.collection)}`);
   }
@@ -255,45 +231,94 @@ export const serializeMd = (input: SerializeInput): string => {
 };
 
 /**
- * The extension every Mango workspace file uses on disk. Doubled so external
- * tools still treat the file as Markdown (`.md`) while we get an unambiguous
- * sub-extension to filter on in the workspace tree (`*.mng.md`).
+ * Per-kind extensions on disk. Each ends with `.md` so external Markdown
+ * tooling renders the file as a normal document; the `.mnX` infix is what
+ * Mango filters on in the workspace tree and uses for kind dispatch.
  */
-export const MANGO_FILE_EXT = ".mng.md";
+export const MANGO_QUERY_EXT = ".mnq.md";
+export const MANGO_CONSOLE_EXT = ".mnc.md";
+export const MANGO_NOTEBOOK_EXT = ".mnn.md";
+export const MANGO_EXTS = [
+  MANGO_QUERY_EXT,
+  MANGO_CONSOLE_EXT,
+  MANGO_NOTEBOOK_EXT,
+] as const;
 
-/** True if `name` is a Mango workspace file. Case-insensitive. */
-export const isMangoFile = (name: string): boolean =>
-  name.toLowerCase().endsWith(MANGO_FILE_EXT);
-
-/**
- * Append `.mng.md` to a user-provided filename when it's not already there.
- * Strips a stray trailing `.md` first so "users-find.md" → "users-find.mng.md"
- * instead of "users-find.md.mng.md".
- */
-export const ensureMangoFileExt = (name: string): string => {
-  const trimmed = name.trim();
-  if (!trimmed) return trimmed;
-  if (isMangoFile(trimmed)) return trimmed;
-  const stripped = trimmed.replace(/\.md$/i, "");
-  return `${stripped}${MANGO_FILE_EXT}`;
+export const extForKind = (kind: MangoKind): string => {
+  switch (kind) {
+    case "query":
+      return MANGO_QUERY_EXT;
+    case "console":
+      return MANGO_CONSOLE_EXT;
+    case "notebook":
+      return MANGO_NOTEBOOK_EXT;
+  }
 };
 
 /**
- * Strip the `.mng.md` extension for display in the workspace tree. The
- * extension is a Mango implementation detail; users see just the stem.
+ * Derive the kind from a file's name (or full path). Returns null for any
+ * file that isn't one of the three Mango kinds — those are non-Mango files
+ * that just happen to live in the workspace tree.
  */
-export const mangoFileDisplayName = (name: string): string =>
-  isMangoFile(name) ? name.slice(0, -MANGO_FILE_EXT.length) : name;
+export const kindFromFilename = (name: string): MangoKind | null => {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(MANGO_QUERY_EXT)) return "query";
+  if (lower.endsWith(MANGO_CONSOLE_EXT)) return "console";
+  if (lower.endsWith(MANGO_NOTEBOOK_EXT)) return "notebook";
+  return null;
+};
 
-/** Suggest a filename from a Mongo command — strips `db.<col>.`, picks first verb. */
-export const suggestFilenameFromScript = (script: string): string => {
+/** True if `name` is one of the three Mango workspace file kinds. */
+export const isMangoFile = (name: string): boolean =>
+  kindFromFilename(name) !== null;
+
+/**
+ * Append the kind-appropriate extension to a user-provided filename when
+ * it's not already there. Strips a stray trailing `.md` first so
+ * "users-find.md" → "users-find.mnq.md" instead of "users-find.md.mnq.md".
+ */
+export const ensureMangoFileExt = (name: string, kind: MangoKind): string => {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  const ext = extForKind(kind);
+  if (trimmed.toLowerCase().endsWith(ext)) return trimmed;
+  // If they typed a different Mango ext, swap it for the requested one.
+  for (const other of MANGO_EXTS) {
+    if (trimmed.toLowerCase().endsWith(other)) {
+      return trimmed.slice(0, -other.length) + ext;
+    }
+  }
+  const stripped = trimmed.replace(/\.md$/i, "");
+  return `${stripped}${ext}`;
+};
+
+/**
+ * Strip whichever Mango extension matches for display in the workspace tree.
+ * The extension is an implementation detail; users see just the stem.
+ */
+export const mangoFileDisplayName = (name: string): string => {
+  for (const ext of MANGO_EXTS) {
+    if (name.toLowerCase().endsWith(ext)) return name.slice(0, -ext.length);
+  }
+  return name;
+};
+
+/**
+ * Suggest a filename from a Mongo command. Strips `db.<col>.`, picks the
+ * first verb, and appends the kind-appropriate extension.
+ */
+export const suggestFilenameFromScript = (
+  script: string,
+  kind: MangoKind,
+): string => {
+  const ext = extForKind(kind);
   const m = /\bdb\.([\w$]+)\.(\w+)/.exec(script);
   if (m) {
     const col = m[1]!;
     const verb = m[2]!;
-    return `${col}-${verb}${MANGO_FILE_EXT}`;
+    return `${col}-${verb}${ext}`;
   }
-  return `untitled${MANGO_FILE_EXT}`;
+  return `untitled${ext}`;
 };
 
 /** Pull the inferred collection out of a `db.<col>.<verb>(…)` command. */

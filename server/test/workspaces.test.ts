@@ -104,11 +104,11 @@ describe("path safety", () => {
   });
 
   it("lists files in the root directory", async () => {
-    writeFileSync(path.join(dir, "hello.md"), "# hi");
+    writeFileSync(path.join(dir, "hello.mnn.md"), "# hi");
     const res = await workspacesRoute.request(`/${id}/tree?path=`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { entries: Array<{ name: string; kind: string }> };
-    expect(body.entries.some((e) => e.name === "hello.md" && e.kind === "file")).toBe(
+    expect(body.entries.some((e) => e.name === "hello.mnn.md" && e.kind === "file")).toBe(
       true,
     );
   });

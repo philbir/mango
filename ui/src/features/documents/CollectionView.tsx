@@ -1,7 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   IconBraces,
-  IconDeviceFloppy,
   IconInfoCircle,
   IconPlayerPlayFilled,
   IconTable,
@@ -26,6 +25,7 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { InfoView } from "../info/InfoView";
 import { useServerConfig } from "../connections/useServerConfig";
 import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
+import { UnboundSaveHeader } from "../workspaces/UnboundSaveHeader";
 import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
 import { WorkspaceFileHeader } from "../workspaces/WorkspaceFileHeader";
 import { ConsoleView } from "./ConsoleView";
@@ -56,11 +56,18 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   const [page, setPage] = useState(0);
   const [view, setView] = useState<ResultFormat>("table");
   // Initial page mode honors the tab's pinned mode (set when opening from
-  // a workspace file with `kind: console` / `kind: query`); otherwise we
-  // fall back to the user's preference.
+  // a `.mnq.md` query file or `.mnc.md` console file); otherwise we fall
+  // back to the user's preference.
   const [pageMode, setPageMode] = useState<"query" | "console" | "info">(
     tab?.initialPageMode ?? defaultCollectionMode,
   );
+  // In single-tab mode the tab object is mutated in place (same id) when
+  // navigating to a new file, so the component doesn't remount and the
+  // useState above stays stuck on the previous value. Re-sync whenever the
+  // bound file path or its pinned mode changes.
+  useEffect(() => {
+    if (tab?.initialPageMode) setPageMode(tab.initialPageMode);
+  }, [tab?.workspaceFilePath, tab?.initialPageMode]);
   const [queryMode, setQueryMode] = useState<"raw" | "builder">("raw");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const config = useServerConfig();
@@ -77,29 +84,32 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   const [filterDirty, setFilterDirty] = useState(false);
 
   /**
-   * Build the runnable script for this query — `db.<col>.find(<filter>)`.
-   * Projection is intentionally excluded; the selected fields are persisted
-   * in frontmatter (`fields:`) so the script body stays focused on the
-   * filter and remains a clean, copy-pasteable shell command.
+   * The body we store on disk for a `kind: query` file is just the filter
+   * JSON. Projection lives in frontmatter (`fields:`) so the body stays
+   * focused on what changes most often — the filter.
    */
-  const buildQueryScript = (filterJson: string): string => {
-    const filterPart = filterJson.trim() || "{}";
-    return `db.${name}.find(${filterPart})`;
+  const buildQueryBody = (filterJson: string): string => {
+    return filterJson.trim() || "{}";
   };
 
   /**
-   * Best-effort extractor that reads the first `find(<filter>, <projection>?)`
-   * call out of a stored script. We keep the brace-matched substring rather
-   * than parsing JSON so MongoDB Extended JSON (`$oid`, `$date`, etc.) and
-   * comments survive the round-trip into the editor.
+   * Read the filter out of a stored query body. Modern files store the
+   * filter directly (a JSON object). Legacy files wrapped it as
+   * `db.<col>.find(<filter>, <projection>?)` — we still parse those so
+   * existing workspaces keep opening, but on save they get rewritten to
+   * the filter-only form.
+   *
+   * We keep brace-matched substrings rather than calling JSON.parse so
+   * MongoDB Extended JSON (`$oid`, `$date`, …) and comments survive the
+   * round-trip.
    */
-  const extractFindArgs = (
-    script: string,
-  ): { filter: string | null; projection: string | null } => {
+  const extractStoredFilter = (script: string): string | null => {
+    const trimmed = script.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("{")) return trimmed;
     const m = /\bdb\.[\w$]+\.find\s*\(/.exec(script);
-    if (!m) return { filter: null, projection: null };
+    if (!m) return null;
     let i = m.index + m[0].length;
-    const args: string[] = [];
     let depth = 0;
     let buf = "";
     let inString: '"' | "'" | "`" | null = null;
@@ -134,27 +144,20 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         i++;
         continue;
       }
-      if (ch === ")") {
-        if (depth === 0) {
-          if (buf.trim()) args.push(buf.trim());
-          break;
-        }
+      if (ch === ")" || (ch === "," && depth === 0)) {
+        if (depth === 0) return buf.trim() || null;
         depth--;
         buf += ch;
-        i++;
-        continue;
-      }
-      if (ch === "," && depth === 0) {
-        if (buf.trim()) args.push(buf.trim());
-        buf = "";
         i++;
         continue;
       }
       buf += ch;
       i++;
     }
-    return { filter: args[0] ?? null, projection: args[1] ?? null };
+    return buf.trim() || null;
   };
+
+  const normalizeFilter = (s: string): string => s.replace(/\s+/g, "");
 
   const { size: filterHeight, onMouseDown: onFilterResize } = useResize({
     storageKey: "mango:filter-height",
@@ -172,17 +175,18 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
     setSelectedFields(new Set());
   }, [name]);
 
-  // Seed the filter from the bound workspace file. Only fires when the file's
-  // mtime advances and the user hasn't started editing — otherwise an
-  // in-flight query would be clobbered on the next refetch.
+  // Seed the filter from the bound workspace file. Fires on initial load
+  // (seededMtime null) and whenever the file's mtime advances on disk —
+  // EXCEPT when the user has unsaved edits (filterDirty), in which case we
+  // preserve the in-flight edit instead of clobbering it on a refetch.
   useEffect(() => {
     if (!fileBinding.bound || fileBinding.mtime === null) return;
-    if (seededMtime === fileBinding.mtime && !filterDirty) return;
-    if (filterDirty) return;
-    const args = extractFindArgs(fileBinding.script);
-    if (args.filter) {
-      setFilterDraft(args.filter);
-      setFilter(args.filter);
+    if (seededMtime === fileBinding.mtime) return;
+    if (seededMtime !== null && filterDirty) return;
+    const filterFromFile = extractStoredFilter(fileBinding.script);
+    if (filterFromFile) {
+      setFilterDraft(filterFromFile);
+      setFilter(filterFromFile);
     }
     // Seed projection field selection from frontmatter — this replaces the
     // older inline-projection encoding inside the find() call.
@@ -206,7 +210,6 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
       await fileBinding.save({
         frontmatter: {
           ...fileBinding.frontmatter,
-          kind: "query",
           collection: name,
           connectionId: activeId ?? fileBinding.frontmatter.connectionId,
           connection: active?.name ?? fileBinding.frontmatter.connection,
@@ -214,7 +217,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           fields: fieldList.length > 0 ? fieldList : null,
         },
         description: fileBinding.description,
-        script: buildQueryScript(filterDraft),
+        script: buildQueryBody(filterDraft),
       });
       setFilterDirty(false);
     } catch (e) {
@@ -237,10 +240,16 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   );
 
   // Mark the filter as dirty whenever the filter or selected-fields list
-  // diverges from the bound file's stored values.
+  // diverges from the bound file's stored values. Wait until the seeder
+  // has run (seededMtime set) so we don't false-flip dirty on the initial
+  // mount when filterDraft still holds the empty placeholder.
   useEffect(() => {
     if (!fileBinding.bound) return;
-    const filterChanged = buildQueryScript(filterDraft) !== fileBinding.script;
+    if (seededMtime === null) return;
+    const storedFilter = extractStoredFilter(fileBinding.script) ?? "{}";
+    const filterChanged =
+      normalizeFilter(buildQueryBody(filterDraft)) !==
+      normalizeFilter(storedFilter);
     const stored = fileBinding.frontmatter.fields ?? [];
     const current = [...selectedFields].sort();
     const fieldsChanged =
@@ -254,6 +263,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
     fileBinding.frontmatter.fields,
     filterDraft,
     selectedFields,
+    seededMtime,
   ]);
 
   // Cmd/Ctrl + S → save bound file or open the save dialog (query mode).
@@ -466,6 +476,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         <ConsoleView
           tabId={tabId}
           initialCommand={`db.${name}.find(\n{\n  \n})\n`}
+          collection={name}
         />
       )}
 
@@ -480,7 +491,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
       {pageMode === "query" && (
       <>
-      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath && (
+      {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath ? (
         <WorkspaceFileHeader
           workspaceId={tab.workspaceId}
           filePath={tab.workspaceFilePath}
@@ -493,7 +504,12 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           onAfterDelete={() => tabId && closeTab(tabId)}
           onClose={tabId ? () => closeTab(tabId) : undefined}
         />
-      )}
+      ) : config.workspacesEnabled ? (
+        <UnboundSaveHeader
+          canSave={!!filterDraft.trim()}
+          onSave={() => setShowSaveDialog(true)}
+        />
+      ) : null}
       <section
         className="relative flex flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: filterHeight }}
@@ -560,35 +576,6 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
                     <IconBraces size={11} />
                     Format
                   </button>
-                  {config.workspacesEnabled && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (fileBinding.bound) void saveBoundQuery(selectedFields);
-                        else setShowSaveDialog(true);
-                      }}
-                      disabled={
-                        fileBinding.bound
-                          ? !filterDirty || fileBinding.saving
-                          : !filterDraft.trim()
-                      }
-                      className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      title={
-                        fileBinding.bound
-                          ? "Save query (⌘/Ctrl + S)"
-                          : "Save query to workspace (⌘/Ctrl + S)"
-                      }
-                    >
-                      <IconDeviceFloppy size={11} />
-                      {fileBinding.bound
-                        ? fileBinding.saving
-                          ? "Saving…"
-                          : filterDirty
-                            ? "Save"
-                            : "Saved"
-                        : "Save…"}
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -662,9 +649,10 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         <SaveToWorkspaceDialog
           connectionId={activeId}
           kind="query"
-          script={buildQueryScript(filterDraft)}
+          script={buildQueryBody(filterDraft)}
           collection={name}
           fields={[...selectedFields]}
+          suggestedFilename={`${name}-find`}
           onClose={() => setShowSaveDialog(false)}
         />
       )}

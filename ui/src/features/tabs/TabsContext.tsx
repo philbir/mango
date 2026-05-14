@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useSettings } from "../../settings";
 
-export type TabKind = "collection" | "console" | "shell" | "workspace-file";
+export type TabKind = "collection" | "console" | "shell" | "notebook";
 
 export interface Tab {
   id: string;
@@ -18,9 +18,8 @@ export interface Tab {
   collection?: string;
   /**
    * When set, this tab is bound to a workspace file: edits flow through the
-   * existing view (CollectionView/ConsoleView/ShellView) but Save writes back
-   * to the file at this path. The "workspace-file" tab kind is now reserved
-   * as a fallback for files whose `kind` doesn't map to a runnable view.
+   * matching view (CollectionView for query/console, NotebookView for
+   * notebooks) but Save writes back to the file at this path.
    */
   workspaceId?: string;
   workspaceFilePath?: string;
@@ -37,10 +36,6 @@ export interface OpenConsoleOptions {
   workspaceFile?: { workspaceId: string; filePath: string };
 }
 
-export interface OpenShellOptions {
-  workspaceFile?: { workspaceId: string; filePath: string };
-}
-
 interface TabsContextValue {
   tabs: Tab[];
   activeId: string | null;
@@ -51,8 +46,8 @@ interface TabsContextValue {
     options?: OpenCollectionOptions,
   ) => void;
   openConsole: (connectionId: string, options?: OpenConsoleOptions) => void;
-  openShell: (connectionId: string, options?: OpenShellOptions) => void;
-  openWorkspaceFile: (
+  openShell: (connectionId: string) => void;
+  openNotebook: (
     connectionId: string,
     workspaceId: string,
     filePath: string,
@@ -63,7 +58,7 @@ interface TabsContextValue {
 
 const TabsContext = createContext<TabsContextValue | null>(null);
 
-const STORAGE_KEY = "mango:tabs:v4";
+const STORAGE_KEY = "mango:tabs:v5";
 
 const genId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -186,27 +181,12 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   const openShell = useCallback(
-    (connectionId: string, options?: OpenShellOptions) => {
-      const wsId = options?.workspaceFile?.workspaceId;
-      const wsPath = options?.workspaceFile?.filePath;
+    (connectionId: string) => {
       setState((prev) => {
-        const existing =
-          wsId && wsPath
-            ? prev.tabs.find(
-                (t) =>
-                  t.kind === "shell" &&
-                  t.workspaceId === wsId &&
-                  t.workspaceFilePath === wsPath,
-              )
-            : null;
-        if (existing) return { ...prev, activeId: existing.id };
         const tab: Tab = {
           id: prev.activeId && !tabMode ? prev.activeId : genId(),
           kind: "shell",
           connectionId,
-          ...(wsId && wsPath
-            ? { workspaceId: wsId, workspaceFilePath: wsPath }
-            : {}),
         };
         if (!tabMode && prev.activeId) {
           const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
@@ -218,12 +198,12 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
     [tabMode],
   );
 
-  const openWorkspaceFile = useCallback(
+  const openNotebook = useCallback(
     (connectionId: string, workspaceId: string, filePath: string) => {
       setState((prev) => {
         const existing = prev.tabs.find(
           (t) =>
-            t.kind === "workspace-file" &&
+            t.kind === "notebook" &&
             t.workspaceId === workspaceId &&
             t.workspaceFilePath === filePath,
         );
@@ -233,7 +213,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
             t.id === prev.activeId
               ? {
                   id: t.id,
-                  kind: "workspace-file" as const,
+                  kind: "notebook" as const,
                   connectionId,
                   workspaceId,
                   workspaceFilePath: filePath,
@@ -248,7 +228,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
             ...prev.tabs,
             {
               id,
-              kind: "workspace-file",
+              kind: "notebook",
               connectionId,
               workspaceId,
               workspaceFilePath: filePath,
@@ -292,7 +272,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
-      openWorkspaceFile,
+      openNotebook,
       closeTab,
       activate,
     }),
@@ -303,7 +283,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
-      openWorkspaceFile,
+      openNotebook,
       closeTab,
       activate,
     ],
