@@ -51,6 +51,7 @@
   },
   "resolutions": {
     "dompurify": "^3.4.3",
+    "protobufjs": "^7.5.8",
     "vite": "^8.0.13"
   },
   "engines": {
