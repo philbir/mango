@@ -1,4 +1,5 @@
 import {
+  IconDatabase,
   IconNotebook,
   IconTable,
   IconTerminal,
@@ -15,6 +16,7 @@ const labelFor = (tab: Tab, index: number): string => {
     const base = (tab.workspaceFilePath ?? "").split("/").pop() ?? "(file)";
     return mangoFileDisplayName(base);
   }
+  if (tab.kind === "database") return tab.database ?? "(database)";
   return `shell ${index}`;
 };
 
@@ -63,6 +65,8 @@ export const TabBar = () => {
                 <IconTerminal2 size={12} className="text-slate-400" />
               ) : tab.kind === "notebook" ? (
                 <IconNotebook size={12} className="text-violet-500" />
+              ) : tab.kind === "database" ? (
+                <IconDatabase size={12} className="text-amber-500" />
               ) : (
                 <IconTable size={12} className="text-slate-400" />
               )}

@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -31,7 +32,7 @@ const resolveVersion = () => {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_MANGO_VERSION": JSON.stringify(resolveVersion()),
     "import.meta.env.VITE_MANGO_DOCS_URL": JSON.stringify(

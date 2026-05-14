@@ -29,7 +29,7 @@ if (endpoint) {
   const { PeriodicExportingMetricReader } = await import(
     "@opentelemetry/sdk-metrics"
   );
-  const { Resource } = await import("@opentelemetry/resources");
+  const { resourceFromAttributes } = await import("@opentelemetry/resources");
   const {
     ATTR_SERVICE_NAME,
     ATTR_SERVICE_VERSION,
@@ -39,7 +39,7 @@ if (endpoint) {
   const serviceVersion = process.env.npm_package_version ?? "dev";
 
   const sdk = new NodeSDK({
-    resource: new Resource({
+    resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: serviceName,
       [ATTR_SERVICE_VERSION]: serviceVersion,
     }),

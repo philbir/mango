@@ -6,6 +6,8 @@ const FALLBACK: ServerConfig = {
   standaloneConnectionId: null,
   logsAvailable: false,
   workspacesEnabled: true,
+  devMode: false,
+  dbToolsAvailable: false,
 };
 
 /**

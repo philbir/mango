@@ -70,6 +70,54 @@ export interface ServerConfig {
   standaloneConnectionId: string | null;
   logsAvailable: boolean;
   workspacesEnabled: boolean;
+  devMode: boolean;
+  dbToolsAvailable: boolean;
+}
+
+export interface DatabaseCollectionStats {
+  name: string;
+  type: string;
+  count: number | null;
+  size: number | null;
+  storageSize: number | null;
+  avgObjSize: number | null;
+  totalIndexSize: number | null;
+  indexCount: number | null;
+}
+
+export interface DatabaseStats {
+  database: string;
+  collections: DatabaseCollectionStats[];
+  stats: {
+    dataSize: number | null;
+    storageSize: number | null;
+    indexSize: number | null;
+    totalSize: number | null;
+    fsUsedSize: number | null;
+    fsTotalSize: number | null;
+    collections: number | null;
+    views: number | null;
+    objects: number | null;
+    indexes: number | null;
+    avgObjSize: number | null;
+  };
+}
+
+export interface ClearCollectionsResult {
+  ok: true;
+  database: string;
+  results: Array<{
+    name: string;
+    deletedCount: number | null;
+    error?: string;
+  }>;
+}
+
+export interface ToolResult {
+  ok: boolean;
+  code?: number;
+  stderr?: string;
+  error?: string;
 }
 
 export interface Workspace {
@@ -768,6 +816,110 @@ export const api = {
       { method: "POST" },
     );
     return (await handlePlainJson(res)) as { deletedCount: number };
+  },
+
+  // ── Database-level operations ───────────────────────────────────────────────
+  async getDatabaseStats(cid: string, db: string): Promise<DatabaseStats> {
+    const res = await fetch(
+      `${cidPath(cid)}/databases/${encodeURIComponent(db)}/stats`,
+    );
+    return handlePlainJson(res) as Promise<DatabaseStats>;
+  },
+
+  async clearDatabaseCollections(
+    cid: string,
+    db: string,
+  ): Promise<ClearCollectionsResult> {
+    const res = await fetch(
+      `${cidPath(cid)}/databases/${encodeURIComponent(db)}/clear-collections`,
+      { method: "POST" },
+    );
+    return (await handlePlainJson(res)) as ClearCollectionsResult;
+  },
+
+  async dropDatabase(cid: string, db: string): Promise<{ ok: true }> {
+    const res = await fetch(
+      `${cidPath(cid)}/databases/${encodeURIComponent(db)}/drop`,
+      { method: "POST" },
+    );
+    return (await handlePlainJson(res)) as { ok: true };
+  },
+
+  async exportCollection(
+    cid: string,
+    db: string,
+    collection: string,
+  ): Promise<Blob> {
+    const qs = `?collection=${encodeURIComponent(collection)}`;
+    const res = await fetch(
+      `${cidPath(cid)}/databases/${encodeURIComponent(db)}/export${qs}`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let message = res.statusText;
+      try {
+        const parsed = text ? (JSON.parse(text) as { error?: string }) : null;
+        if (parsed?.error) message = parsed.error;
+      } catch {
+        if (text) message = text;
+      }
+      throw new ApiError(res.status, message);
+    }
+    return res.blob();
+  },
+
+  async importCollection(params: {
+    cid: string;
+    db: string;
+    collection: string;
+    file: Blob;
+    mode?: "insert" | "upsert" | "merge";
+    drop?: boolean;
+  }): Promise<ToolResult> {
+    const qs = new URLSearchParams({
+      collection: params.collection,
+      mode: params.mode ?? "insert",
+    });
+    if (params.drop) qs.set("drop", "true");
+    const res = await fetch(
+      `${cidPath(params.cid)}/databases/${encodeURIComponent(params.db)}/import?${qs.toString()}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: params.file,
+      },
+    );
+    return (await handlePlainJson(res)) as ToolResult;
+  },
+
+  async dumpDatabase(cid: string, db: string): Promise<Blob> {
+    const res = await fetch(
+      `${cidPath(cid)}/databases/${encodeURIComponent(db)}/dump`,
+      { method: "POST" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
+    return res.blob();
+  },
+
+  async restoreDatabase(params: {
+    cid: string;
+    db: string;
+    file: Blob;
+    drop?: boolean;
+  }): Promise<ToolResult> {
+    const qs = new URLSearchParams();
+    if (params.drop) qs.set("drop", "true");
+    const url = `${cidPath(params.cid)}/databases/${encodeURIComponent(params.db)}/restore${qs.toString() ? `?${qs}` : ""}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: params.file,
+    });
+    return (await handlePlainJson(res)) as ToolResult;
   },
 
   async createIndex(params: {

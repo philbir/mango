@@ -3,6 +3,7 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconDatabase,
+  IconInfoCircle,
   IconPlugConnectedX,
   IconPlus,
   IconRefresh,
@@ -22,7 +23,8 @@ export const CollectionsPane = () => {
   const { activeId } = useActiveConnection();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
-  const { activeTab, openCollection, openConsole, openShell } = useTabs();
+  const { activeTab, openCollection, openConsole, openShell, openDatabase } =
+    useTabs();
 
   // Gate Mongo metadata fetches on a successful ping. Without this, a
   // disconnected connection (bad URI, server down) would surface as a 500
@@ -81,6 +83,15 @@ export const CollectionsPane = () => {
             <span className="flex-1 truncate font-mono text-[11px] text-slate-700 dark:text-slate-200">
               {database}
             </span>
+            <button
+              type="button"
+              onClick={() => openDatabase(activeId!, database)}
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              title={`Database info: ${database}`}
+              aria-label={`Open database info for ${database}`}
+            >
+              <IconInfoCircle size={12} />
+            </button>
             <NewMenu
               onNewConsole={() => openConsole(activeId!)}
               onNewShell={() => openShell(activeId!)}
@@ -144,6 +155,7 @@ export const CollectionsPane = () => {
             isError={databasesQuery.isError}
             error={databasesQuery.error as Error | null}
             onPick={setDatabase}
+            onOpenInfo={(name) => openDatabase(activeId!, name)}
           />
         )}
 
@@ -277,6 +289,7 @@ interface DatabaseListProps {
   isError: boolean;
   error: Error | null;
   onPick: (name: string) => void;
+  onOpenInfo: (name: string) => void;
 }
 
 const DatabaseList = ({
@@ -285,6 +298,7 @@ const DatabaseList = ({
   isError,
   error,
   onPick,
+  onOpenInfo,
 }: DatabaseListProps) => {
   if (isLoading) {
     return <div className="px-2 py-1.5 text-xs text-slate-400">Loading…</div>;
@@ -309,20 +323,34 @@ const DatabaseList = ({
       </div>
       <ul>
         {databases.map((d) => (
-          <li key={d.name}>
-            <button
-              type="button"
-              onClick={() => onPick(d.name)}
-              className="flex w-full items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <IconDatabase size={12} className="text-slate-400" />
-              <span className="flex-1 truncate font-mono">{d.name}</span>
-              {d.sizeOnDisk != null && (
-                <span className="text-[10.5px] text-slate-400 dark:text-slate-500">
-                  {formatBytes(d.sizeOnDisk)}
-                </span>
-              )}
-            </button>
+          <li key={d.name} className="group">
+            <div className="flex items-center rounded hover:bg-slate-200 dark:hover:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => onPick(d.name)}
+                className="flex flex-1 items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight text-slate-700 dark:text-slate-200"
+              >
+                <IconDatabase size={12} className="text-slate-400" />
+                <span className="flex-1 truncate font-mono">{d.name}</span>
+                {d.sizeOnDisk != null && (
+                  <span className="text-[10.5px] text-slate-400 dark:text-slate-500">
+                    {formatBytes(d.sizeOnDisk)}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenInfo(d.name);
+                }}
+                className="mr-1 rounded p-0.5 text-slate-400 opacity-0 hover:bg-slate-300 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                title={`Database info: ${d.name}`}
+                aria-label={`Open database info for ${d.name}`}
+              >
+                <IconInfoCircle size={12} />
+              </button>
+            </div>
           </li>
         ))}
       </ul>

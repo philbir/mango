@@ -8,7 +8,12 @@ import {
 } from "react";
 import { useSettings } from "../../settings";
 
-export type TabKind = "collection" | "console" | "shell" | "notebook";
+export type TabKind =
+  | "collection"
+  | "console"
+  | "shell"
+  | "notebook"
+  | "database";
 
 export interface Tab {
   id: string;
@@ -16,6 +21,9 @@ export interface Tab {
   /** Connection this tab is bound to. Doesn't change after creation. */
   connectionId: string;
   collection?: string;
+  /** Database name — set for `database` kind, and on `collection` tabs that
+   * were opened from a non-default db (existing behavior uses activeDatabase). */
+  database?: string;
   /**
    * When set, this tab is bound to a workspace file: edits flow through the
    * matching view (CollectionView for query/console, NotebookView for
@@ -47,6 +55,7 @@ interface TabsContextValue {
   ) => void;
   openConsole: (connectionId: string, options?: OpenConsoleOptions) => void;
   openShell: (connectionId: string) => void;
+  openDatabase: (connectionId: string, database: string) => void;
   openNotebook: (
     connectionId: string,
     workspaceId: string,
@@ -58,7 +67,7 @@ interface TabsContextValue {
 
 const TabsContext = createContext<TabsContextValue | null>(null);
 
-const STORAGE_KEY = "mango:tabs:v5";
+const STORAGE_KEY = "mango:tabs:v6";
 
 const genId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -198,6 +207,32 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
     [tabMode],
   );
 
+  const openDatabase = useCallback(
+    (connectionId: string, database: string) => {
+      setState((prev) => {
+        const existing = prev.tabs.find(
+          (t) =>
+            t.kind === "database" &&
+            t.connectionId === connectionId &&
+            t.database === database,
+        );
+        if (existing) return { ...prev, activeId: existing.id };
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "database",
+          connectionId,
+          database,
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
   const openNotebook = useCallback(
     (connectionId: string, workspaceId: string, filePath: string) => {
       setState((prev) => {
@@ -272,6 +307,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
+      openDatabase,
       openNotebook,
       closeTab,
       activate,
@@ -283,6 +319,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openCollection,
       openConsole,
       openShell,
+      openDatabase,
       openNotebook,
       closeTab,
       activate,

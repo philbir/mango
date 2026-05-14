@@ -11,6 +11,7 @@ import {
 } from "./features/connections/useActiveConnection";
 import { CollectionView } from "./features/documents/CollectionView";
 import { ConsoleView } from "./features/documents/ConsoleView";
+import { DatabaseView } from "./features/database/DatabaseView";
 import { ShellView } from "./features/shell/ShellView";
 import { TabBar } from "./features/tabs/TabBar";
 import { useTabs } from "./features/tabs/TabsContext";
@@ -119,6 +120,13 @@ export const App = () => {
                   <NotebookView
                     key={`${activeTab.id}:${activeTab.workspaceFilePath ?? ""}`}
                     tabId={activeTab.id}
+                  />
+                )}
+                {activeTab.kind === "database" && activeTab.database && (
+                  <DatabaseView
+                    key={`${activeTab.id}:${activeTab.database}`}
+                    cid={activeTab.connectionId}
+                    database={activeTab.database}
                   />
                 )}
               </ViewConnectionContext.Provider>
