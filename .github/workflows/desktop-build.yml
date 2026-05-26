@@ -64,6 +64,16 @@ jobs:
 
       - run: yarn install --immutable
 
+      # Defensive sync: rewrite desktop/package.json, tauri.conf.json,
+      # src-tauri/Cargo.toml, and src-tauri/Cargo.lock to the tag version so
+      # the bundled installers' filenames and Info.plist always match the
+      # tag — even when a release PR forgets to bump those files (see
+      # 0.3.3 → 0.3.6, which all shipped as Mango_0.3.2_*.dmg).
+      - name: Sync desktop version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: node desktop/scripts/sync-version.mjs "${GITHUB_REF_NAME}"
+
       - run: yarn workspace @mango/ui build
 
       - run: yarn compile-server ${{ matrix.target }}
