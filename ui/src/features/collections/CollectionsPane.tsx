@@ -3,7 +3,9 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconDatabase,
+  IconFiles,
   IconInfoCircle,
+  IconPaperclip,
   IconPlugConnectedX,
   IconPlus,
   IconRefresh,
@@ -23,8 +25,14 @@ export const CollectionsPane = () => {
   const { activeId } = useActiveConnection();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
-  const { activeTab, openCollection, openConsole, openShell, openDatabase } =
-    useTabs();
+  const {
+    activeTab,
+    openCollection,
+    openConsole,
+    openShell,
+    openDatabase,
+    openGridFs,
+  } = useTabs();
 
   // Gate Mongo metadata fetches on a successful ping. Without this, a
   // disconnected connection (bad URI, server down) would surface as a 500
@@ -176,22 +184,51 @@ export const CollectionsPane = () => {
             )}
             <ul>
               {filtered.map((c) => {
-                const isActive =
-                  activeTab?.kind === "collection" &&
-                  activeTab.collection === c.name;
+                const isFilesBucket = c.gridFs?.role === "files";
+                const isChunks = c.gridFs?.role === "chunks";
+                const isActive = isFilesBucket
+                  ? activeTab?.kind === "gridfs" &&
+                    activeTab.bucket === c.gridFs?.bucket
+                  : activeTab?.kind === "collection" &&
+                    activeTab.collection === c.name;
+                const onClick = () => {
+                  if (isFilesBucket && c.gridFs) {
+                    openGridFs(activeId!, c.gridFs.bucket, database ?? undefined);
+                  } else {
+                    openCollection(activeId!, c.name);
+                  }
+                };
+                const Icon = isFilesBucket
+                  ? IconFiles
+                  : isChunks
+                    ? IconPaperclip
+                    : IconTable;
+                const iconClass = isFilesBucket
+                  ? "text-emerald-500"
+                  : isChunks
+                    ? "text-slate-300 dark:text-slate-600"
+                    : "text-slate-400";
+                const title = isFilesBucket
+                  ? `GridFS bucket: ${c.gridFs?.bucket}`
+                  : isChunks
+                    ? `GridFS chunks (${c.gridFs?.bucket})`
+                    : c.name;
                 return (
                   <li key={c.name}>
                     <button
                       type="button"
-                      onClick={() => openCollection(activeId!, c.name)}
+                      onClick={onClick}
+                      title={title}
                       className={[
                         "flex w-full items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight",
                         isActive
                           ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
-                          : "text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-800",
+                          : isChunks
+                            ? "text-slate-500 hover:bg-slate-200 dark:text-slate-500 dark:hover:bg-slate-800"
+                            : "text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-800",
                       ].join(" ")}
                     >
-                      <IconTable size={12} className="text-slate-400" />
+                      <Icon size={12} className={iconClass} />
                       <span className="flex-1 truncate font-mono">{c.name}</span>
                       <span className="text-[10.5px] text-slate-400 dark:text-slate-500">
                         {c.count?.toLocaleString() ?? "—"}

@@ -189,6 +189,45 @@ export interface CollectionIndexes {
   usageAvailable: boolean;
 }
 
+export interface CollectionListEntry {
+  name: string;
+  type: string;
+  count: number | null;
+  gridFs: { bucket: string; role: "files" | "chunks" } | null;
+}
+
+export interface GridFsBucketInfo {
+  name: string;
+  filesCollection: string;
+  chunksCollection: string;
+  fileCount: number | null;
+}
+
+export interface GridFsFileMeta {
+  _id: unknown;
+  filename: string;
+  length: number;
+  chunkSize: number;
+  uploadDate: unknown;
+  contentType?: string | null;
+  md5?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export const gridFsDownloadUrl = (params: {
+  cid: string;
+  bucket: string;
+  fileId: string;
+  database?: string;
+  inline?: boolean;
+}): string => {
+  const qs = new URLSearchParams();
+  if (params.database) qs.set("database", params.database);
+  if (params.inline) qs.set("inline", "1");
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/download/${encodeURIComponent(params.fileId)}${suffix}`;
+};
+
 export interface AspireRef {
   appHostPath: string;
   resourceName: string;
@@ -412,14 +451,85 @@ export const api = {
     database?: string,
   ): Promise<{
     database: string;
-    collections: Array<{ name: string; type: string; count: number | null }>;
+    collections: CollectionListEntry[];
   }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
     const res = await fetch(`${cidPath(cid)}/collections${qs}`);
     return handleJson(res) as Promise<{
       database: string;
-      collections: Array<{ name: string; type: string; count: number | null }>;
+      collections: CollectionListEntry[];
     }>;
+  },
+
+  // ── GridFS ──────────────────────────────────────────────────────────────────
+  async listGridFsBuckets(
+    cid: string,
+    database?: string,
+  ): Promise<{
+    database: string;
+    buckets: GridFsBucketInfo[];
+  }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(`${cidPath(cid)}/gridfs${qs}`);
+    return handleJson(res) as Promise<{
+      database: string;
+      buckets: GridFsBucketInfo[];
+    }>;
+  },
+
+  async listGridFsFiles(params: {
+    cid: string;
+    bucket: string;
+    database?: string;
+    search?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<{
+    bucket: string;
+    database: string;
+    total: number;
+    skip: number;
+    limit: number;
+    hasMore: boolean;
+    files: GridFsFileMeta[];
+  }> {
+    const qs = new URLSearchParams();
+    if (params.database) qs.set("database", params.database);
+    if (params.search) qs.set("search", params.search);
+    if (params.skip != null) qs.set("skip", String(params.skip));
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    const res = await fetch(
+      `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/files${suffix}`,
+    );
+    return handleJson(res) as Promise<{
+      bucket: string;
+      database: string;
+      total: number;
+      skip: number;
+      limit: number;
+      hasMore: boolean;
+      files: GridFsFileMeta[];
+    }>;
+  },
+
+  async deleteGridFsFile(params: {
+    cid: string;
+    bucket: string;
+    fileId: string;
+    database?: string;
+  }): Promise<void> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await fetch(
+      `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/files/${encodeURIComponent(params.fileId)}${qs}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ApiError(res.status, text || res.statusText);
+    }
   },
 
   async findDocuments(params: {

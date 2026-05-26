@@ -7,7 +7,8 @@
 // docs, arrays) so the Mango UI has something interesting to click through.
 
 import { randomBytes } from "node:crypto";
-import { Decimal128, MongoClient, ObjectId } from "mongodb";
+import { Readable } from "node:stream";
+import { Decimal128, GridFSBucket, MongoClient, ObjectId } from "mongodb";
 
 const MONGO_URL = process.env.MONGO_URL;
 if (!MONGO_URL) {
@@ -236,6 +237,170 @@ const buildComments = (count: number, posts: SeedPost[]): SeedComment[] =>
     };
   });
 
+// Tiny 16x16 PNG (a yellow square with a darker outline) — base64-inlined so
+// the seed has no runtime file dependencies. Renders fine in any browser.
+const SAMPLE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAR0lEQVR42mP8//8/Aw5gZGRk+I8L" +
+  "MOIyBKsGFhYG/v//GRkYwOAk0AVAg0lJQAOAAYAATAYwI8EJYBhAFiBSJgYsAAEYAOQzD4Hl3aZRAAAAAElFTkSuQmCC";
+
+// Tiny PDF (one blank page) — the smallest valid PDF that browsers will open.
+const SAMPLE_PDF =
+  "%PDF-1.1\n" +
+  "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+  "2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n" +
+  "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R/Resources<<>>>>endobj\n" +
+  "4 0 obj<</Length 44>>stream\nBT /F1 18 Tf 30 80 Td (Mango GridFS sample) Tj ET\nendstream endobj\n" +
+  "xref\n0 5\n0000000000 65535 f \n0000000010 00000 n \n0000000053 00000 n \n0000000100 00000 n \n0000000180 00000 n \n" +
+  "trailer<</Size 5/Root 1 0 R>>\nstartxref\n265\n%%EOF\n";
+
+interface SampleFile {
+  filename: string;
+  /** When null the file is uploaded with no contentType — the viewer must
+   * then fall back to filename-extension guessing (and ultimately the user's
+   * "View as" override for truly opaque names). */
+  contentType: string | null;
+  body: Buffer;
+  metadata?: Record<string, unknown>;
+}
+
+const buildSampleFiles = (): SampleFile[] => [
+  {
+    filename: "readme.md",
+    contentType: "text/markdown",
+    body: Buffer.from(
+      "# Mango GridFS Sample\n\n" +
+        "This bucket is seeded so the file viewer has something to click through.\n\n" +
+        "- Images preview as `<img>`\n" +
+        "- Text-based files preview in Monaco\n" +
+        "- PDFs render inline\n" +
+        "- Everything else falls back to download\n",
+      "utf8",
+    ),
+    metadata: { tags: ["docs"], generated: true },
+  },
+  {
+    filename: "package.json",
+    contentType: "application/json",
+    body: Buffer.from(
+      JSON.stringify(
+        { name: "sample", version: "1.0.0", private: true, dependencies: {} },
+        null,
+        2,
+      ),
+      "utf8",
+    ),
+  },
+  {
+    filename: "notes.txt",
+    contentType: "text/plain",
+    body: Buffer.from(
+      "Plain text file. Useful for testing the text viewer fallback.\n",
+      "utf8",
+    ),
+  },
+  {
+    filename: "style.css",
+    contentType: "text/css",
+    body: Buffer.from(
+      ":root { --mango: #ffaa00; }\nbody { background: var(--mango); }\n",
+      "utf8",
+    ),
+  },
+  {
+    filename: "script.ts",
+    contentType: "text/typescript",
+    body: Buffer.from(
+      "export const greet = (name: string): string => `hello, ${name}`;\n",
+      "utf8",
+    ),
+  },
+  {
+    filename: "chart.svg",
+    contentType: "image/svg+xml",
+    body: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">' +
+        '<rect width="120" height="80" fill="#fef3c7"/>' +
+        '<circle cx="60" cy="40" r="28" fill="#f59e0b"/>' +
+        '<text x="60" y="46" font-family="sans-serif" font-size="14" text-anchor="middle" fill="white">Mango</text>' +
+        "</svg>",
+      "utf8",
+    ),
+  },
+  {
+    filename: "logo.png",
+    contentType: "image/png",
+    body: Buffer.from(SAMPLE_PNG_BASE64, "base64"),
+  },
+  {
+    filename: "spec.pdf",
+    contentType: "application/pdf",
+    body: Buffer.from(SAMPLE_PDF, "binary"),
+  },
+  {
+    filename: "data.bin",
+    contentType: "application/octet-stream",
+    body: randomBytes(2048),
+    metadata: { note: "Opaque binary — viewer should offer download only." },
+  },
+  // ── Fallback exercise files ───────────────────────────────────────────────
+  // No contentType stored — viewer must guess from the .png extension.
+  {
+    filename: "mystery.png",
+    contentType: null,
+    body: Buffer.from(SAMPLE_PNG_BASE64, "base64"),
+    metadata: { note: "No contentType — relies on extension fallback." },
+  },
+  // No extension AND no contentType — auto-detect can't help; the user has
+  // to pick "Text" (or JSON) from the "View as" override.
+  {
+    filename: "report",
+    contentType: null,
+    body: Buffer.from(
+      JSON.stringify({ status: "ok", samples: 3, ratio: 0.42 }, null, 2),
+      "utf8",
+    ),
+    metadata: { note: "No extension or contentType — needs manual override." },
+  },
+  // Unknown extension AND no contentType — also a manual-override case.
+  {
+    filename: "schema.proto",
+    contentType: null,
+    body: Buffer.from(
+      'syntax = "proto3";\npackage mango;\nmessage Sample { string name = 1; }\n',
+      "utf8",
+    ),
+    metadata: {
+      note: "Unknown extension, no contentType — pick a text language manually.",
+    },
+  },
+];
+
+const seedBucket = async (
+  db: ReturnType<MongoClient["db"]>,
+  bucketName: string,
+  files: SampleFile[],
+): Promise<void> => {
+  const bucket = new GridFSBucket(db, { bucketName });
+  for (const file of files) {
+    // mongodb v6+ dropped the top-level `contentType` option on
+    // GridFSBucketWriteStream — the convention is to nest it under
+    // `metadata.contentType`, which is what the viewer route reads. When
+    // contentType is null we deliberately omit it so the file exercises the
+    // viewer's extension / manual-override fallback paths.
+    const meta: Record<string, unknown> = { ...(file.metadata ?? {}) };
+    if (file.contentType) meta.contentType = file.contentType;
+    const upload = bucket.openUploadStream(file.filename, {
+      ...(Object.keys(meta).length > 0 ? { metadata: meta } : {}),
+    });
+    await new Promise<void>((resolve, reject) => {
+      Readable.from(file.body)
+        .pipe(upload)
+        .on("error", reject)
+        .on("finish", () => resolve());
+    });
+  }
+};
+
 const main = async (): Promise<void> => {
   const client = new MongoClient(MONGO_URL, {
     serverSelectionTimeoutMS: 30_000,
@@ -244,9 +409,10 @@ const main = async (): Promise<void> => {
   try {
     const acme = client.db("acme");
     const bloggy = client.db("bloggy");
+    const cdn = client.db("cdn");
 
     console.log("[seed] dropping existing sample databases…");
-    await Promise.all([acme.dropDatabase(), bloggy.dropDatabase()]);
+    await Promise.all([acme.dropDatabase(), bloggy.dropDatabase(), cdn.dropDatabase()]);
 
     console.log("[seed] building documents…");
     const users = buildUsers(50);
@@ -281,8 +447,16 @@ const main = async (): Promise<void> => {
       bloggy.collection("comments").createIndex({ postId: 1, createdAt: -1 }),
     ]);
 
+    console.log("[seed] seeding GridFS buckets…");
+    const samples = buildSampleFiles();
+    // Default-named `fs` bucket in `cdn` — typical setup.
+    await seedBucket(cdn, "fs", samples);
+    // Named `media` bucket co-located with the acme app data so users
+    // discover GridFS without leaving the database they're already exploring.
+    await seedBucket(acme, "media", samples);
+
     console.log(
-      `[seed] done — acme(users=${users.length}, products=${products.length}, orders=${orders.length}) bloggy(posts=${posts.length}, comments=${comments.length})`,
+      `[seed] done — acme(users=${users.length}, products=${products.length}, orders=${orders.length}, media=${samples.length} files) bloggy(posts=${posts.length}, comments=${comments.length}) cdn(fs=${samples.length} files)`,
     );
   } finally {
     await client.close();
