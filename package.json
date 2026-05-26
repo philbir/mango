@@ -37,22 +37,22 @@
     "lint": "npm run aspire:lint"
   },
   "devDependencies": {
-    "@types/node": "^25.7.0",
+    "@types/node": "^25.9.1",
     "concurrently": "^9.2.1",
-    "eslint": "^10.3.0",
+    "eslint": "^10.4.0",
     "nodemon": "^3.1.14",
-    "tsx": "^4.22.0",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.60.0"
   },
-  "packageManager": "yarn@4.5.0",
+  "packageManager": "yarn@4.15.0",
   "dependencies": {
-    "vscode-jsonrpc": "^8.2.0"
+    "vscode-jsonrpc": "^8.2.1"
   },
   "resolutions": {
-    "dompurify": "^3.4.3",
+    "dompurify": "^3.4.6",
     "protobufjs": "^7.5.8",
-    "vite": "^8.0.13"
+    "vite": "^8.0.14"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
