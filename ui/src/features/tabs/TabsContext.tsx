@@ -13,7 +13,8 @@ export type TabKind =
   | "console"
   | "shell"
   | "notebook"
-  | "database";
+  | "database"
+  | "gridfs";
 
 export interface Tab {
   id: string;
@@ -24,6 +25,8 @@ export interface Tab {
   /** Database name — set for `database` kind, and on `collection` tabs that
    * were opened from a non-default db (existing behavior uses activeDatabase). */
   database?: string;
+  /** GridFS bucket name — set for `gridfs` kind. */
+  bucket?: string;
   /**
    * When set, this tab is bound to a workspace file: edits flow through the
    * matching view (CollectionView for query/console, NotebookView for
@@ -56,6 +59,11 @@ interface TabsContextValue {
   openConsole: (connectionId: string, options?: OpenConsoleOptions) => void;
   openShell: (connectionId: string) => void;
   openDatabase: (connectionId: string, database: string) => void;
+  openGridFs: (
+    connectionId: string,
+    bucket: string,
+    database?: string,
+  ) => void;
   openNotebook: (
     connectionId: string,
     workspaceId: string,
@@ -233,6 +241,34 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
     [tabMode],
   );
 
+  const openGridFs = useCallback(
+    (connectionId: string, bucket: string, database?: string) => {
+      setState((prev) => {
+        const existing = prev.tabs.find(
+          (t) =>
+            t.kind === "gridfs" &&
+            t.connectionId === connectionId &&
+            t.bucket === bucket &&
+            (t.database ?? null) === (database ?? null),
+        );
+        if (existing) return { ...prev, activeId: existing.id };
+        const tab: Tab = {
+          id: prev.activeId && !tabMode ? prev.activeId : genId(),
+          kind: "gridfs",
+          connectionId,
+          bucket,
+          ...(database ? { database } : {}),
+        };
+        if (!tabMode && prev.activeId) {
+          const tabs = prev.tabs.map((t) => (t.id === prev.activeId ? tab : t));
+          return { tabs, activeId: prev.activeId };
+        }
+        return { tabs: [...prev.tabs, tab], activeId: tab.id };
+      });
+    },
+    [tabMode],
+  );
+
   const openNotebook = useCallback(
     (connectionId: string, workspaceId: string, filePath: string) => {
       setState((prev) => {
@@ -308,6 +344,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openConsole,
       openShell,
       openDatabase,
+      openGridFs,
       openNotebook,
       closeTab,
       activate,
@@ -320,6 +357,7 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openConsole,
       openShell,
       openDatabase,
+      openGridFs,
       openNotebook,
       closeTab,
       activate,

@@ -1,5 +1,6 @@
 import {
   IconDatabase,
+  IconFiles,
   IconNotebook,
   IconTable,
   IconTerminal,
@@ -17,6 +18,7 @@ const labelFor = (tab: Tab, index: number): string => {
     return mangoFileDisplayName(base);
   }
   if (tab.kind === "database") return tab.database ?? "(database)";
+  if (tab.kind === "gridfs") return tab.bucket ? `${tab.bucket} files` : "(gridfs)";
   return `shell ${index}`;
 };
 
@@ -67,6 +69,8 @@ export const TabBar = () => {
                 <IconNotebook size={12} className="text-violet-500" />
               ) : tab.kind === "database" ? (
                 <IconDatabase size={12} className="text-amber-500" />
+              ) : tab.kind === "gridfs" ? (
+                <IconFiles size={12} className="text-emerald-500" />
               ) : (
                 <IconTable size={12} className="text-slate-400" />
               )}

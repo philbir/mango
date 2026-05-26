@@ -12,13 +12,42 @@ collectionsRoute.get("/", async (c) => {
     const db = client.db(dbName);
     const cols = await db.listCollections({}, { nameOnly: false }).toArray();
 
+    // GridFS bucket detection — a bucket exists when both `<name>.files` and
+    // `<name>.chunks` collections are present. Flag each member so the UI can
+    // render a folder/files icon and route clicks to the bucket viewer.
+    const names = new Set(cols.map((c) => c.name));
+    const gridFsFor = (
+      name: string,
+    ): { bucket: string; role: "files" | "chunks" } | null => {
+      if (name.endsWith(".files")) {
+        const bucket = name.slice(0, -".files".length);
+        if (names.has(`${bucket}.chunks`)) return { bucket, role: "files" };
+      }
+      if (name.endsWith(".chunks")) {
+        const bucket = name.slice(0, -".chunks".length);
+        if (names.has(`${bucket}.files`)) return { bucket, role: "chunks" };
+      }
+      return null;
+    };
+
     const counts = await Promise.all(
       cols.map(async (col) => {
+        const gridFs = gridFsFor(col.name);
         try {
           const count = await db.collection(col.name).estimatedDocumentCount();
-          return { name: col.name, type: col.type ?? "collection", count };
+          return {
+            name: col.name,
+            type: col.type ?? "collection",
+            count,
+            gridFs,
+          };
         } catch {
-          return { name: col.name, type: col.type ?? "collection", count: null };
+          return {
+            name: col.name,
+            type: col.type ?? "collection",
+            count: null,
+            gridFs,
+          };
         }
       }),
     );

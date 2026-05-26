@@ -12,6 +12,7 @@ import {
 import { CollectionView } from "./features/documents/CollectionView";
 import { ConsoleView } from "./features/documents/ConsoleView";
 import { DatabaseView } from "./features/database/DatabaseView";
+import { GridFsView } from "./features/gridfs/GridFsView";
 import { ShellView } from "./features/shell/ShellView";
 import { TabBar } from "./features/tabs/TabBar";
 import { useTabs } from "./features/tabs/TabsContext";
@@ -127,6 +128,12 @@ export const App = () => {
                     key={`${activeTab.id}:${activeTab.database}`}
                     cid={activeTab.connectionId}
                     database={activeTab.database}
+                  />
+                )}
+                {activeTab.kind === "gridfs" && activeTab.bucket && (
+                  <GridFsView
+                    key={`${activeTab.id}:${activeTab.bucket}:${activeTab.database ?? ""}`}
+                    tabId={activeTab.id}
                   />
                 )}
               </ViewConnectionContext.Provider>
