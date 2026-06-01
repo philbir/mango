@@ -56,11 +56,25 @@ export const CollectionsPane = () => {
 
   const filtered = useMemo(() => {
     if (!collectionsQuery.data) return [];
+    const byNameWithGridFsPairing = (
+      a: (typeof collectionsQuery.data.collections)[number],
+      b: (typeof collectionsQuery.data.collections)[number],
+    ) => {
+      const aBucket = a.gridFs?.bucket;
+      const bBucket = b.gridFs?.bucket;
+      if (aBucket && bBucket && aBucket === bBucket && a.gridFs?.role !== b.gridFs?.role) {
+        return a.gridFs?.role === "files" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    };
+
     const q = search.trim().toLowerCase();
-    if (!q) return collectionsQuery.data.collections;
-    return collectionsQuery.data.collections.filter((c) =>
-      c.name.toLowerCase().includes(q),
-    );
+    const visible = q
+      ? collectionsQuery.data.collections.filter((c) =>
+          c.name.toLowerCase().includes(q),
+        )
+      : collectionsQuery.data.collections;
+    return [...visible].sort(byNameWithGridFsPairing);
   }, [collectionsQuery.data, search]);
 
   const onRefresh = () => {
