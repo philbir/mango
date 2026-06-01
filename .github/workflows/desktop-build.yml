@@ -127,5 +127,102 @@ jobs:
           # marked as pre-releases.
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          includeUpdaterJson: true
+          # tauri-action's own latest.json emitter trips over the asset
+          # rename it does on upload (Mango.app.tar.gz → Mango_aarch64.app.tar.gz),
+          # so the manifest is skipped and .sig files never get attached.
+          # We compose latest.json ourselves in the `publish-updater` job below.
+          includeUpdaterJson: false
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      # tauri-action uploads the user-facing bundles (.dmg / .msi / .exe /
+      # .deb / .app.tar.gz) but not the .sig files needed for the updater
+      # manifest. Upload them here, renaming so each sig matches the
+      # release-asset name tauri-action picked.
+      - name: Attach updater signatures to release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          BUNDLE="desktop/src-tauri/target/${TARGET}/release/bundle"
+          case "${TARGET}" in
+            aarch64-apple-darwin)
+              # tauri-action uploaded the bundle as Mango_aarch64.app.tar.gz —
+              # rename the sig to match so the publish-updater job can pair them.
+              cp "${BUNDLE}/macos/Mango.app.tar.gz.sig" \
+                 "Mango_aarch64.app.tar.gz.sig"
+              gh release upload "${VERSION}" \
+                "Mango_aarch64.app.tar.gz.sig" --clobber
+              ;;
+            x86_64-pc-windows-msvc)
+              # The updater downloads + unpacks the .nsis.zip; the .sig is
+              # over the zip. The .zip isn't a tauri-action default upload,
+              # so push both.
+              ZIP="${BUNDLE}/nsis/Mango_${VERSION}_x64-setup.nsis.zip"
+              gh release upload "${VERSION}" "${ZIP}" "${ZIP}.sig" --clobber
+              ;;
+            x86_64-unknown-linux-gnu)
+              echo "Linux ships .deb only — no updater bundle, skipping."
+              ;;
+          esac
+
+  # Compose latest.json from the per-platform sigs the matrix attached and
+  # publish it to the release. The updater client at
+  # github.com/philbir/mango/releases/latest/download/latest.json reads this.
+  publish-updater:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate and upload latest.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p sigs
+          gh release download "${VERSION}" --pattern '*.sig' --dir sigs
+
+          BASE="https://github.com/${GH_REPO}/releases/download/${VERSION}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          NOTES=$(gh release view "${VERSION}" --json body --jq '.body // ""')
+
+          PLATFORMS='{}'
+
+          MAC_SIG_PATH="sigs/Mango_aarch64.app.tar.gz.sig"
+          if [ -f "${MAC_SIG_PATH}" ]; then
+            MAC_SIG=$(cat "${MAC_SIG_PATH}")
+            PLATFORMS=$(jq -n \
+              --arg sig "${MAC_SIG}" \
+              --arg url "${BASE}/Mango_aarch64.app.tar.gz" \
+              '{ "darwin-aarch64": { signature: $sig, url: $url } }')
+          fi
+
+          WIN_SIG_PATH="sigs/Mango_${VERSION}_x64-setup.nsis.zip.sig"
+          if [ -f "${WIN_SIG_PATH}" ]; then
+            WIN_SIG=$(cat "${WIN_SIG_PATH}")
+            PLATFORMS=$(echo "${PLATFORMS}" | jq \
+              --arg sig "${WIN_SIG}" \
+              --arg url "${BASE}/Mango_${VERSION}_x64-setup.nsis.zip" \
+              '. + { "windows-x86_64": { signature: $sig, url: $url } }')
+          fi
+
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg notes "${NOTES}" \
+            --arg pub_date "${PUB_DATE}" \
+            --argjson platforms "${PLATFORMS}" \
+            '{ version: $version, notes: $notes, pub_date: $pub_date, platforms: $platforms }' \
+            > latest.json
+
+          echo "--- latest.json ---"
+          cat latest.json
+          gh release upload "${VERSION}" latest.json --clobber
