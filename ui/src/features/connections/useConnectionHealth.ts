@@ -6,7 +6,7 @@ export type ConnectionHealthStatus = "ok" | "error" | "loading" | "idle";
 export interface ConnectionHealth {
   status: ConnectionHealthStatus;
   error: string | null;
-  refetch: () => void;
+  refetch: () => Promise<void>;
   isFetching: boolean;
 }
 
@@ -28,12 +28,15 @@ export const useConnectionHealth = (cid: string | null): ConnectionHealth => {
     refetchInterval: (query) => (query.state.error ? 15_000 : 60_000),
     retry: 0,
   });
+  const refetch = async (): Promise<void> => {
+    await q.refetch({ throwOnError: true });
+  };
 
   if (!cid) {
-    return { status: "idle", error: null, refetch: () => q.refetch(), isFetching: false };
+    return { status: "idle", error: null, refetch, isFetching: false };
   }
   if (q.isLoading) {
-    return { status: "loading", error: null, refetch: () => q.refetch(), isFetching: q.isFetching };
+    return { status: "loading", error: null, refetch, isFetching: q.isFetching };
   }
   if (q.isError) {
     const message =
@@ -42,7 +45,7 @@ export const useConnectionHealth = (cid: string | null): ConnectionHealth => {
         : q.error instanceof Error
           ? q.error.message
           : "Connection failed";
-    return { status: "error", error: message, refetch: () => q.refetch(), isFetching: q.isFetching };
+    return { status: "error", error: message, refetch, isFetching: q.isFetching };
   }
-  return { status: "ok", error: null, refetch: () => q.refetch(), isFetching: q.isFetching };
+  return { status: "ok", error: null, refetch, isFetching: q.isFetching };
 };

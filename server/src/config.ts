@@ -4,6 +4,11 @@ import http from "http";
 import { MongoClient } from "mongodb";
 import type { OIDCCallbackParams, OIDCResponse } from "mongodb";
 import { resolveAspireConnectionUri } from "./aspire.js";
+import {
+  openUrlInBrowser,
+  type BrowserPreference,
+  type OidcBrowser,
+} from "./browser.js";
 import { sanitizeMongoUri } from "./security.js";
 import { getConnection, touchConnection } from "./store/connections.js";
 import type { OidcProvider } from "./store/connections.js";
@@ -54,6 +59,8 @@ interface CachedClient {
   oidcTokenAudience: string | null;
   azureClientId: string | null;
   azureTenantId: string | null;
+  oidcBrowser: OidcBrowser;
+  oidcBrowserProfile: string | null;
 }
 
 const clients = new Map<string, CachedClient>();
@@ -71,6 +78,46 @@ interface BrowserTokenEntry {
   refreshToken?: string;
 }
 const browserTokenCache = new Map<string, BrowserTokenEntry>();
+
+const oidcBrowserOverrides = new Map<string, BrowserPreference>();
+
+/**
+ * One-shot, short-lived approval that a real browser window is allowed to
+ * open for a given connection. Set only when the UI shows the OIDC auth
+ * dialog and the user confirms; consumed the moment the interactive login
+ * actually starts. Without a live approval, `makeAzureBrowserOidcCallback`
+ * refuses to open a browser — this is what stops background health-check
+ * polling (and any other silent reconnect) from launching a browser window
+ * without the user having seen the confirmation dialog first.
+ */
+const AUTH_APPROVAL_TTL_MS = 2 * 60_000;
+const authApprovals = new Map<string, number>(); // connectionId -> expiresAt
+
+const consumeAuthApproval = (connectionId: string): boolean => {
+  const expiresAt = authApprovals.get(connectionId);
+  if (expiresAt === undefined) return false;
+  authApprovals.delete(connectionId);
+  return expiresAt > Date.now();
+};
+
+/**
+ * Marker prefix so the UI can distinguish "needs a fresh browser-auth
+ * confirmation" from any other connection error and show the OIDC auth
+ * dialog instead of a generic failure message.
+ */
+export const AUTH_CONFIRMATION_REQUIRED_PREFIX = "AUTH_CONFIRMATION_REQUIRED:";
+
+let inFlightBrowserAuth:
+  | {
+      connectionId: string;
+      connectionName: string;
+      authUrl: string;
+      browserPreference: BrowserPreference;
+      promise: Promise<BrowserTokenEntry>;
+      cancel: (reason?: string) => void;
+      startedAt: number;
+    }
+  | null = null;
 
 /**
  * Build the OIDC_HUMAN_CALLBACK for the Azure CLI credential flow.
@@ -153,14 +200,38 @@ const generateCodeChallenge = (verifier: string): string =>
 
 /** Start a one-shot HTTP server on OIDC_REDIRECT_PORT and resolve with the
  *  authorization code delivered to OIDC_REDIRECT_PATH. */
-const waitForAuthCode = (): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
+const startAuthCodeListener = (expectedState: string): {
+  promise: Promise<string>;
+  cancel: (reason?: string) => void;
+} => {
+  let server: http.Server | null = null;
+  let timeout: NodeJS.Timeout | null = null;
+  let settled = false;
+  let rejectPromise: ((reason?: unknown) => void) | null = null;
+
+  const cleanup = () => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    if (server) {
+      server.close();
+      server = null;
+    }
+  };
+
+  const promise = new Promise<string>((resolve, reject) => {
+    rejectPromise = reject;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+
+    server = http.createServer((req, res) => {
       try {
-        const url = new URL(
-          req.url ?? "/",
-          `http://localhost:${OIDC_REDIRECT_PORT}`,
-        );
+        const url = new URL(req.url ?? "/", `http://localhost:${OIDC_REDIRECT_PORT}`);
         if (url.pathname !== "/redirect") {
           res.writeHead(404).end();
           return;
@@ -168,33 +239,54 @@ const waitForAuthCode = (): Promise<string> =>
         const code = url.searchParams.get("code");
         const error = url.searchParams.get("error");
         const desc = url.searchParams.get("error_description") ?? error;
+        const actualState = url.searchParams.get("state");
+        const mismatch = code && actualState !== expectedState;
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
-          code
+          code && !mismatch
             ? "<html><body><p>Sign-in successful. You may close this window.</p></body></html>"
-            : `<html><body><p>Sign-in failed: ${desc}</p></body></html>`,
+            : `<html><body><p>Sign-in failed: ${
+                mismatch ? "state mismatch" : (desc ?? "unknown error")
+              }</p></body></html>`,
         );
-        server.close();
-        if (code) resolve(code);
-        else reject(new Error(`Azure AD auth error: ${desc}`));
+        if (code && !mismatch) {
+          finish(() => resolve(code));
+        } else if (mismatch) {
+          finish(() =>
+            reject(
+              new Error("Azure AD auth error: returned state did not match the original request."),
+            ),
+          );
+        } else {
+          finish(() => reject(new Error(`Azure AD auth error: ${desc}`)));
+        }
       } catch (e) {
-        server.close();
-        reject(e);
+        finish(() => reject(e));
       }
     });
+
     server.listen(OIDC_REDIRECT_PORT, "127.0.0.1", () => {
       console.log(
         `[mango/oidc] Listening on http://127.0.0.1:${OIDC_REDIRECT_PORT}/redirect`,
       );
     });
-    server.on("error", reject);
-    // 5-minute hard timeout
-    const t = setTimeout(() => {
-      server.close();
-      reject(new Error("Azure AD interactive login timed out after 5 minutes"));
+    server.on("error", (error) => finish(() => reject(error)));
+
+    timeout = setTimeout(() => {
+      finish(() => reject(new Error("Azure AD interactive login timed out after 5 minutes")));
     }, 5 * 60 * 1000);
-    t.unref();
+    timeout.unref();
   });
+
+  const cancel = (reason = "Azure AD interactive login was cancelled before completion.") => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    rejectPromise?.(new Error(reason));
+  };
+
+  return { promise, cancel };
+};
 
 interface TokenEndpointResponse {
   access_token: string;
@@ -221,6 +313,66 @@ const azureTokenRequest = async (
   return resp.json() as Promise<TokenEndpointResponse>;
 };
 
+interface OidcClientConfig {
+  connectionId: string;
+  connectionName: string;
+  oidcProvider: OidcProvider;
+  oidcTokenAudience: string | null;
+  azureClientId: string | null;
+  azureTenantId: string | null;
+  oidcBrowser: OidcBrowser;
+  oidcBrowserProfile: string | null;
+}
+
+const takePreparedBrowserPreference = (
+  connectionId: string,
+  configuredBrowser: OidcBrowser,
+  configuredBrowserProfile: string | null,
+): BrowserPreference => {
+  const prepared = oidcBrowserOverrides.get(connectionId);
+  if (prepared) {
+    oidcBrowserOverrides.delete(connectionId);
+    return prepared;
+  }
+  return {
+    browser: configuredBrowser,
+    profile: configuredBrowserProfile,
+  };
+};
+
+export const prepareOidcBrowserAuth = (
+  connectionId: string,
+  preference: BrowserPreference,
+  options?: { forceRestart?: boolean },
+): void => {
+  oidcBrowserOverrides.set(connectionId, {
+    browser: preference.browser ?? null,
+    profile: preference.profile ?? null,
+  });
+  authApprovals.set(connectionId, Date.now() + AUTH_APPROVAL_TTL_MS);
+  if (options?.forceRestart && inFlightBrowserAuth) {
+    const current = inFlightBrowserAuth;
+    inFlightBrowserAuth = null;
+    current.cancel("Azure AD interactive login was restarted from Mango.");
+  }
+};
+
+export const reopenOidcBrowserAuth = async (
+  connectionId: string,
+  preference?: BrowserPreference,
+): Promise<void> => {
+  const current = inFlightBrowserAuth;
+  if (!current || current.connectionId !== connectionId) {
+    throw new Error("No browser authentication is currently running for this connection.");
+  }
+  const browserPreference = preference ?? current.browserPreference;
+  current.browserPreference = browserPreference;
+  await openUrlInBrowser(current.authUrl, {
+    browser: browserPreference.browser,
+    profile: browserPreference.profile,
+  });
+};
+
 /**
  * Build the OIDC_HUMAN_CALLBACK for the interactive browser credential flow.
  *
@@ -236,9 +388,12 @@ const azureTokenRequest = async (
  */
 const makeAzureBrowserOidcCallback = (
   connectionId: string,
+  connectionName: string,
   configuredClientId: string | null,
   configuredTenantId: string | null,
   configuredAudience: string | null,
+  configuredBrowser: OidcBrowser,
+  configuredBrowserProfile: string | null,
 ) =>
   async (params: OIDCCallbackParams): Promise<OIDCResponse> => {
     const audience = configuredAudience || params.idpInfo?.clientId;
@@ -301,14 +456,58 @@ const makeAzureBrowserOidcCallback = (
       }
     }
 
-    // --- Full interactive flow (PKCE) ----------------------------------------
-    const verifier = generateCodeVerifier();
-    const challenge = generateCodeChallenge(verifier);
-    const state = crypto.randomBytes(16).toString("hex");
+    if (inFlightBrowserAuth) {
+      if (inFlightBrowserAuth.connectionId !== connectionId) {
+        if (inFlightBrowserAuth.connectionName === connectionName) {
+          console.log(
+            `[mango/oidc] restarting stale browser auth for "${connectionName}" (previous session used a different connection id)`,
+          );
+          const current = inFlightBrowserAuth;
+          inFlightBrowserAuth = null;
+          current.cancel(
+            `Azure AD interactive login for "${connectionName}" was restarted from Mango.`,
+          );
+        } else {
+          throw new Error(
+            `Browser authentication is already in progress for connection "${inFlightBrowserAuth.connectionName}". Finish that sign-in and retry "${connectionName}".`,
+          );
+        }
+      }
+      if (inFlightBrowserAuth) {
+        const entry = await inFlightBrowserAuth.promise;
+        return {
+          accessToken: entry.accessToken,
+          expiresInSeconds: Math.max(
+            0,
+            Math.floor((entry.expiresAt - Date.now()) / 1000),
+          ),
+        };
+      }
+    }
 
+    // A brand-new interactive login is about to start — require that the UI
+    // has shown the auth dialog and the user confirmed within the last
+    // AUTH_APPROVAL_TTL_MS. This is what stops background health-check polls
+    // (or any other silent reconnect) from popping a browser window without
+    // the user having seen a confirmation first.
+    if (!consumeAuthApproval(connectionId)) {
+      throw new Error(
+        `${AUTH_CONFIRMATION_REQUIRED_PREFIX}Browser authentication is required for connection "${connectionName}". Confirm in Mango to continue.`,
+      );
+    }
+
+    const state = crypto.randomBytes(16).toString("hex");
+    const authListener = startAuthCodeListener(state);
+    const browserPreference = takePreparedBrowserPreference(
+      connectionId,
+      configuredBrowser,
+      configuredBrowserProfile,
+    );
     const authUrl = new URL(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`,
     );
+    const verifier = generateCodeVerifier();
+    const challenge = generateCodeChallenge(verifier);
     authUrl.searchParams.set("client_id", clientId);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("redirect_uri", OIDC_REDIRECT_URI);
@@ -317,45 +516,98 @@ const makeAzureBrowserOidcCallback = (
     authUrl.searchParams.set("code_challenge_method", "S256");
     authUrl.searchParams.set("state", state);
 
-    console.log(`[mango/oidc] Opening browser for Azure AD login: ${authUrl}`);
+    const interactiveLogin = (async (): Promise<BrowserTokenEntry> => {
+      console.log(`[mango/oidc] Opening browser for Azure AD login: ${authUrl}`);
 
-    // Start listening before opening the browser so the redirect doesn't miss us.
-    const codePromise = waitForAuthCode();
+      try {
+        await openUrlInBrowser(authUrl.toString(), {
+          browser: browserPreference.browser,
+          profile: browserPreference.profile,
+        });
 
-    // Open the browser.  Use platform open command as a simple cross-platform
-    // alternative; falls back gracefully if unavailable.
-    try {
-      const { default: open } = await import("open");
-      await open(authUrl.toString(), { newInstance: false });
-    } catch {
-      console.log(
-        `[mango/oidc] Could not open browser automatically. Please visit:\n${authUrl}`,
-      );
-    }
+        const code = await authListener.promise;
+        const data = await azureTokenRequest(tenantId, {
+          client_id: clientId,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: OIDC_REDIRECT_URI,
+          code_verifier: verifier,
+          scope: `${audience}/.default offline_access`,
+        });
 
-    const code = await codePromise;
+        const entry: BrowserTokenEntry = {
+          accessToken: data.access_token,
+          expiresAt: Date.now() + data.expires_in * 1000,
+          refreshToken: data.refresh_token,
+        };
+        browserTokenCache.set(connectionId, entry);
+        return entry;
+      } catch (error) {
+        authListener.cancel(
+          error instanceof Error
+            ? error.message
+            : "Azure AD interactive login failed before completion.",
+        );
+        throw error;
+      }
+    })();
 
-    const data = await azureTokenRequest(tenantId, {
-      client_id: clientId,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: OIDC_REDIRECT_URI,
-      code_verifier: verifier,
-      scope: `${audience}/.default offline_access`,
-    });
-
-    const entry: BrowserTokenEntry = {
-      accessToken: data.access_token,
-      expiresAt: Date.now() + data.expires_in * 1000,
-      refreshToken: data.refresh_token,
+    inFlightBrowserAuth = {
+      connectionId,
+      connectionName,
+      authUrl: authUrl.toString(),
+      browserPreference,
+      cancel: authListener.cancel,
+      startedAt: Date.now(),
+      promise: interactiveLogin.finally(() => {
+        if (inFlightBrowserAuth?.connectionId === connectionId) {
+          inFlightBrowserAuth = null;
+        }
+      }),
     };
-    browserTokenCache.set(connectionId, entry);
 
+    const entry = await inFlightBrowserAuth.promise;
     return {
       accessToken: entry.accessToken,
-      expiresInSeconds: data.expires_in,
+      expiresInSeconds: Math.max(0, Math.floor((entry.expiresAt - Date.now()) / 1000)),
     };
   };
+
+export const buildMongoClientOptions = (
+  oidc: OidcClientConfig,
+): ConstructorParameters<typeof MongoClient>[1] => {
+  let clientOptions: ConstructorParameters<typeof MongoClient>[1] = {
+    serverSelectionTimeoutMS: 5_000,
+  };
+
+  if (oidc.oidcProvider === "azure-cli") {
+    clientOptions = {
+      ...clientOptions,
+      authMechanism: "MONGODB-OIDC",
+      authMechanismProperties: {
+        OIDC_HUMAN_CALLBACK: makeAzureCliOidcCallback(oidc.oidcTokenAudience),
+      },
+    };
+  } else if (oidc.oidcProvider === "azure-browser") {
+    clientOptions = {
+      ...clientOptions,
+      authMechanism: "MONGODB-OIDC",
+      authMechanismProperties: {
+        OIDC_HUMAN_CALLBACK: makeAzureBrowserOidcCallback(
+          oidc.connectionId,
+          oidc.connectionName,
+          oidc.azureClientId,
+          oidc.azureTenantId,
+          oidc.oidcTokenAudience,
+          oidc.oidcBrowser,
+          oidc.oidcBrowserProfile,
+        ),
+      },
+    };
+  }
+
+  return clientOptions;
+};
 
 const resolveUriForConnection = async (connectionId: string): Promise<{
   uri: string;
@@ -396,6 +648,8 @@ export const getMongoClientFor = async (
   const oidcTokenAudience = conn?.oidcTokenAudience ?? null;
   const azureClientId = conn?.azureClientId ?? null;
   const azureTenantId = conn?.azureTenantId ?? null;
+  const oidcBrowser = conn?.oidcBrowser ?? null;
+  const oidcBrowserProfile = conn?.oidcBrowserProfile ?? null;
 
   const cached = clients.get(connectionId);
   if (
@@ -404,7 +658,9 @@ export const getMongoClientFor = async (
     cached.oidcProvider === oidcProvider &&
     cached.oidcTokenAudience === oidcTokenAudience &&
     cached.azureClientId === azureClientId &&
-    cached.azureTenantId === azureTenantId
+    cached.azureTenantId === azureTenantId &&
+    cached.oidcBrowser === oidcBrowser &&
+    cached.oidcBrowserProfile === oidcBrowserProfile
   ) {
     touchConnection(connectionId);
     return cached;
@@ -415,33 +671,16 @@ export const getMongoClientFor = async (
     cached.client.close().catch(() => {});
   }
 
-  let clientOptions: ConstructorParameters<typeof MongoClient>[1] = {
-    serverSelectionTimeoutMS: 5_000,
-  };
-
-  if (oidcProvider === "azure-cli") {
-    const audience = oidcTokenAudience || null;
-    clientOptions = {
-      ...clientOptions,
-      authMechanism: "MONGODB-OIDC",
-      authMechanismProperties: {
-        OIDC_HUMAN_CALLBACK: makeAzureCliOidcCallback(audience),
-      },
-    };
-  } else if (oidcProvider === "azure-browser") {
-    clientOptions = {
-      ...clientOptions,
-      authMechanism: "MONGODB-OIDC",
-      authMechanismProperties: {
-        OIDC_HUMAN_CALLBACK: makeAzureBrowserOidcCallback(
-          connectionId,
-          azureClientId,
-          azureTenantId,
-          oidcTokenAudience,
-        ),
-      },
-    };
-  }
+  const clientOptions = buildMongoClientOptions({
+    connectionId,
+    connectionName: conn?.name ?? connectionId,
+    oidcProvider,
+    oidcTokenAudience,
+    azureClientId,
+    azureTenantId,
+    oidcBrowser,
+    oidcBrowserProfile,
+  });
 
   const client = new MongoClient(sanitizeMongoUri(resolved.uri), clientOptions);
   await client.connect();
@@ -453,6 +692,8 @@ export const getMongoClientFor = async (
     oidcTokenAudience,
     azureClientId,
     azureTenantId,
+    oidcBrowser,
+    oidcBrowserProfile,
   };
   clients.set(connectionId, entry);
   touchConnection(connectionId);

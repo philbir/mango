@@ -17,9 +17,12 @@ import {
   type ConnectionPublic,
   type ConnectionSource,
   type DiscoveredMongo,
+  type OidcBrowser,
   type OidcProvider,
 } from "../../api/client";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { BrowserPicker } from "./BrowserPicker";
+import { OidcAuthDialog } from "./OidcAuthDialog";
 
 const COLORS = [
   "#38bdf8",
@@ -51,6 +54,8 @@ interface BuilderState {
   oidcTokenAudience: string;
   azureClientId: string;
   azureTenantId: string;
+  oidcBrowser: OidcBrowser;
+  oidcBrowserProfile: string;
 }
 
 const DEFAULT_BUILDER: BuilderState = {
@@ -68,6 +73,8 @@ const DEFAULT_BUILDER: BuilderState = {
   oidcTokenAudience: "",
   azureClientId: "",
   azureTenantId: "",
+  oidcBrowser: null,
+  oidcBrowserProfile: "",
 };
 
 const enc = (s: string) => encodeURIComponent(s);
@@ -200,6 +207,8 @@ const parseUri = (uri: string): BuilderState | null => {
     oidcTokenAudience: "",
     azureClientId: "",
     azureTenantId: "",
+    oidcBrowser: null,
+    oidcBrowserProfile: "",
   };
 };
 
@@ -230,6 +239,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     { ok: true } | { ok: false; error: string } | null
   >(null);
   const [testing, setTesting] = useState(false);
+  const [confirmingBrowserTest, setConfirmingBrowserTest] = useState(false);
+  const browserTestAttemptId = useRef<string | null>(null);
 
   const [discoveryOpen, setDiscoveryOpen] = useState<
     "docker" | "aspire" | null
@@ -276,6 +287,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
             oidcTokenAudience: existing.oidcTokenAudience ?? "",
             azureClientId: existing.azureClientId ?? "",
             azureTenantId: existing.azureTenantId ?? "",
+            oidcBrowser: existing.oidcBrowser ?? null,
+            oidcBrowserProfile: existing.oidcBrowserProfile ?? "",
           });
         }
       })
@@ -334,21 +347,63 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     setDiscoveryOpen(null);
   };
 
-  const onTest = async () => {
+  const runTest = async (override?: {
+    oidcBrowser: OidcBrowser;
+    oidcBrowserProfile: string | null;
+    authAttemptId?: string;
+  }) => {
     if (!effectiveUri) return;
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await api.testUri(effectiveUri);
-      setTestResult(res.ok ? { ok: true } : { ok: false, error: res.error ?? "" });
+      const res = await api.testUri({
+        uri: effectiveUri,
+        name: name.trim() || undefined,
+        oidcProvider: builder.authMethod === "oidc" ? builder.oidcProvider : null,
+        oidcTokenAudience:
+          builder.authMethod === "oidc" && builder.oidcTokenAudience.trim()
+            ? builder.oidcTokenAudience.trim()
+            : null,
+        azureClientId:
+          builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser" && builder.azureClientId.trim()
+            ? builder.azureClientId.trim()
+            : null,
+        azureTenantId:
+          builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser" && builder.azureTenantId.trim()
+            ? builder.azureTenantId.trim()
+            : null,
+        oidcBrowser:
+          builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser"
+            ? (override?.oidcBrowser ?? builder.oidcBrowser)
+            : null,
+        oidcBrowserProfile:
+          builder.authMethod === "oidc" &&
+          builder.oidcProvider === "azure-browser" &&
+          (override?.oidcBrowserProfile ?? builder.oidcBrowserProfile).trim()
+            ? (override?.oidcBrowserProfile ?? builder.oidcBrowserProfile).trim()
+            : null,
+        authAttemptId: override?.authAttemptId,
+      });
+      if (!res.ok) throw new Error(res.error || "Connection failed");
+      setTestResult({ ok: true });
     } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
       setTestResult({
         ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        error: error.message,
       });
+      throw error;
     } finally {
       setTesting(false);
     }
+  };
+
+  const onTest = () => {
+    if (builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser") {
+      setConfirmingBrowserTest(true);
+      return;
+    }
+    void runTest().catch(() => {});
   };
 
   const save = useMutation({
@@ -367,6 +422,16 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser" && builder.azureTenantId.trim()
           ? builder.azureTenantId.trim()
           : null;
+      const oidcBrowser =
+        builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser"
+          ? builder.oidcBrowser
+          : null;
+      const oidcBrowserProfile =
+        builder.authMethod === "oidc" &&
+        builder.oidcProvider === "azure-browser" &&
+        builder.oidcBrowserProfile.trim()
+          ? builder.oidcBrowserProfile.trim()
+          : null;
       if (mode === "create") {
         return api.createConnection({
           name: name.trim(),
@@ -379,6 +444,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           oidcTokenAudience,
           azureClientId,
           azureTenantId,
+          oidcBrowser,
+          oidcBrowserProfile,
         });
       }
       return api.updateConnection(existing!.id, {
@@ -392,6 +459,8 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         oidcTokenAudience,
         azureClientId,
         azureTenantId,
+        oidcBrowser,
+        oidcBrowserProfile,
       });
     },
     onSuccess: (conn) => {
@@ -646,6 +715,29 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         onCancel={() => setConfirmingDelete(false)}
       />
     )}
+    {confirmingBrowserTest && (
+      <OidcAuthDialog
+        connectionName={name.trim() || "this connection"}
+        initialBrowser={builder.oidcBrowser}
+        initialBrowserProfile={builder.oidcBrowserProfile}
+        message="This OIDC connection needs to authenticate using a browser before Mango can test it."
+        onConfirm={async ({ oidcBrowser, oidcBrowserProfile }) => {
+          const authAttemptId = crypto.randomUUID();
+          browserTestAttemptId.current = authAttemptId;
+          await runTest({ oidcBrowser, oidcBrowserProfile, authAttemptId });
+          setConfirmingBrowserTest(false);
+        }}
+        onReopen={async ({ oidcBrowser, oidcBrowserProfile }) => {
+          const authAttemptId = browserTestAttemptId.current;
+          if (!authAttemptId) throw new Error("Browser authentication has not started yet.");
+          await api.reopenOidcBrowserAuth(`test-uri:${authAttemptId}`, {
+            oidcBrowser,
+            oidcBrowserProfile,
+          });
+        }}
+        onCancel={() => setConfirmingBrowserTest(false)}
+      />
+    )}
     </>
   );
 };
@@ -754,6 +846,12 @@ const ServerTab = ({ builder, setB }: TabProps) => {
 };
 
 const AuthTab = ({ builder, setB }: TabProps) => {
+  const browserOptions = useQuery({
+    queryKey: ["browser-options"],
+    queryFn: () => api.listBrowsers(),
+    staleTime: 5 * 60_000,
+  });
+
   return (
     <div className="space-y-3">
       <Field label="Method">
@@ -838,9 +936,29 @@ const AuthTab = ({ builder, setB }: TabProps) => {
           {builder.oidcProvider === "azure-browser" && (
             <>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                A browser window will open to sign in with Azure AD — no admin
-                consent or extra setup required.
+                Mango will first prompt before sign-in starts, then open the
+                selected browser for Azure AD authentication.
               </p>
+              <div>
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Browser
+                </div>
+                <BrowserPicker
+                  browsers={browserOptions.data?.browsers ?? []}
+                  browser={builder.oidcBrowser}
+                  browserProfile={builder.oidcBrowserProfile}
+                  onBrowserChange={(browser) => {
+                    setB("oidcBrowser", browser);
+                    if (browser === "safari" || browser === null) {
+                      setB("oidcBrowserProfile", "");
+                    }
+                  }}
+                  onBrowserProfileChange={(profile) =>
+                    setB("oidcBrowserProfile", profile)
+                  }
+                  includeSystemDefault
+                />
+              </div>
               <details className="group">
                 <summary className="cursor-pointer select-none text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                   Advanced (custom Azure AD app)

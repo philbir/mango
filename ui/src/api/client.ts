@@ -236,6 +236,21 @@ export interface AspireRef {
 export type ConnectionSource = "docker" | null;
 
 export type OidcProvider = "azure-cli" | "azure-browser" | null;
+export type OidcBrowser = "chrome" | "edge" | "firefox" | "safari" | null;
+
+export interface BrowserProfile {
+  key: string;
+  label: string;
+  isDefault: boolean;
+}
+
+export interface BrowserOption {
+  id: Exclude<OidcBrowser, null>;
+  label: string;
+  available: boolean;
+  supportsProfiles: boolean;
+  profiles: BrowserProfile[];
+}
 
 export interface ConnectionPublic {
   id: string;
@@ -253,6 +268,8 @@ export interface ConnectionPublic {
   oidcTokenAudience: string | null;
   azureClientId: string | null;
   azureTenantId: string | null;
+  oidcBrowser: OidcBrowser;
+  oidcBrowserProfile: string | null;
 }
 
 export interface DiscoveredMongo {
@@ -343,6 +360,11 @@ export const api = {
     }>;
   },
 
+  async listBrowsers(): Promise<{ browsers: BrowserOption[] }> {
+    const res = await fetch("/api/system/browsers");
+    return handlePlainJson(res) as Promise<{ browsers: BrowserOption[] }>;
+  },
+
   // ── Connection management ───────────────────────────────────────────────────
   async listConnections(): Promise<{ connections: ConnectionPublic[] }> {
     const res = await fetch("/api/connections");
@@ -360,6 +382,8 @@ export const api = {
     oidcTokenAudience?: string | null;
     azureClientId?: string | null;
     azureTenantId?: string | null;
+    oidcBrowser?: OidcBrowser;
+    oidcBrowserProfile?: string | null;
   }): Promise<ConnectionPublic> {
     const res = await fetch("/api/connections", {
       method: "POST",
@@ -382,6 +406,8 @@ export const api = {
       oidcTokenAudience: string | null;
       azureClientId: string | null;
       azureTenantId: string | null;
+      oidcBrowser: OidcBrowser;
+      oidcBrowserProfile: string | null;
     }>,
   ): Promise<ConnectionPublic> {
     const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
@@ -417,6 +443,43 @@ export const api = {
     return data;
   },
 
+  async prepareOidcBrowserAuth(
+    id: string,
+    input: {
+      oidcBrowser: OidcBrowser;
+      oidcBrowserProfile?: string | null;
+      forceRestart?: boolean;
+    },
+  ): Promise<{ ok: boolean }> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+    return handlePlainJson(res) as Promise<{ ok: boolean }>;
+  },
+
+  async reopenOidcBrowserAuth(
+    id: string,
+    input: {
+      oidcBrowser: OidcBrowser;
+      oidcBrowserProfile?: string | null;
+    },
+  ): Promise<{ ok: boolean }> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/reopen`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+    return handlePlainJson(res) as Promise<{ ok: boolean }>;
+  },
+
   async discoverDocker(): Promise<DiscoveryResult> {
     const res = await fetch("/api/discovery/docker");
     return handlePlainJson(res) as Promise<DiscoveryResult>;
@@ -427,11 +490,21 @@ export const api = {
     return handlePlainJson(res) as Promise<AspireDiscoveryResult>;
   },
 
-  async testUri(uri: string): Promise<{ ok: boolean; error?: string }> {
+  async testUri(input: {
+    uri: string;
+    name?: string;
+    oidcProvider?: OidcProvider;
+    oidcTokenAudience?: string | null;
+    azureClientId?: string | null;
+    azureTenantId?: string | null;
+    oidcBrowser?: OidcBrowser;
+    oidcBrowserProfile?: string | null;
+    authAttemptId?: string;
+  }): Promise<{ ok: boolean; error?: string }> {
     const res = await fetch("/api/connections/test-uri", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ uri }),
+      body: JSON.stringify(input),
     });
     return handlePlainJson(res) as Promise<{ ok: boolean; error?: string }>;
   },
@@ -570,6 +643,51 @@ export const api = {
       limit: number;
       hasMore: boolean;
     }>;
+  },
+
+  /** deleteMany over an EJSON filter string. Server rejects an empty filter. */
+  async deleteMany(
+    cid: string,
+    name: string,
+    filterEJSON: string,
+    database?: string,
+  ): Promise<{ deletedCount: number }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/deleteMany${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filter: filterEJSON }),
+      },
+    );
+    return (await handlePlainJson(res)) as { deletedCount: number };
+  },
+
+  /**
+   * updateMany over an EJSON filter string with an operator-keyed update body
+   * (e.g. `{ "$set": {…} }`). Server rejects an empty filter or non-operator body.
+   */
+  async updateMany(
+    cid: string,
+    name: string,
+    filterEJSON: string,
+    updateEJSON: string,
+    database?: string,
+  ): Promise<{ matchedCount: number; modifiedCount: number }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/updateMany${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filter: filterEJSON, update: updateEJSON }),
+      },
+    );
+    return (await handlePlainJson(res)) as {
+      matchedCount: number;
+      modifiedCount: number;
+    };
   },
 
   async getDocument(

@@ -8,10 +8,23 @@ import { useMemo } from "react";
 import { extractIdString, formatUuid } from "../../api/client";
 import { useSettings, type UuidRepresentation } from "../../settings";
 
+export interface TableSelection {
+  /** Currently-selected row id strings (may span pages). */
+  selectedIds: Set<string>;
+  /** Toggle a single row; `rawId` is the untouched BSON `_id` for filter building. */
+  onToggle: (id: string, rawId: unknown, selected: boolean) => void;
+  /** Toggle every row on the current page at once. */
+  onToggleAll: (
+    rows: Array<{ id: string; rawId: unknown }>,
+    selected: boolean,
+  ) => void;
+}
+
 interface Props {
   documents: Array<Record<string, unknown>>;
   loading?: boolean;
   onRowClick?: (id: string) => void;
+  selection?: TableSelection;
 }
 
 const formatCell = (
@@ -66,8 +79,28 @@ const formatCell = (
 
 const COLUMN_LIMIT = 12;
 
-export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
+export const DocumentTable = ({
+  documents,
+  loading,
+  onRowClick,
+  selection,
+}: Props) => {
   const { uuidRepresentation } = useSettings();
+
+  // Rows of the current page as {id, rawId} for select-all + header state.
+  const pageRows = useMemo(
+    () =>
+      documents.map((d) => ({ id: extractIdString(d._id), rawId: d._id })),
+    [documents],
+  );
+  const selectedOnPage = useMemo(() => {
+    if (!selection) return 0;
+    let n = 0;
+    for (const r of pageRows) if (selection.selectedIds.has(r.id)) n++;
+    return n;
+  }, [selection, pageRows]);
+  const allOnPageSelected =
+    pageRows.length > 0 && selectedOnPage === pageRows.length;
 
   const columnNames = useMemo(() => {
     const seen = new Set<string>();
@@ -108,18 +141,41 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
     columnResizeMode: "onChange",
   });
 
+  const SELECT_COL_WIDTH = 38;
+
   return (
     <div className="h-full overflow-auto">
       <table
         className="border-separate border-spacing-0"
         style={{
-          width: table.getCenterTotalSize(),
+          width: table.getCenterTotalSize() + (selection ? SELECT_COL_WIDTH : 0),
           tableLayout: "fixed",
         }}
       >
         <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
+              {selection && (
+                <th
+                  className="border-b border-slate-200 px-2 py-2 text-center dark:border-slate-700"
+                  style={{ width: SELECT_COL_WIDTH }}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label="Select all rows on this page"
+                    className="cursor-pointer align-middle accent-sky-500"
+                    checked={allOnPageSelected}
+                    ref={(el) => {
+                      if (el)
+                        el.indeterminate =
+                          selectedOnPage > 0 && !allOnPageSelected;
+                    }}
+                    onChange={(e) =>
+                      selection.onToggleAll(pageRows, e.target.checked)
+                    }
+                  />
+                </th>
+              )}
               {hg.headers.map((h) => (
                 <th
                   key={h.id}
@@ -151,7 +207,7 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
           {loading && documents.length === 0 && (
             <tr>
               <td
-                colSpan={columns.length || 1}
+                colSpan={columns.length + (selection ? 1 : 0) || 1}
                 className="px-3 py-6 text-center text-sm text-slate-400"
               >
                 Loading…
@@ -161,7 +217,7 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
           {!loading && documents.length === 0 && (
             <tr>
               <td
-                colSpan={columns.length || 1}
+                colSpan={columns.length + (selection ? 1 : 0) || 1}
                 className="px-3 py-6 text-center text-sm text-slate-400"
               >
                 No documents.
@@ -170,12 +226,34 @@ export const DocumentTable = ({ documents, loading, onRowClick }: Props) => {
           )}
           {table.getRowModel().rows.map((row) => {
             const id = extractIdString(row.original._id);
+            const isSelected = selection?.selectedIds.has(id) ?? false;
             return (
               <tr
                 key={id}
                 onClick={() => onRowClick?.(id)}
-                className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                className={`cursor-pointer ${
+                  isSelected
+                    ? "bg-sky-50 hover:bg-sky-100 dark:bg-sky-500/10 dark:hover:bg-sky-500/20"
+                    : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                }`}
               >
+                {selection && (
+                  <td
+                    className="border-b border-slate-200 px-2 py-1.5 text-center dark:border-slate-800"
+                    style={{ width: SELECT_COL_WIDTH }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label="Select row"
+                      className="cursor-pointer align-middle accent-sky-500"
+                      checked={isSelected}
+                      onChange={(e) =>
+                        selection.onToggle(id, row.original._id, e.target.checked)
+                      }
+                    />
+                  </td>
+                )}
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}

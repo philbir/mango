@@ -7,8 +7,9 @@
 import { Hono } from "hono";
 import { Readable } from "node:stream";
 import { GridFSBucket, ObjectId } from "mongodb";
-import { databaseNameFor, getMongoClientFor } from "../config.js";
+import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { stringifyEJSON } from "../ejson.js";
+import { countForListing } from "../mongo-util.js";
 import { redactErrorMessage } from "../security.js";
 
 export const gridfsRoute = new Hono();
@@ -104,9 +105,9 @@ gridfsRoute.get("/:bucket/files", async (c) => {
     }
 
     const [total, files] = await Promise.all([
-      filesColl.countDocuments(filter),
+      countForListing(filesColl, filter, config.mongoMaxTimeMS),
       filesColl
-        .find(filter)
+        .find(filter, { maxTimeMS: config.mongoMaxTimeMS })
         .sort({ uploadDate: -1 })
         .skip(skip)
         .limit(limit)

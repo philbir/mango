@@ -16,13 +16,14 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
+import { requestOidcAuthPrompt } from "../connections/oidcAuthPrompt";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { useConnectionHealth } from "../connections/useConnectionHealth";
 import { useTabs } from "../tabs/TabsContext";
 
 export const CollectionsPane = () => {
-  const { activeId } = useActiveConnection();
+  const { activeId, active } = useActiveConnection();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
   const {
@@ -56,14 +57,70 @@ export const CollectionsPane = () => {
 
   const filtered = useMemo(() => {
     if (!collectionsQuery.data) return [];
+    const byNameWithGridFsPairing = (
+      a: (typeof collectionsQuery.data.collections)[number],
+      b: (typeof collectionsQuery.data.collections)[number],
+    ) => {
+      const aBucket = a.gridFs?.bucket;
+      const bBucket = b.gridFs?.bucket;
+      if (aBucket && bBucket && aBucket === bBucket && a.gridFs?.role !== b.gridFs?.role) {
+        return a.gridFs?.role === "files" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    };
+
     const q = search.trim().toLowerCase();
-    if (!q) return collectionsQuery.data.collections;
-    return collectionsQuery.data.collections.filter((c) =>
-      c.name.toLowerCase().includes(q),
-    );
+    const visible = q
+      ? collectionsQuery.data.collections.filter((c) =>
+          c.name.toLowerCase().includes(q),
+        )
+      : collectionsQuery.data.collections;
+    return [...visible].sort(byNameWithGridFsPairing);
   }, [collectionsQuery.data, search]);
 
+  const AUTH_PROMPT_ERROR =
+    /AUTH_CONFIRMATION_REQUIRED:|Browser authentication is already in progress|interactive login timed out|cancelled/i;
+
+  const lastPromptedError = useRef<string | null>(null);
+
+  const openAuthPrompt = (mode: "activate" | "retry") => {
+    if (!active) return;
+    requestOidcAuthPrompt(
+      active,
+      async (selection) => {
+        await api.prepareOidcBrowserAuth(active.id, selection);
+        await health.refetch();
+      },
+      mode,
+    );
+  };
+
+  // Whenever the health check comes back needing a fresh browser-auth
+  // confirmation — including on background polling ticks, not just an
+  // explicit Retry click — surface the OIDC auth dialog automatically so a
+  // browser window never opens without the user having seen it first.
+  useEffect(() => {
+    if (!active || active.oidcProvider !== "azure-browser") return;
+    if (!health.error || !AUTH_PROMPT_ERROR.test(health.error)) {
+      lastPromptedError.current = null;
+      return;
+    }
+    if (lastPromptedError.current === health.error) return;
+    lastPromptedError.current = health.error;
+    openAuthPrompt("activate");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, health.error]);
+
   const onRefresh = () => {
+    if (
+      active &&
+      active.oidcProvider === "azure-browser" &&
+      health.error &&
+      AUTH_PROMPT_ERROR.test(health.error)
+    ) {
+      openAuthPrompt("retry");
+      return;
+    }
     health.refetch();
     if (health.status !== "ok") return;
     if (database) collectionsQuery.refetch();
@@ -82,23 +139,23 @@ export const CollectionsPane = () => {
             <button
               type="button"
               onClick={() => setDatabase(null)}
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               title="Switch database"
             >
-              <IconChevronLeft size={12} />
+              <IconChevronLeft size={14} />
             </button>
-            <IconDatabase size={11} className="text-slate-400" />
-            <span className="flex-1 truncate font-mono text-[11px] text-slate-700 dark:text-slate-200">
+            <IconDatabase size={13} className="text-slate-400" />
+            <span className="flex-1 truncate font-mono text-[12px] text-slate-700 dark:text-slate-200">
               {database}
             </span>
             <button
               type="button"
               onClick={() => openDatabase(activeId!, database)}
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               title={`Database info: ${database}`}
               aria-label={`Open database info for ${database}`}
             >
-              <IconInfoCircle size={12} />
+              <IconInfoCircle size={14} />
             </button>
             <NewMenu
               onNewConsole={() => openConsole(activeId!)}
@@ -115,10 +172,10 @@ export const CollectionsPane = () => {
           type="button"
           onClick={onRefresh}
           disabled={!activeId}
-          className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           title="Refresh"
         >
-          <IconRefresh size={12} className={isFetching ? "animate-spin" : ""} />
+          <IconRefresh size={14} className={isFetching ? "animate-spin" : ""} />
         </button>
       </div>
 
@@ -151,7 +208,7 @@ export const CollectionsPane = () => {
         {activeId && health.status === "error" && (
           <NotConnectedPanel
             error={health.error}
-            onRetry={() => health.refetch()}
+            onRetry={onRefresh}
             isFetching={health.isFetching}
           />
         )}
@@ -220,7 +277,7 @@ export const CollectionsPane = () => {
                       onClick={onClick}
                       title={title}
                       className={[
-                        "flex w-full items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight",
+                        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] leading-tight",
                         isActive
                           ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
                           : isChunks
@@ -228,9 +285,9 @@ export const CollectionsPane = () => {
                             : "text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-800",
                       ].join(" ")}
                     >
-                      <Icon size={12} className={iconClass} />
+                      <Icon size={16} className={iconClass} />
                       <span className="flex-1 truncate font-mono">{c.name}</span>
-                      <span className="text-[10.5px] text-slate-400 dark:text-slate-500">
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
                         {c.count?.toLocaleString() ?? "—"}
                       </span>
                     </button>
@@ -268,19 +325,19 @@ const NewMenu = ({ onNewConsole, onNewShell }: NewMenuProps) => {
       <button
         type="button"
         onClick={onNewConsole}
-        className="flex items-center gap-0.5 rounded-l px-1 py-0.5 text-[10.5px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="flex items-center gap-0.5 rounded-l px-1.5 py-1 text-[11.5px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         title="New console"
       >
-        <IconPlus size={10} />
+        <IconPlus size={12} />
         New
       </button>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded-r border-l border-slate-300/60 px-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:border-slate-700/80 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="rounded-r border-l border-slate-300/60 px-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:border-slate-700/80 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         title="New…"
       >
-        <IconChevronDown size={10} />
+        <IconChevronDown size={12} />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -365,12 +422,12 @@ const DatabaseList = ({
               <button
                 type="button"
                 onClick={() => onPick(d.name)}
-                className="flex flex-1 items-center gap-1.5 rounded px-2 py-[3px] text-left text-[12.5px] leading-tight text-slate-700 dark:text-slate-200"
+                className="flex flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] leading-tight text-slate-700 dark:text-slate-200"
               >
-                <IconDatabase size={12} className="text-slate-400" />
+                <IconDatabase size={16} className="text-slate-400" />
                 <span className="flex-1 truncate font-mono">{d.name}</span>
                 {d.sizeOnDisk != null && (
-                  <span className="text-[10.5px] text-slate-400 dark:text-slate-500">
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
                     {formatBytes(d.sizeOnDisk)}
                   </span>
                 )}
@@ -381,11 +438,11 @@ const DatabaseList = ({
                   e.stopPropagation();
                   onOpenInfo(d.name);
                 }}
-                className="mr-1 rounded p-0.5 text-slate-400 opacity-0 hover:bg-slate-300 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                className="mr-1 rounded p-1 text-slate-400 opacity-0 hover:bg-slate-300 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 title={`Database info: ${d.name}`}
                 aria-label={`Open database info for ${d.name}`}
               >
-                <IconInfoCircle size={12} />
+                <IconInfoCircle size={14} />
               </button>
             </div>
           </li>

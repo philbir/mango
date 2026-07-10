@@ -6,13 +6,16 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconLoader2,
+  IconPencil,
   IconTable,
+  IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 import { prettifyUuids } from "../../api/client";
 import { InteractiveJsonView } from "../../components/JsonView";
 import { type PageSize, useSettings } from "../../settings";
-import { DocumentTable } from "./DocumentTable";
+import { DocumentTable, type TableSelection } from "./DocumentTable";
 
 export type ResultFormat = "table" | "json";
 
@@ -27,6 +30,14 @@ export interface ResultPaging {
   pageSizes?: PageSize[];
 }
 
+export interface ResultSelection extends TableSelection {
+  /** Total selected (may span pages) — drives the batch action bar. */
+  count: number;
+  onDelete: () => void;
+  onUpdate: () => void;
+  onClear: () => void;
+}
+
 interface Props {
   format: ResultFormat;
   onFormatChange: (f: ResultFormat) => void;
@@ -39,6 +50,8 @@ interface Props {
   truncatedHint?: string | null;
   onRowClick?: (id: string) => void;
   emptyHint?: string;
+  /** Enables row multi-select + a batch action bar. Table view only. */
+  selection?: ResultSelection;
 }
 
 const formatElapsed = (ms: number): string => {
@@ -69,6 +82,7 @@ export const ResultPanel = ({
   truncatedHint,
   onRowClick,
   emptyHint,
+  selection,
 }: Props) => {
   const { uuidRepresentation } = useSettings();
   const documents = useMemo(() => asDocumentArray(rawValue), [rawValue]);
@@ -114,6 +128,39 @@ export const ResultPanel = ({
             <IconCheck size={11} /> done · {formatElapsed(elapsedMs)}
           </span>
         )}
+        {selection && selection.count > 0 && (
+          <div className="flex items-center gap-1.5 rounded border border-sky-300 bg-sky-50 px-1.5 py-0.5 dark:border-sky-500/40 dark:bg-sky-500/10">
+            <span className="font-medium text-sky-700 dark:text-sky-200">
+              {selection.count} selected
+            </span>
+            <button
+              type="button"
+              onClick={selection.onUpdate}
+              title="Update selected documents"
+              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-sky-700 hover:bg-sky-100 dark:text-sky-200 dark:hover:bg-sky-500/20"
+            >
+              <IconPencil size={12} />
+              Update
+            </button>
+            <button
+              type="button"
+              onClick={selection.onDelete}
+              title="Delete selected documents"
+              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-red-600 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-500/20"
+            >
+              <IconTrash size={12} />
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={selection.onClear}
+              title="Clear selection"
+              className="flex items-center rounded p-0.5 text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700"
+            >
+              <IconX size={12} />
+            </button>
+          </div>
+        )}
         <div className="flex-1" />
         {canTable && (
           <div className="flex rounded border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
@@ -153,6 +200,7 @@ export const ResultPanel = ({
             documents={documents}
             loading={isLoading}
             onRowClick={onRowClick}
+            selection={selection}
           />
         )}
         {hasResult && effectiveFormat === "json" && (

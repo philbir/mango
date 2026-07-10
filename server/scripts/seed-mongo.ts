@@ -8,7 +8,14 @@
 
 import { randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
-import { Decimal128, GridFSBucket, MongoClient, ObjectId } from "mongodb";
+import {
+  Binary,
+  Decimal128,
+  GridFSBucket,
+  MongoClient,
+  ObjectId,
+  UUID,
+} from "mongodb";
 
 const MONGO_URL = process.env.MONGO_URL;
 if (!MONGO_URL) {
@@ -223,6 +230,152 @@ const buildPosts = (count: number, authors: SeedUser[]): SeedPost[] =>
     };
   });
 
+interface SeedPagingRow {
+  _id: ObjectId;
+  seq: number;
+  label: string;
+  even: boolean;
+  createdAt: Date;
+}
+
+// Large fixed-size collection with a monotonic `seq` so the page-size /
+// next-page / boundary behaviour is easy to eyeball — row 1 is always seq=1,
+// seq maps 1:1 to a row number, so any page's contents are predictable.
+const buildPagingRows = (count: number): SeedPagingRow[] =>
+  Array.from({ length: count }, (_, i) => ({
+    _id: new ObjectId(),
+    seq: i + 1,
+    label: `row-${String(i + 1).padStart(5, "0")}`,
+    even: (i + 1) % 2 === 0,
+    createdAt: daysAgo(rangeInt(0, 720)),
+  }));
+
+// ── UUID format sampling ──────────────────────────────────────────────────
+// A MongoDB UUID is stored as a Binary. Subtype 4 is the modern, unambiguous
+// "standard" encoding. Subtype 3 is a *legacy* UUID whose on-disk byte order
+// depends on the driver that wrote it — the C#, Java and Python legacy drivers
+// each scramble the bytes differently, so the same logical UUID reads as three
+// different hex strings unless the viewer knows which representation to apply.
+//
+// This collection stores a handful of fixed canonical UUIDs, each written out
+// in *every* format, so the UI's UUID-representation switcher has something
+// concrete to verify against: pick "C# legacy" and only the `csharpLegacy`
+// rows should surface their `canonical` value; pick "standard" and only the
+// subtype-4 rows should.
+
+type UuidRep = "standard" | "csharpLegacy" | "javaLegacy" | "pythonLegacy";
+
+const UUID_REPS: ReadonlyArray<{ rep: UuidRep; subType: 3 | 4; marker: string }> = [
+  { rep: "standard", subType: 4, marker: "UUID" },
+  { rep: "csharpLegacy", subType: 3, marker: "CSUUID" },
+  { rep: "javaLegacy", subType: 3, marker: "JUUID" },
+  { rep: "pythonLegacy", subType: 3, marker: "PYUUID" },
+];
+
+// Fixed canonical UUIDs (dash-separated hex) so repeat runs are eyeball-stable
+// and the stored bytes can be checked against a known value. Mix of versions:
+// a v7 (time-ordered), a classic v4, and an all-visible-nibbles pattern.
+const CANONICAL_UUIDS = [
+  "0193ade0-5f8e-7c3a-9b21-1f4c8e5a7d90",
+  "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "a1b2c3d4-e5f6-4789-abcd-ef0123456789",
+] as const;
+
+const uuidBytes = (canonical: string): Buffer =>
+  Buffer.from(canonical.replace(/-/g, ""), "hex");
+
+// Mirror of the UI's reorderBytesForRepresentation (ui/src/api/client.ts). The
+// permutation is an involution, so the same function maps a canonical-order
+// buffer to the on-disk bytes each legacy driver would have written.
+const reorderForRep = (bytes: Buffer, rep: UuidRep): Buffer => {
+  if (rep === "standard" || rep === "pythonLegacy") return Buffer.from(bytes);
+  const out = Buffer.alloc(16);
+  if (rep === "csharpLegacy") {
+    out[0] = bytes[3]!;
+    out[1] = bytes[2]!;
+    out[2] = bytes[1]!;
+    out[3] = bytes[0]!;
+    out[4] = bytes[5]!;
+    out[5] = bytes[4]!;
+    out[6] = bytes[7]!;
+    out[7] = bytes[6]!;
+    bytes.copy(out, 8, 8, 16);
+    return out;
+  }
+  // javaLegacy: reverse the two 8-byte halves independently.
+  for (let i = 0; i < 8; i++) out[i] = bytes[7 - i]!;
+  for (let i = 0; i < 8; i++) out[8 + i] = bytes[15 - i]!;
+  return out;
+};
+
+// Build the Binary a driver using `rep` would persist for `canonical`.
+const uuidBinary = (canonical: string, rep: UuidRep, subType: 3 | 4): Binary => {
+  const disk = reorderForRep(uuidBytes(canonical), rep);
+  return subType === 4 ? new UUID(disk).toBinary() : new Binary(disk, 3);
+};
+
+interface SeedUuidDoc {
+  // Some rows are keyed by an ObjectId, some by the UUID itself, so the viewer
+  // has to render both `_id` shapes (and legacy subtype-3 keys, which are the
+  // trickiest to display correctly).
+  _id: ObjectId | Binary;
+  canonical: string;
+  format: UuidRep;
+  subType: 3 | 4;
+  marker: string;
+  value: Binary;
+  createdAt: Date;
+  note: string;
+  // Only set on the nested-sample row — exercises the recursive display walk
+  // over UUIDs held in arrays and sub-documents.
+  siblings?: Binary[];
+  related?: { primary: Binary; legacy: Binary };
+}
+
+const buildUuidDocs = (): SeedUuidDoc[] => {
+  const docs: SeedUuidDoc[] = [];
+  for (const canonical of CANONICAL_UUIDS) {
+    for (const { rep, subType, marker } of UUID_REPS) {
+      const value = uuidBinary(canonical, rep, subType);
+      docs.push({
+        // Key the standard-format rows by the UUID itself; the rest by
+        // ObjectId — this keeps a subtype-4 UUID `_id` in the mix without
+        // colliding on the shared canonical value.
+        _id: subType === 4 ? value : new ObjectId(),
+        canonical,
+        format: rep,
+        subType,
+        marker,
+        value,
+        createdAt: daysAgo(rangeInt(0, 365)),
+        note:
+          subType === 4
+            ? "Standard subtype-4 UUID — representation-independent."
+            : `Legacy subtype-3 UUID as written by the ${rep} driver — only the "${marker}" representation decodes it back to \`canonical\`.`,
+      });
+    }
+  }
+  // One document exercising UUIDs nested in arrays / sub-documents, so the
+  // read-only humanize walk is tested beyond top-level fields.
+  const nestedCanonical = CANONICAL_UUIDS[0]!;
+  docs.push({
+    _id: new ObjectId(),
+    canonical: nestedCanonical,
+    format: "standard",
+    subType: 4,
+    marker: "UUID",
+    value: uuidBinary(nestedCanonical, "standard", 4),
+    createdAt: daysAgo(1),
+    note: "Nested/array UUIDs — exercises the recursive display walk.",
+    siblings: CANONICAL_UUIDS.map((c) => uuidBinary(c, "standard", 4)),
+    related: {
+      primary: uuidBinary(nestedCanonical, "standard", 4),
+      legacy: uuidBinary(nestedCanonical, "csharpLegacy", 3),
+    },
+  });
+  return docs;
+};
+
 const buildComments = (count: number, posts: SeedPost[]): SeedComment[] =>
   Array.from({ length: count }, () => {
     const post = pick(posts);
@@ -420,12 +573,18 @@ const main = async (): Promise<void> => {
     const orders = buildOrders(120, users, products);
     const posts = buildPosts(40, users);
     const comments = buildComments(220, posts);
+    const pagingRows = buildPagingRows(10_000);
+    const uuidDocs = buildUuidDocs();
 
     console.log("[seed] inserting into acme…");
     await Promise.all([
       acme.collection("users").insertMany(users),
       acme.collection("products").insertMany(products),
       acme.collection("orders").insertMany(orders),
+      acme.collection("paging").insertMany(pagingRows),
+      // Typed explicitly because these docs key some rows by a Binary `_id`
+      // (a subtype-4 UUID), which the default ObjectId-only signature rejects.
+      acme.collection<SeedUuidDoc>("uuids").insertMany(uuidDocs),
     ]);
     await Promise.all([
       acme.collection("users").createIndex({ email: 1 }, { unique: true }),
@@ -433,6 +592,8 @@ const main = async (): Promise<void> => {
       acme.collection("products").createIndex({ category: 1 }),
       acme.collection("orders").createIndex({ userId: 1, placedAt: -1 }),
       acme.collection("orders").createIndex({ status: 1 }),
+      acme.collection("paging").createIndex({ seq: 1 }, { unique: true }),
+      acme.collection("uuids").createIndex({ format: 1 }),
     ]);
 
     console.log("[seed] inserting into bloggy…");
@@ -456,7 +617,7 @@ const main = async (): Promise<void> => {
     await seedBucket(acme, "media", samples);
 
     console.log(
-      `[seed] done — acme(users=${users.length}, products=${products.length}, orders=${orders.length}, media=${samples.length} files) bloggy(posts=${posts.length}, comments=${comments.length}) cdn(fs=${samples.length} files)`,
+      `[seed] done — acme(users=${users.length}, products=${products.length}, orders=${orders.length}, paging=${pagingRows.length}, uuids=${uuidDocs.length}, media=${samples.length} files) bloggy(posts=${posts.length}, comments=${comments.length}) cdn(fs=${samples.length} files)`,
     );
   } finally {
     await client.close();

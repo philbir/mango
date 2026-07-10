@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import type { OidcBrowser } from "../browser.js";
 import { decryptString, encryptString, redactUri } from "./crypto.js";
 import { JsonFileStore } from "./jsonFile.js";
 
@@ -45,6 +46,8 @@ export interface Connection {
    * auto-detected from the OIDC issuer advertised by the server.
    */
   azureTenantId: string | null;
+  oidcBrowser: OidcBrowser;
+  oidcBrowserProfile: string | null;
 }
 
 export interface ConnectionWithUri extends Connection {
@@ -71,6 +74,8 @@ interface StoredConnection {
   oidcTokenAudience?: string | null;
   azureClientId?: string | null;
   azureTenantId?: string | null;
+  oidcBrowser?: OidcBrowser;
+  oidcBrowserProfile?: string | null;
 }
 
 interface ConnectionsFile {
@@ -89,6 +94,9 @@ const normalizeSource = (s: unknown): ConnectionSource =>
 const normalizeOidcProvider = (v: unknown): OidcProvider =>
   v === "azure-cli" ? "azure-cli" : v === "azure-browser" ? "azure-browser" : null;
 
+const normalizeOidcBrowser = (v: unknown): OidcBrowser =>
+  v === "chrome" || v === "edge" || v === "firefox" || v === "safari" ? v : null;
+
 const fromStored = (s: StoredConnection): Connection => ({
   id: s.id,
   name: s.name,
@@ -103,6 +111,8 @@ const fromStored = (s: StoredConnection): Connection => ({
   oidcTokenAudience: s.oidcTokenAudience ?? null,
   azureClientId: s.azureClientId ?? null,
   azureTenantId: s.azureTenantId ?? null,
+  oidcBrowser: normalizeOidcBrowser(s.oidcBrowser),
+  oidcBrowserProfile: s.oidcBrowserProfile ?? null,
 });
 
 const toWithUri = (s: StoredConnection): ConnectionWithUri => ({
@@ -144,6 +154,8 @@ export interface CreateConnectionInput {
   oidcTokenAudience?: string | null;
   azureClientId?: string | null;
   azureTenantId?: string | null;
+  oidcBrowser?: OidcBrowser;
+  oidcBrowserProfile?: string | null;
 }
 
 export interface UpdateConnectionInput {
@@ -157,6 +169,8 @@ export interface UpdateConnectionInput {
   oidcTokenAudience?: string | null;
   azureClientId?: string | null;
   azureTenantId?: string | null;
+  oidcBrowser?: OidcBrowser;
+  oidcBrowserProfile?: string | null;
 }
 
 const sortForList = (a: StoredConnection, b: StoredConnection): number => {
@@ -228,6 +242,8 @@ export const createConnection = (input: CreateConnectionInput): ConnectionPublic
     oidcTokenAudience: input.oidcTokenAudience ?? null,
     azureClientId: input.azureClientId ?? null,
     azureTenantId: input.azureTenantId ?? null,
+    oidcBrowser: input.oidcBrowser ?? null,
+    oidcBrowserProfile: input.oidcBrowserProfile ?? null,
   };
   store.mutate((file) => ({
     ...file,
@@ -271,6 +287,14 @@ export const updateConnection = (
       input.azureTenantId !== undefined
         ? input.azureTenantId ?? null
         : (existing.azureTenantId ?? null),
+    oidcBrowser:
+      input.oidcBrowser !== undefined
+        ? input.oidcBrowser ?? null
+        : (existing.oidcBrowser ?? null),
+    oidcBrowserProfile:
+      input.oidcBrowserProfile !== undefined
+        ? input.oidcBrowserProfile ?? null
+        : (existing.oidcBrowserProfile ?? null),
     updatedAt: now,
   };
   store.mutate((file) => ({
@@ -332,6 +356,12 @@ export const upsertStandaloneConnection = (
           lastUsedAt: null,
           aspire: null,
           source: null,
+          oidcProvider: null,
+          oidcTokenAudience: null,
+          azureClientId: null,
+          azureTenantId: null,
+          oidcBrowser: null,
+          oidcBrowserProfile: null,
         };
     return {
       ...file,
@@ -399,6 +429,8 @@ export const upsertEnvConnection = (): void => {
           oidcTokenAudience: null,
           azureClientId: null,
           azureTenantId: null,
+          oidcBrowser: null,
+          oidcBrowserProfile: null,
         };
     return {
       ...file,
@@ -407,6 +439,12 @@ export const upsertEnvConnection = (): void => {
             c.id === ENV_DEFAULT_CONNECTION_ID ? next : c,
           )
         : [...file.connections, next],
+      oidcProvider: null,
+      oidcTokenAudience: null,
+      azureClientId: null,
+      azureTenantId: null,
+      oidcBrowser: null,
+      oidcBrowserProfile: null,
     };
   });
   console.log(
