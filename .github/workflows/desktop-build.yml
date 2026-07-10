@@ -149,10 +149,10 @@ jobs:
           includeUpdaterJson: false
           args: --target ${{ matrix.target }} --bundles ${{ steps.bundles.outputs.value }}
 
-      # tauri-action uploads the user-facing bundles (.dmg / .msi / .exe /
-      # .deb / .app.tar.gz) but not the .sig files needed for the updater
-      # manifest. Upload them here, renaming so each sig matches the
-      # release-asset name tauri-action picked.
+      # With createUpdaterArtifacts on, tauri-action uploads each installer and
+      # its .sig — EXCEPT on macOS, where it renames the updater tarball to
+      # Mango_aarch64.app.tar.gz but leaves the matching .sig behind. Upload
+      # that one here so publish-updater can pair it.
       - name: Attach updater signatures to release
         if: github.ref_type == 'tag'
         shell: bash
@@ -174,11 +174,11 @@ jobs:
                 "Mango_aarch64.app.tar.gz.sig" --clobber
               ;;
             x86_64-pc-windows-msvc)
-              # The updater downloads + unpacks the .nsis.zip; the .sig is
-              # over the zip. The .zip isn't a tauri-action default upload,
-              # so push both.
-              ZIP="${BUNDLE}/nsis/Mango_${VERSION}_x64-setup.nsis.zip"
-              gh release upload "${VERSION}" "${ZIP}" "${ZIP}.sig" --clobber
+              # With createUpdaterArtifacts on, tauri-action uploads the NSIS
+              # installer (Mango_<v>_x64-setup.exe) AND its .exe.sig itself —
+              # the Windows updater installs from the .exe directly. Nothing to
+              # attach here.
+              echo "Windows updater .exe + .sig uploaded by tauri-action — skipping."
               ;;
             x86_64-unknown-linux-gnu)
               echo "Linux ships .deb only — no updater bundle, skipping."
@@ -221,12 +221,12 @@ jobs:
               '{ "darwin-aarch64": { signature: $sig, url: $url } }')
           fi
 
-          WIN_SIG_PATH="sigs/Mango_${VERSION}_x64-setup.nsis.zip.sig"
+          WIN_SIG_PATH="sigs/Mango_${VERSION}_x64-setup.exe.sig"
           if [ -f "${WIN_SIG_PATH}" ]; then
             WIN_SIG=$(cat "${WIN_SIG_PATH}")
             PLATFORMS=$(echo "${PLATFORMS}" | jq \
               --arg sig "${WIN_SIG}" \
-              --arg url "${BASE}/Mango_${VERSION}_x64-setup.nsis.zip" \
+              --arg url "${BASE}/Mango_${VERSION}_x64-setup.exe" \
               '. + { "windows-x86_64": { signature: $sig, url: $url } }')
           fi
 
