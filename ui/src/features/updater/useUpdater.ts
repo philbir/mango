@@ -42,14 +42,23 @@ export function useUpdater() {
     error: null,
   });
 
-  const check = useCallback(async () => {
+  // `silent` suppresses the error banner — used for the automatic startup
+  // check, where a missing manifest (no stable release published yet) or an
+  // offline machine is routine and not worth alarming the user over. A manual
+  // "check for updates" action should pass silent = false so failures surface.
+  const check = useCallback(async (silent = false) => {
     if (!isTauri()) return;
     setState((s) => ({ ...s, checking: true, error: null }));
     try {
       const update = await invoke<UpdateInfo | null>("check_for_update");
       setState((s) => ({ ...s, checking: false, available: update }));
     } catch (e) {
-      setState((s) => ({ ...s, checking: false, error: String(e) }));
+      if (silent) {
+        console.warn("Background update check failed:", e);
+        setState((s) => ({ ...s, checking: false }));
+      } else {
+        setState((s) => ({ ...s, checking: false, error: String(e) }));
+      }
     }
   }, []);
 
@@ -71,9 +80,10 @@ export function useUpdater() {
   }, []);
 
   // Check once on startup, after a short delay so the app is fully rendered.
+  // Silent: the startup check never surfaces an error banner.
   useEffect(() => {
     if (!isTauri()) return;
-    const timer = setTimeout(check, 4000);
+    const timer = setTimeout(() => void check(true), 4000);
     return () => clearTimeout(timer);
   }, [check]);
 
