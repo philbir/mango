@@ -27,7 +27,7 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.tags }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Prepare platform pair
         id: prep
