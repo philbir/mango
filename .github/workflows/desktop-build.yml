@@ -35,6 +35,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # setup-node@v5 defaults package-manager-cache to true, which runs
+          # `yarn cache dir` before corepack is enabled — the global Yarn 1.x
+          # then errors on our `packageManager: yarn@4`. We enable corepack and
+          # cache nothing here, so turn it off.
+          package-manager-cache: false
 
       - run: corepack enable
 

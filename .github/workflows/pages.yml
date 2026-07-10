@@ -30,6 +30,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # See desktop-build.yml: avoid setup-node@v5's default yarn cache,
+          # which runs before corepack is enabled and trips on packageManager.
+          package-manager-cache: false
 
       - run: corepack enable
 
