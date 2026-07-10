@@ -16,13 +16,14 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
+import { requestOidcAuthPrompt } from "../connections/oidcAuthPrompt";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { useConnectionHealth } from "../connections/useConnectionHealth";
 import { useTabs } from "../tabs/TabsContext";
 
 export const CollectionsPane = () => {
-  const { activeId } = useActiveConnection();
+  const { activeId, active } = useActiveConnection();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
   const {
@@ -77,7 +78,49 @@ export const CollectionsPane = () => {
     return [...visible].sort(byNameWithGridFsPairing);
   }, [collectionsQuery.data, search]);
 
+  const AUTH_PROMPT_ERROR =
+    /AUTH_CONFIRMATION_REQUIRED:|Browser authentication is already in progress|interactive login timed out|cancelled/i;
+
+  const lastPromptedError = useRef<string | null>(null);
+
+  const openAuthPrompt = (mode: "activate" | "retry") => {
+    if (!active) return;
+    requestOidcAuthPrompt(
+      active,
+      async (selection) => {
+        await api.prepareOidcBrowserAuth(active.id, selection);
+        await health.refetch();
+      },
+      mode,
+    );
+  };
+
+  // Whenever the health check comes back needing a fresh browser-auth
+  // confirmation — including on background polling ticks, not just an
+  // explicit Retry click — surface the OIDC auth dialog automatically so a
+  // browser window never opens without the user having seen it first.
+  useEffect(() => {
+    if (!active || active.oidcProvider !== "azure-browser") return;
+    if (!health.error || !AUTH_PROMPT_ERROR.test(health.error)) {
+      lastPromptedError.current = null;
+      return;
+    }
+    if (lastPromptedError.current === health.error) return;
+    lastPromptedError.current = health.error;
+    openAuthPrompt("activate");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, health.error]);
+
   const onRefresh = () => {
+    if (
+      active &&
+      active.oidcProvider === "azure-browser" &&
+      health.error &&
+      AUTH_PROMPT_ERROR.test(health.error)
+    ) {
+      openAuthPrompt("retry");
+      return;
+    }
     health.refetch();
     if (health.status !== "ok") return;
     if (database) collectionsQuery.refetch();
@@ -165,7 +208,7 @@ export const CollectionsPane = () => {
         {activeId && health.status === "error" && (
           <NotConnectedPanel
             error={health.error}
-            onRetry={() => health.refetch()}
+            onRetry={onRefresh}
             isFetching={health.isFetching}
           />
         )}

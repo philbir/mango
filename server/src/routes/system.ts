@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { Hono } from "hono";
+import { listAvailableBrowsers } from "../browser.js";
 import { clearAiSettings } from "../store/aiSettings.js";
 import {
   countUndecryptableConnections,
@@ -18,6 +19,10 @@ systemRoute.post("/reset-encrypted", (c) => {
   const removed = deleteAllConnections();
   clearAiSettings();
   return c.json({ ok: true, removedConnections: removed });
+});
+
+systemRoute.get("/browsers", (c) => {
+  return c.json({ browsers: listAvailableBrowsers() });
 });
 
 const platformOpener = (): { cmd: string; args: (target: string) => string[] } | null => {

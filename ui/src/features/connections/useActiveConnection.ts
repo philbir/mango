@@ -6,6 +6,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import { api } from "../../api/client";
+import {
+  requestOidcAuthPrompt,
+  requiresOidcAuthPrompt,
+} from "./oidcAuthPrompt";
 import { useServerConfig } from "./useServerConfig";
 
 const STORAGE_KEY = "mango:active-connection-id";
@@ -94,21 +98,54 @@ export const useActiveConnection = () => {
       return;
     }
     if (!list.data) return;
-    const ids = list.data.connections.map((c) => c.id);
-    if (ids.length === 0) {
+    const allowed = list.data.connections.filter((connection) => !requiresOidcAuthPrompt(connection));
+    if (allowed.length === 0) {
       if (pickerId !== null) setStoredPickerId(null);
       return;
     }
-    if (pickerId && ids.includes(pickerId)) return;
-    setStoredPickerId(list.data.connections[0]!.id);
+    if (
+      pickerId &&
+      allowed.some((connection) => connection.id === pickerId)
+    ) {
+      return;
+    }
+    setStoredPickerId(allowed[0]!.id);
   }, [list.data, pickerId, isStandalone, config.standaloneConnectionId]);
 
-  const setActiveId = (id: string | null) => {
-    if (isStandalone) return;
+  const setActiveId = (
+    id: string | null,
+    options?: { onActivated?: () => void },
+  ): boolean => {
+    if (isStandalone) return false;
+    if (!id) {
+      setStoredPickerId(null);
+      options?.onActivated?.();
+      return true;
+    }
+    const connection =
+      list.data?.connections.find((candidate) => candidate.id === id) ?? null;
+    if (connection && requiresOidcAuthPrompt(connection)) {
+      requestOidcAuthPrompt(connection, async (selection) => {
+        await api.prepareOidcBrowserAuth(id, selection);
+        await api.testConnection(id);
+        setStoredPickerId(id);
+        options?.onActivated?.();
+      });
+      return false;
+    }
     setStoredPickerId(id);
+    options?.onActivated?.();
+    return true;
   };
 
-  const effectiveId = viewCid ?? pickerId;
+  const viewConnection =
+    viewCid
+      ? list.data?.connections.find((connection) => connection.id === viewCid) ?? null
+      : null;
+  const effectiveId =
+    viewConnection && requiresOidcAuthPrompt(viewConnection)
+      ? null
+      : (viewCid ?? pickerId);
   const active =
     list.data?.connections.find((c) => c.id === effectiveId) ?? null;
   return {

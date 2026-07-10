@@ -109,9 +109,12 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         ? connections.find((c) => c.id === fm.connectionId)
         : null;
       if (stored) {
-        setActiveId(stored.id);
-        if (fm.database) setDatabase(fm.database);
-        routeToView(stored.id, relPath, fm);
+        setActiveId(stored.id, {
+          onActivated: () => {
+            if (fm.database) setDatabase(fm.database);
+            routeToView(stored.id, relPath, fm);
+          },
+        });
         return;
       }
       // Legacy file (no connectionId) AND we already have an active
@@ -284,9 +287,12 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
           staleConnectionId={pendingOpen.staleConnectionId}
           onCancel={() => setPendingOpen(null)}
           onPick={(connectionId, database) => {
-            setActiveId(connectionId);
-            setDatabase(database);
-            routeToView(connectionId, pendingOpen.relPath, pendingOpen.frontmatter);
+            setActiveId(connectionId, {
+              onActivated: () => {
+                setDatabase(database);
+                routeToView(connectionId, pendingOpen.relPath, pendingOpen.frontmatter);
+              },
+            });
             setPendingOpen(null);
           }}
         />

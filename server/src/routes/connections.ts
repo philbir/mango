@@ -1,7 +1,14 @@
 import { Hono } from "hono";
 import { MongoClient } from "mongodb";
+import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { closeMongoClient, getMongoClientFor } from "../config.js";
+import {
+  buildMongoClientOptions,
+  closeMongoClient,
+  getMongoClientFor,
+  prepareOidcBrowserAuth,
+  reopenOidcBrowserAuth,
+} from "../config.js";
 import { resolveServerConfig, STANDALONE_CONNECTION_ID } from "../mode.js";
 import {
   redactErrorMessage,
@@ -35,6 +42,10 @@ const aspireRefSchema = z
 const sourceSchema = z.enum(["docker"]).nullable().optional();
 
 const oidcProviderSchema = z.enum(["azure-cli", "azure-browser"]).nullable().optional();
+const oidcBrowserSchema = z
+  .enum(["chrome", "edge", "firefox", "safari"])
+  .nullable()
+  .optional();
 
 const createBody = z.object({
   name: z.string().min(1).max(100),
@@ -47,9 +58,16 @@ const createBody = z.object({
   oidcTokenAudience: z.string().optional().nullable(),
   azureClientId: z.string().optional().nullable(),
   azureTenantId: z.string().optional().nullable(),
+  oidcBrowser: oidcBrowserSchema,
+  oidcBrowserProfile: z.string().optional().nullable(),
 });
 
 const updateBody = createBody.partial();
+const prepareOidcAuthBody = z.object({
+  oidcBrowser: oidcBrowserSchema,
+  oidcBrowserProfile: z.string().optional().nullable(),
+  forceRestart: z.boolean().optional(),
+});
 
 connectionsRoute.get("/", (c) => {
   const all = listConnections();
@@ -94,6 +112,42 @@ connectionsRoute.get("/:id/secret", (c) => {
   return c.json({ uri: conn.uri });
 });
 
+connectionsRoute.post("/:id/oidc/browser-auth", async (c) => {
+  const id = c.req.param("id");
+  const conn = getConnection(id);
+  if (!conn) return c.json({ error: "Connection not found" }, 404);
+  const parsed = prepareOidcAuthBody.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
+  }
+  prepareOidcBrowserAuth(
+    id,
+    {
+      browser: parsed.data.oidcBrowser ?? null,
+      profile: parsed.data.oidcBrowserProfile ?? null,
+    },
+    { forceRestart: parsed.data.forceRestart },
+  );
+  return c.json({ ok: true });
+});
+
+connectionsRoute.post("/:id/oidc/browser-auth/reopen", async (c) => {
+  const id = c.req.param("id");
+  const parsed = prepareOidcAuthBody.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: parsed.error.issues[0]?.message ?? "Bad input" }, 400);
+  }
+  try {
+    await reopenOidcBrowserAuth(id, {
+      browser: parsed.data.oidcBrowser ?? null,
+      profile: parsed.data.oidcBrowserProfile ?? null,
+    });
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ error: redactErrorMessage(e) }, 400);
+  }
+});
+
 connectionsRoute.patch("/:id", async (c) => {
   if (isStandalone()) return c.json(standaloneError(), 403);
   const id = c.req.param("id");
@@ -135,11 +189,28 @@ const HEALTH_CHECK_TIMEOUT_MS = 3000;
 connectionsRoute.post("/:id/test", async (c) => {
   const id = c.req.param("id");
   try {
-    const work = (async () => {
-      const { client, defaultDatabase } = await getMongoClientFor(id);
-      const dbName = defaultDatabase ?? "admin";
-      return client.db(dbName).command({ ping: 1, maxTimeMS: HEALTH_CHECK_TIMEOUT_MS });
-    })();
+    const conn = getConnection(id);
+    const connect = getMongoClientFor(id);
+    // Interactive browser authentication can legitimately take minutes. Once
+    // the user has confirmed it, wait for that flow to finish rather than
+    // returning a false health timeout after three seconds. The actual Mongo
+    // ping remains capped below.
+    const { client, defaultDatabase } =
+      conn?.oidcProvider === "azure-browser"
+        ? await connect
+        : await Promise.race([
+            connect,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
+                HEALTH_CHECK_TIMEOUT_MS,
+              ),
+            ),
+          ]);
+    const dbName = defaultDatabase ?? "admin";
+    const work = client
+      .db(dbName)
+      .command({ ping: 1, maxTimeMS: HEALTH_CHECK_TIMEOUT_MS });
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error(`Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
@@ -158,7 +229,17 @@ connectionsRoute.post("/:id/test", async (c) => {
  */
 connectionsRoute.post("/test-uri", async (c) => {
   const body = z
-    .object({ uri: z.string().min(1) })
+    .object({
+      uri: z.string().min(1),
+      name: z.string().optional(),
+      oidcProvider: oidcProviderSchema,
+      oidcTokenAudience: z.string().optional().nullable(),
+      azureClientId: z.string().optional().nullable(),
+      azureTenantId: z.string().optional().nullable(),
+      oidcBrowser: oidcBrowserSchema,
+      oidcBrowserProfile: z.string().optional().nullable(),
+      authAttemptId: z.string().uuid().optional(),
+    })
     .safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return c.json({ error: body.error.issues[0]?.message ?? "Bad input" }, 400);
@@ -166,9 +247,29 @@ connectionsRoute.post("/test-uri", async (c) => {
   const cleaned = sanitizeMongoUri(body.data.uri);
   const uriError = validateMongoUri(cleaned);
   if (uriError) return c.json({ error: uriError }, 400);
-  const client = new MongoClient(cleaned, {
-    serverSelectionTimeoutMS: 5_000,
-  });
+  const connectionId = `test-uri:${body.data.authAttemptId ?? uuid()}`;
+  if (body.data.oidcProvider === "azure-browser") {
+    // This endpoint is only ever called right after the UI's OIDC auth
+    // dialog has been confirmed for this exact test run, so pre-approve the
+    // one-shot browser launch for the ephemeral connection ID used below.
+    prepareOidcBrowserAuth(connectionId, {
+      browser: body.data.oidcBrowser ?? null,
+      profile: body.data.oidcBrowserProfile ?? null,
+    });
+  }
+  const client = new MongoClient(
+    cleaned,
+    buildMongoClientOptions({
+      connectionId,
+      connectionName: body.data.name?.trim() || "Unsaved connection",
+      oidcProvider: body.data.oidcProvider ?? null,
+      oidcTokenAudience: body.data.oidcTokenAudience ?? null,
+      azureClientId: body.data.azureClientId ?? null,
+      azureTenantId: body.data.azureTenantId ?? null,
+      oidcBrowser: body.data.oidcBrowser ?? null,
+      oidcBrowserProfile: body.data.oidcBrowserProfile ?? null,
+    }),
+  );
   try {
     await client.connect();
     await client.db("admin").command({ ping: 1 });

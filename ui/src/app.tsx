@@ -4,6 +4,13 @@ import { AssistantPanel } from "./features/assistant/AssistantPanel";
 import { AssistantToggle } from "./features/assistant/AssistantToggle";
 import { SidebarShell } from "./features/sidebar/SidebarShell";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
+import {
+  cancelOidcAuthPrompt,
+  confirmOidcAuthPrompt,
+  requiresOidcAuthPrompt,
+  usePendingOidcAuthPrompt,
+} from "./features/connections/oidcAuthPrompt";
+import { OidcAuthDialog } from "./features/connections/OidcAuthDialog";
 import { NotebookView } from "./features/workspaces/NotebookView";
 import {
   ViewConnectionContext,
@@ -18,13 +25,20 @@ import { TabBar } from "./features/tabs/TabBar";
 import { useTabs } from "./features/tabs/TabsContext";
 import { UpdateBanner } from "./features/updater/UpdateBanner";
 import { useSettings } from "./settings";
+import { api } from "./api/client";
 
 export const App = () => {
   const { tabMode } = useSettings();
   const { tabs, activeTab, closeTab } = useTabs();
   const { toggle } = useAssistant();
+  const pendingOidcPrompt = usePendingOidcAuthPrompt();
   const { pickerId, setActiveId, connections, isLoading: connectionsLoading } =
     useActiveConnection();
+  const activeTabConnection =
+    activeTab
+      ? connections.find((connection) => connection.id === activeTab.connectionId) ?? null
+      : null;
+  const blockedActiveTab = requiresOidcAuthPrompt(activeTabConnection);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,7 +56,7 @@ export const App = () => {
   // active-tab changes — without the ref guard, a manual picker change would
   // also fire this effect and immediately revert pickerId back to the active
   // tab's connection, defeating the picker.
-  const lastActiveTabIdRef = useRef<string | null>(activeTab?.id ?? null);
+  const lastActiveTabIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!tabMode) {
       lastActiveTabIdRef.current = activeTab?.id ?? null;
@@ -91,7 +105,7 @@ export const App = () => {
           {tabMode && <TabBar />}
           <div className="flex flex-1 flex-col overflow-hidden">
             {!activeTab && <EmptyState />}
-            {activeTab && (
+            {activeTab && !blockedActiveTab && (
               <ViewConnectionContext.Provider value={activeTab.connectionId}>
                 {/*
                   Include the bound workspace file path in the React `key`
@@ -138,11 +152,44 @@ export const App = () => {
                 )}
               </ViewConnectionContext.Provider>
             )}
+            {activeTab && blockedActiveTab && <EmptyState />}
           </div>
           <AssistantToggle />
         </main>
         <AssistantPanel />
       </div>
+      {pendingOidcPrompt && (
+        <OidcAuthDialog
+          connectionName={pendingOidcPrompt.connection.name}
+          initialBrowser={pendingOidcPrompt.connection.oidcBrowser}
+          initialBrowserProfile={pendingOidcPrompt.connection.oidcBrowserProfile}
+          forceRestart={pendingOidcPrompt.mode === "retry"}
+          confirmLabel={
+            pendingOidcPrompt.mode === "retry" ? "Retry authentication" : "Continue"
+          }
+          message={
+            pendingOidcPrompt.mode === "retry" ? (
+              <>
+                The previous browser sign-in appears stuck or expired. Pick a
+                browser and restart authentication for this connection.
+              </>
+            ) : (
+              <>
+                This connection needs to authenticate using a browser before
+                Mango can connect.
+              </>
+            )
+          }
+          onConfirm={confirmOidcAuthPrompt}
+          onReopen={async ({ oidcBrowser, oidcBrowserProfile }) => {
+            await api.reopenOidcBrowserAuth(pendingOidcPrompt.connection.id, {
+              oidcBrowser,
+              oidcBrowserProfile,
+            });
+          }}
+          onCancel={cancelOidcAuthPrompt}
+        />
+      )}
     </div>
   );
 };
