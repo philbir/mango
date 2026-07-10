@@ -78,6 +78,21 @@ jobs:
 
       - run: yarn compile-server ${{ matrix.target }}
 
+      # The MSI/WiX bundler can only encode a numeric-only pre-release
+      # identifier in the ProductVersion (e.g. `0.5.0-1`), and rejects
+      # `0.5.0-beta.1` outright. Drop MSI for pre-release tags — NSIS handles
+      # SemVer pre-releases and is what the Windows updater consumes anyway.
+      - name: Resolve bundles for this tag
+        id: bundles
+        shell: bash
+        run: |
+          B="${{ matrix.bundles }}"
+          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" && "${GITHUB_REF_NAME}" == *-* ]]; then
+            B="nsis"
+            echo "Pre-release tag ${GITHUB_REF_NAME}: building nsis only (skipping msi)."
+          fi
+          echo "value=$B" >> "$GITHUB_OUTPUT"
+
       # Notarization needs the App Store Connect .p8 private key on disk.
       # The secret holds the base64-encoded file; decode and export the
       # path so tauri-action picks it up. No-op on non-macOS runners and
@@ -132,7 +147,7 @@ jobs:
           # so the manifest is skipped and .sig files never get attached.
           # We compose latest.json ourselves in the `publish-updater` job below.
           includeUpdaterJson: false
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --target ${{ matrix.target }} --bundles ${{ steps.bundles.outputs.value }}
 
       # tauri-action uploads the user-facing bundles (.dmg / .msi / .exe /
       # .deb / .app.tar.gz) but not the .sig files needed for the updater
