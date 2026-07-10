@@ -18,6 +18,15 @@ interface Props {
   readOnly?: boolean;
   completion?: MongoCompletionConfig;
   onSubmit?: () => void;
+  /**
+   * Editor language. Defaults to `"json"`. Use `"javascript"` for read-only
+   * shell-literal views (e.g. `ObjectId("…")`) so the built-in JSON validator
+   * doesn't flag them as invalid. Only the JSON language worker is bundled
+   * (see monaco-setup.ts), so `"javascript"` gives monarch highlighting with no
+   * diagnostics. The language is fixed at mount — change the component `key` to
+   * switch it.
+   */
+  language?: "json" | "javascript";
 }
 
 export interface MonacoJsonInputHandle {
@@ -35,6 +44,7 @@ export const MonacoJsonInput = forwardRef<MonacoJsonInputHandle, Props>(
       readOnly = false,
       completion,
       onSubmit,
+      language = "json",
     },
     ref,
   ) {
@@ -74,11 +84,12 @@ export const MonacoJsonInput = forwardRef<MonacoJsonInputHandle, Props>(
       ensureMongoCompletionRegistered();
 
       const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
-      const uri = monaco.Uri.parse(`inmemory://mongo-manager/${safeId}.json`);
+      const ext = language === "javascript" ? "js" : "json";
+      const uri = monaco.Uri.parse(`inmemory://mongo-manager/${safeId}.${ext}`);
       const existing = monaco.editor.getModel(uri);
       const model =
         existing ??
-        monaco.editor.createModel(value, "json", uri);
+        monaco.editor.createModel(value, language, uri);
 
       if (existing && existing.getValue() !== value) {
         existing.setValue(value);

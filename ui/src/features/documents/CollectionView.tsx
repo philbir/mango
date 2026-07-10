@@ -7,7 +7,8 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api, extractIdString } from "../../api/client";
+import { ApiError, api, extractIdString, stringifyEJSON } from "../../api/client";
+import { BatchOpDialog, type BatchOp } from "./BatchOpDialog";
 import {
   MonacoJsonInput,
   type MonacoJsonInputHandle,
@@ -70,6 +71,13 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   }, [tab?.workspaceFilePath, tab?.initialPageMode]);
   const [queryMode, setQueryMode] = useState<"raw" | "builder">("raw");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Multi-select for batch delete/update. Maps id-string → raw BSON `_id` so we
+  // can rebuild a typed `{ _id: { $in: [...] } }` filter (selection may span
+  // pages, so we keep the raw values rather than re-deriving from the page).
+  const [selectedRows, setSelectedRows] = useState<Map<string, unknown>>(
+    () => new Map(),
+  );
+  const [batchOp, setBatchOp] = useState<BatchOp | null>(null);
   const config = useServerConfig();
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -173,6 +181,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
     setFilter("");
     setFilterDraft(EMPTY_FILTER_TEMPLATE);
     setSelectedFields(new Set());
+    setSelectedRows(new Map());
   }, [name]);
 
   // Seed the filter from the bound workspace file. Fires on initial load
@@ -291,7 +300,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
   const filterEditorRef = useRef<MonacoJsonInputHandle | null>(null);
 
-  const { data, isLoading, isError, error, isFetching } = useQuery({
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: [
       "docs",
       activeId,
@@ -328,10 +337,48 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
   const onApplyFilter = (next?: string) => {
     const value = next ?? filterDraft;
+    // If neither the filter nor the page changes, the query key stays the
+    // same and React Query won't refetch — but Run should always re-query
+    // to pull fresh data, so force a refetch in that case.
+    const unchanged = value === filter && page === 0;
     setFilterDraft(value);
     setFilter(value);
     setPage(0);
+    // A new result set invalidates the previous selection's row ids.
+    setSelectedRows(new Map());
+    if (unchanged) void refetch();
   };
+
+  const clearSelection = () => setSelectedRows(new Map());
+  const toggleRow = (id: string, rawId: unknown, selected: boolean) => {
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      if (selected) next.set(id, rawId);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllRows = (
+    rows: Array<{ id: string; rawId: unknown }>,
+    selected: boolean,
+  ) => {
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      for (const r of rows) {
+        if (selected) next.set(r.id, r.rawId);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  };
+  const selectedIdSet = useMemo(
+    () => new Set(selectedRows.keys()),
+    [selectedRows],
+  );
+  const selectionFilterEJSON = useMemo(
+    () => stringifyEJSON({ _id: { $in: [...selectedRows.values()] } }),
+    [selectedRows],
+  );
 
   const docs = data?.documents ?? [];
   const selectedDoc = useMemo(() => {
@@ -632,6 +679,15 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         }
         onRowClick={(id) => setSelectedId(id)}
         emptyHint="No matching documents."
+        selection={{
+          selectedIds: selectedIdSet,
+          onToggle: toggleRow,
+          onToggleAll: toggleAllRows,
+          count: selectedRows.size,
+          onDelete: () => setBatchOp("delete"),
+          onUpdate: () => setBatchOp("update"),
+          onClear: clearSelection,
+        }}
       />
 
       </>
@@ -642,6 +698,17 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           collectionName={name}
           document={selectedDoc}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      {batchOp && (
+        <BatchOpDialog
+          collectionName={name}
+          filterEJSON={selectionFilterEJSON}
+          count={selectedRows.size}
+          initialOp={batchOp}
+          onClose={() => setBatchOp(null)}
+          onDone={clearSelection}
         />
       )}
 

@@ -9,6 +9,7 @@ import {
   parseFilter,
   stringifyEJSON,
 } from "../ejson.js";
+import { countForListing } from "../mongo-util.js";
 
 export const documentsRoute = new Hono();
 
@@ -19,6 +20,35 @@ const findBody = z.object({
   limit: z.number().int().positive().max(500).optional(),
   projection: z.string().optional(),
 });
+
+const deleteManyBody = z.object({ filter: z.string().optional() });
+const updateManyBody = z.object({
+  filter: z.string().optional(),
+  update: z.string(),
+});
+
+/**
+ * A Mongo update document is operator-keyed at the top level — every key must
+ * start with `$`. Shared by the single-doc PATCH handler and updateMany so the
+ * user gets a clear error instead of Mongo's cryptic "Unknown modifier".
+ */
+const validateOperatorUpdate = (
+  payload: unknown,
+): { ok: true; update: Record<string, unknown> } | { ok: false; error: string } => {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, error: "Update body must be a JSON object." };
+  }
+  const obj = payload as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return { ok: false, error: "Update is empty." };
+  if (keys.some((k) => !k.startsWith("$"))) {
+    return {
+      ok: false,
+      error: "Update body must contain only operator keys ($set, $unset, …).",
+    };
+  }
+  return { ok: true, update: obj };
+};
 
 documentsRoute.post("/:name/find", async (c) => {
   const cid = c.req.param("cid")!;
@@ -64,7 +94,7 @@ documentsRoute.post("/:name/find", async (c) => {
     .limit(limit);
   const [docs, total] = await Promise.all([
     cursor.toArray(),
-    collection.countDocuments(filter, { maxTimeMS: config.mongoMaxTimeMS }),
+    countForListing(collection, filter, config.mongoMaxTimeMS),
   ]);
 
   return c.body(
@@ -78,6 +108,71 @@ documentsRoute.post("/:name/find", async (c) => {
     200,
     { "content-type": "application/json; charset=utf-8" },
   );
+});
+
+documentsRoute.post("/:name/deleteMany", async (c) => {
+  const cid = c.req.param("cid")!;
+  const name = c.req.param("name");
+  const body = deleteManyBody.parse(await c.req.json().catch(() => ({})));
+
+  let filter: Record<string, unknown>;
+  try {
+    filter = parseFilter(body.filter);
+  } catch (e) {
+    if (e instanceof FilterParseError) return c.json({ error: e.message }, 400);
+    throw e;
+  }
+  // Guard the footgun: an empty filter deletes the whole collection. That's
+  // what the dedicated Clear action is for — batch delete always targets a
+  // subset (selected _ids or a real query).
+  if (Object.keys(filter).length === 0) {
+    return c.json(
+      { error: "Refusing deleteMany with an empty filter — use Clear collection instead." },
+      400,
+    );
+  }
+
+  const { client } = await getMongoClientFor(cid);
+  const dbName = databaseNameFor(cid, c.req.query("database"));
+  const collection = client.db(dbName).collection(name);
+  const result = await collection.deleteMany(filter);
+  return c.json({ deletedCount: result.deletedCount ?? 0 });
+});
+
+documentsRoute.post("/:name/updateMany", async (c) => {
+  const cid = c.req.param("cid")!;
+  const name = c.req.param("name");
+  const body = updateManyBody.parse(await c.req.json().catch(() => ({})));
+
+  let filter: Record<string, unknown>;
+  let update: Record<string, unknown>;
+  try {
+    filter = parseFilter(body.filter);
+    const validated = validateOperatorUpdate(parseEJSON(body.update));
+    if (!validated.ok) return c.json({ error: validated.error }, 400);
+    update = validated.update;
+  } catch (e) {
+    if (e instanceof FilterParseError) return c.json({ error: e.message }, 400);
+    return c.json(
+      { error: `Invalid EJSON body: ${e instanceof Error ? e.message : String(e)}` },
+      400,
+    );
+  }
+  if (Object.keys(filter).length === 0) {
+    return c.json(
+      { error: "Refusing updateMany with an empty filter — narrow the selection or query first." },
+      400,
+    );
+  }
+
+  const { client } = await getMongoClientFor(cid);
+  const dbName = databaseNameFor(cid, c.req.query("database"));
+  const collection = client.db(dbName).collection(name);
+  const result = await collection.updateMany(filter, update);
+  return c.json({
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+  });
 });
 
 documentsRoute.get("/:name/document/:id", async (c) => {
@@ -137,24 +232,9 @@ documentsRoute.patch("/:name/document/:id", async (c) => {
     );
   }
 
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-    return c.json({ error: "Body must be a JSON object." }, 400);
-  }
-
-  // MongoDB update documents are operator-keyed at the top level — every key
-  // must start with `$`. Reject mixed payloads up front so the user gets a
-  // clear error instead of Mongo's cryptic "Unknown modifier".
-  const obj = payload as Record<string, unknown>;
-  const keys = Object.keys(obj);
-  if (keys.length === 0) {
-    return c.json({ error: "Update is empty." }, 400);
-  }
-  if (keys.some((k) => !k.startsWith("$"))) {
-    return c.json(
-      { error: "Update body must contain only operator keys ($set, $unset, …)." },
-      400,
-    );
-  }
+  const validated = validateOperatorUpdate(payload);
+  if (!validated.ok) return c.json({ error: validated.error }, 400);
+  const obj = validated.update;
 
   const { client } = await getMongoClientFor(cid);
   const dbName = databaseNameFor(cid, c.req.query("database"));

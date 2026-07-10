@@ -572,6 +572,51 @@ export const api = {
     }>;
   },
 
+  /** deleteMany over an EJSON filter string. Server rejects an empty filter. */
+  async deleteMany(
+    cid: string,
+    name: string,
+    filterEJSON: string,
+    database?: string,
+  ): Promise<{ deletedCount: number }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/deleteMany${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filter: filterEJSON }),
+      },
+    );
+    return (await handlePlainJson(res)) as { deletedCount: number };
+  },
+
+  /**
+   * updateMany over an EJSON filter string with an operator-keyed update body
+   * (e.g. `{ "$set": {…} }`). Server rejects an empty filter or non-operator body.
+   */
+  async updateMany(
+    cid: string,
+    name: string,
+    filterEJSON: string,
+    updateEJSON: string,
+    database?: string,
+  ): Promise<{ matchedCount: number; modifiedCount: number }> {
+    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
+    const res = await fetch(
+      `${cidPath(cid)}/collections/${encodeURIComponent(name)}/updateMany${qs}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filter: filterEJSON, update: updateEJSON }),
+      },
+    );
+    return (await handlePlainJson(res)) as {
+      matchedCount: number;
+      modifiedCount: number;
+    };
+  },
+
   async getDocument(
     cid: string,
     name: string,

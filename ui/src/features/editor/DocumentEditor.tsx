@@ -11,7 +11,6 @@ import {
   ApiError,
   api,
   extractIdString,
-  humanizeForDisplay,
   parseEJSON,
   prettifyUuids,
   stringifyEJSON,
@@ -20,6 +19,11 @@ import { MonacoJsonInput } from "../../components/MonacoJsonInput";
 import { useSettings } from "../../settings";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import {
+  DOC_FORMATS,
+  formatDocument,
+  isShellFormat,
+} from "../documents/docFormats";
 
 interface Props {
   collectionName: string;
@@ -47,15 +51,17 @@ export const DocumentEditor = ({
 }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
-  const { uuidRepresentation } = useSettings();
+  const { uuidRepresentation, documentFormat, setDocumentFormat } =
+    useSettings();
   const queryClient = useQueryClient();
 
   const id = extractIdString(doc._id);
-  // View mode shows plain humanized values (matches the result-table cells);
-  // edit mode keeps canonical EJSON below so saves round-trip with type fidelity.
+  // View mode renders the whole document in the user's chosen JSON flavour
+  // (shell / mongoexport / pure / …); edit mode keeps canonical EJSON below so
+  // saves round-trip with full type fidelity.
   const fullJson = useMemo(
-    () => JSON.stringify(humanizeForDisplay(doc, uuidRepresentation), null, 2),
-    [doc, uuidRepresentation],
+    () => formatDocument(doc, documentFormat, uuidRepresentation),
+    [doc, documentFormat, uuidRepresentation],
   );
   // Edit mode keeps raw $binary so saves round-trip — prettified $uuid
   // strings would only round-trip cleanly for subtype-04 / Standard.
@@ -215,6 +221,23 @@ export const DocumentEditor = ({
             </div>
           </div>
 
+          {isViewing && (
+            <select
+              value={documentFormat}
+              onChange={(e) =>
+                setDocumentFormat(e.target.value as typeof documentFormat)
+              }
+              title="Document display format"
+              className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {DOC_FORMATS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          )}
+
           {isViewing && !readOnly && (
             <>
               <button
@@ -280,8 +303,9 @@ export const DocumentEditor = ({
         <div className="flex-1 overflow-hidden">
           {isViewing ? (
             <MonacoJsonInput
-              key={`view-${id}`}
+              key={`view-${id}-${documentFormat}`}
               value={fullJson}
+              language={isShellFormat(documentFormat) ? "javascript" : "json"}
               onChange={() => {
                 /* read-only */
               }}

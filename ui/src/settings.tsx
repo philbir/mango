@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { UuidRepresentation } from "./api/client";
+import type { DocFormat } from "./features/documents/docFormats";
 
 export type { UuidRepresentation };
 export type Theme = "dark" | "light";
@@ -19,6 +20,7 @@ export interface Settings {
   pageSize: PageSize;
   tabMode: boolean;
   defaultCollectionMode: CollectionMode;
+  documentFormat: DocFormat;
 }
 
 const DEFAULT: Settings = {
@@ -27,6 +29,7 @@ const DEFAULT: Settings = {
   pageSize: 50,
   tabMode: false,
   defaultCollectionMode: "query",
+  documentFormat: "pure",
 };
 
 const STORAGE_KEY = "mongo-manager:settings:v1";
@@ -56,6 +59,7 @@ interface SettingsContextValue extends Settings {
   setPageSize: (n: PageSize) => void;
   setTabMode: (v: boolean) => void;
   setDefaultCollectionMode: (m: CollectionMode) => void;
+  setDocumentFormat: (f: DocFormat) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -97,6 +101,11 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setSettings((s) => ({ ...s, defaultCollectionMode })),
     [],
   );
+  const setDocumentFormat = useCallback(
+    (documentFormat: DocFormat) =>
+      setSettings((s) => ({ ...s, documentFormat })),
+    [],
+  );
 
   const value = useMemo(
     () => ({
@@ -106,6 +115,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,
+      setDocumentFormat,
     }),
     [
       settings,
@@ -114,6 +124,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,
+      setDocumentFormat,
     ],
   );
 

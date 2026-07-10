@@ -1,13 +1,21 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertCircle,
   IconCalendarStats,
   IconDatabase,
+  IconEraser,
   IconLockSquareRounded,
   IconRefresh,
   IconServerCog,
   IconStack2,
   IconTable,
+  IconTrash,
 } from "@tabler/icons-react";
+import { useState } from "react";
+import { ApiError, api } from "../../api/client";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useServerConfig } from "../connections/useServerConfig";
+import { useTabs } from "../tabs/TabsContext";
 import { useDatabaseStats } from "./useDatabaseStats";
 
 interface Props {
@@ -15,9 +23,11 @@ interface Props {
   database: string;
 }
 
+type CollectionAction = { kind: "clear" | "drop"; name: string } | null;
+
 const formatBytes = (n: number | null | undefined): string => {
   if (n === null || n === undefined) return "—";
-  if (n < 1024) return `${n} B`;
+  if (n < 1024) return `${Math.round(n)} B`;
   if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
@@ -28,6 +38,52 @@ const formatCount = (n: number | null | undefined): string =>
 
 export const StatsTab = ({ cid, database }: Props) => {
   const q = useDatabaseStats(cid, database);
+  const { devMode } = useServerConfig();
+  const queryClient = useQueryClient();
+  const { tabs, closeTab } = useTabs();
+  const [confirming, setConfirming] = useState<CollectionAction>(null);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["database-stats", cid, database],
+    });
+    queryClient.invalidateQueries({ queryKey: ["collections", cid, database] });
+  };
+
+  const clear = useMutation({
+    mutationFn: (name: string) => api.clearCollection(cid, name, database),
+    onSuccess: () => {
+      setConfirming(null);
+      invalidate();
+    },
+  });
+
+  const drop = useMutation({
+    mutationFn: (name: string) => api.dropCollection(cid, name, database),
+    onSuccess: (_data, name) => {
+      setConfirming(null);
+      invalidate();
+      // The collection is gone — close any tab pointing at it.
+      tabs
+        .filter(
+          (t) =>
+            t.connectionId === cid &&
+            t.database === database &&
+            t.kind === "collection" &&
+            t.collection === name,
+        )
+        .forEach((t) => closeTab(t.id));
+    },
+  });
+
+  const activeMutation = confirming?.kind === "clear" ? clear : drop;
+  const mutationError = confirming ? activeMutation.error : null;
+  const errorMessage =
+    mutationError instanceof ApiError
+      ? mutationError.message
+      : mutationError instanceof Error
+        ? mutationError.message
+        : null;
 
   if (q.isLoading) {
     return (
@@ -48,6 +104,7 @@ export const StatsTab = ({ cid, database }: Props) => {
   if (!data) return null;
 
   return (
+    <>
     <div className="space-y-5 p-5">
       <header className="flex items-center justify-between">
         <div>
@@ -144,6 +201,7 @@ export const StatsTab = ({ cid, database }: Props) => {
                 <th className="px-3 py-1.5 text-right">Avg</th>
                 <th className="px-3 py-1.5 text-right">Indexes</th>
                 <th className="px-3 py-1.5 text-right">Index size</th>
+                {devMode && <th className="w-16 px-3 py-1.5" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900/40">
@@ -168,12 +226,40 @@ export const StatsTab = ({ cid, database }: Props) => {
                   <td className="px-3 py-1.5 text-right tabular-nums">
                     {formatBytes(c.totalIndexSize)}
                   </td>
+                  {devMode && (
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clear.reset();
+                            setConfirming({ kind: "clear", name: c.name });
+                          }}
+                          title="Clear collection (delete all documents)"
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        >
+                          <IconEraser size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            drop.reset();
+                            setConfirming({ kind: "drop", name: c.name });
+                          }}
+                          title="Delete collection (drop)"
+                          className="rounded p-1 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {data.collections.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={devMode ? 8 : 7}
                     className="px-3 py-3 text-center text-slate-500 dark:text-slate-400"
                   >
                     No collections.
@@ -185,6 +271,71 @@ export const StatsTab = ({ cid, database }: Props) => {
         </div>
       </section>
     </div>
+
+      {confirming?.kind === "clear" && (
+        <ConfirmDialog
+          title="Clear collection?"
+          message={
+            <div className="space-y-2">
+              <div>
+                Every document in{" "}
+                <span className="font-mono font-semibold">
+                  {confirming.name}
+                </span>{" "}
+                will be deleted. Indexes are preserved. Cannot be undone.
+              </div>
+              {errorMessage && (
+                <div className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+          }
+          confirmLabel="Clear"
+          danger
+          busy={clear.isPending}
+          onConfirm={() => clear.mutate(confirming.name)}
+          onCancel={() => {
+            if (!clear.isPending) {
+              clear.reset();
+              setConfirming(null);
+            }
+          }}
+        />
+      )}
+
+      {confirming?.kind === "drop" && (
+        <ConfirmDialog
+          title="Delete collection?"
+          message={
+            <div className="space-y-2">
+              <div>
+                This will permanently drop{" "}
+                <span className="font-mono font-semibold">
+                  {confirming.name}
+                </span>{" "}
+                and every document and index inside it. Cannot be undone.
+              </div>
+              {errorMessage && (
+                <div className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+          }
+          confirmLabel="Delete"
+          danger
+          busy={drop.isPending}
+          onConfirm={() => drop.mutate(confirming.name)}
+          onCancel={() => {
+            if (!drop.isPending) {
+              drop.reset();
+              setConfirming(null);
+            }
+          }}
+        />
+      )}
+    </>
   );
 };
 

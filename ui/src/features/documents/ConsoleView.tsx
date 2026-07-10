@@ -195,8 +195,13 @@ export const ConsoleView = ({
   const onRun = () => {
     const cmd = code.trim();
     if (!cmd) return;
+    // When the command and page are unchanged the query key doesn't move,
+    // so React Query won't refetch — but Run should always re-query for
+    // fresh data, so force a refetch in that case.
+    const unchanged = cmd === pinned && page === 0;
     setPage(0);
     setPinned(cmd);
+    if (unchanged) void run.refetch();
   };
 
   const handlerSupports: ApplyKind[] = useMemo(() => ["console"], []);

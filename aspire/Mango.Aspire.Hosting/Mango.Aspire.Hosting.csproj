@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting" Version="13.2.3" />
-    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.2.3" />
+    <PackageReference Include="Aspire.Hosting" Version="13.4.2" />
+    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.4.2" />
   </ItemGroup>
 
 </Project>
