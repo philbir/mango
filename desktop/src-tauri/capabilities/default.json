@@ -11,6 +11,8 @@
     "opener:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "allow-check-for-update",
+    "allow-install-update"
   ]
 }
