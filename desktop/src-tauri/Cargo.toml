@@ -25,8 +25,8 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-rand = "0.9"
-base64 = "0.22"
+rand = "0.10"
+base64 = "0.23"
 
 [features]
 default = ["custom-protocol"]

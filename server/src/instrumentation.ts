@@ -49,9 +49,9 @@ if (endpoint) {
       exportIntervalMillis: 5_000,
     }),
     logRecordProcessors: [
-      new (await import("@opentelemetry/sdk-logs")).BatchLogRecordProcessor(
-        new OTLPLogExporter({ url: endpoint }),
-      ),
+      new (await import("@opentelemetry/sdk-logs")).BatchLogRecordProcessor({
+        exporter: new OTLPLogExporter({ url: endpoint }),
+      }),
     ],
     instrumentations: [
       getNodeAutoInstrumentations({
