@@ -394,6 +394,7 @@ export const ConsoleView = ({
         }
         emptyHint="Press ⌘/Ctrl + Enter to run."
         onRowClick={(id) => setSelectedId(id)}
+        activeRowId={selectedDoc ? selectedId : null}
       />
 
       {selectedDoc && (

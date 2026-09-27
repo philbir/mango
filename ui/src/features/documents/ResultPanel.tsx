@@ -49,6 +49,8 @@ interface Props {
   truncated?: boolean;
   truncatedHint?: string | null;
   onRowClick?: (id: string) => void;
+  /** Id of the row whose document is open in the detail drawer. */
+  activeRowId?: string | null;
   emptyHint?: string;
   /** Enables row multi-select + a batch action bar. Table view only. */
   selection?: ResultSelection;
@@ -81,6 +83,7 @@ export const ResultPanel = ({
   truncated,
   truncatedHint,
   onRowClick,
+  activeRowId,
   emptyHint,
   selection,
 }: Props) => {
@@ -200,6 +203,7 @@ export const ResultPanel = ({
             documents={documents}
             loading={isLoading}
             onRowClick={onRowClick}
+            activeRowId={activeRowId}
             selection={selection}
           />
         )}

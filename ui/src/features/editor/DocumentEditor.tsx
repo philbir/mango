@@ -202,10 +202,33 @@ export const DocumentEditor = ({
   };
 
   const isViewing = mode === "view";
+  const busy = save.isPending || patch.isPending || remove.isPending;
+
+  // Esc closes the confirm dialog if one is open, otherwise the drawer. Edit
+  // mode ignores it so a stray Esc (e.g. dismissing Monaco's suggest widget)
+  // can't throw away unsaved changes. Monaco marks keys it handled itself
+  // (find widget, etc.) as defaultPrevented.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (preview) {
+        if (!busy) setPreview(null);
+        return;
+      }
+      if (mode === "view") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [preview, busy, mode, onClose]);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-stretch justify-end bg-black/50">
-      <div className="flex h-full w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <>
+      {/* Non-modal drawer: no backdrop, so the result table stays clickable
+          and keyboard-navigable while a document is open. */}
+      <div
+        className="fixed inset-y-0 right-0 z-30 flex w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        data-doc-editor-locked={!isViewing || preview ? "" : undefined}
+      >
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
@@ -284,7 +307,7 @@ export const DocumentEditor = ({
             type="button"
             onClick={onClose}
             className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            title="Close"
+            title="Close (Esc)"
           >
             <IconX size={18} />
           </button>
@@ -361,7 +384,7 @@ export const DocumentEditor = ({
           onConfirm={onConfirmUpdate}
         />
       )}
-    </div>
+    </>
   );
 };
 

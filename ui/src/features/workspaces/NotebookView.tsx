@@ -384,6 +384,7 @@ export const NotebookView = ({ tabId }: Props) => {
         errorMessage={errorMessage}
         elapsedMs={run.data?.elapsedMs ?? null}
         onRowClick={(id) => setSelectedId(id)}
+        activeRowId={selectedDoc ? selectedId : null}
         paging={
           run.data && run.data.paged
             ? {

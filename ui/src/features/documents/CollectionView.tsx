@@ -678,6 +678,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
             : null
         }
         onRowClick={(id) => setSelectedId(id)}
+        activeRowId={selectedDoc ? selectedId : null}
         emptyHint="No matching documents."
         selection={{
           selectedIds: selectedIdSet,
