@@ -110,7 +110,7 @@ export const ConnectionPicker = () => {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1.5 text-left hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+          className="flex h-7 w-full items-center gap-2 rounded border border-slate-300 bg-white px-2 text-left hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
         >
           <span
             className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
@@ -132,7 +132,7 @@ export const ConnectionPicker = () => {
             />
           )}
           {active && <SourceBadge conn={active} />}
-          <IconChevronDown size={14} className="text-slate-400" />
+          <IconChevronDown size={14} className="text-slate-500" />
         </button>
 
         {open && (
@@ -169,14 +169,14 @@ export const ConnectionPicker = () => {
                   </button>
                   <button
                     type="button"
-                    className="rounded p-1 text-slate-400 opacity-0 hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                    className="btn-icon btn-ghost opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                     title="Edit"
                     onClick={() => {
                       setOpen(false);
                       setModal({ mode: "edit", conn: c });
                     }}
                   >
-                    <IconSettings size={12} />
+                    <IconSettings size={13} />
                   </button>
                 </li>
               ))}
@@ -188,7 +188,7 @@ export const ConnectionPicker = () => {
                   setOpen(false);
                   setModal({ mode: "create" });
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/15"
+                className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-[12.5px] font-medium text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/15"
               >
                 <IconPlus size={14} />
                 New connection
@@ -199,7 +199,7 @@ export const ConnectionPicker = () => {
                   setOpen(false);
                   setModal({ mode: "manage" });
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-[12.5px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <IconList size={14} />
                 Manage
@@ -288,7 +288,7 @@ const StandaloneLabel = ({ active }: { active: ConnectionPublic | null }) => {
         disabled={!active}
         onClick={() => setOpen((o) => !o)}
         title={active ? "Show connection string" : undefined}
-        className="flex w-full items-center gap-2 rounded px-1 py-1.5 text-left hover:bg-slate-100 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-slate-800"
+        className="flex h-7 w-full items-center gap-2 rounded px-1 text-left hover:bg-slate-200 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-slate-800"
       >
         <IconCircleDot size={14} className="flex-shrink-0 text-emerald-500" />
         <div className="min-w-0 flex-1 truncate font-mono text-[13px] font-medium text-slate-900 dark:text-slate-100">
@@ -298,22 +298,20 @@ const StandaloneLabel = ({ active }: { active: ConnectionPublic | null }) => {
       </button>
       {open && active && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Connection string
-          </div>
+          <div className="eyebrow mb-1">Connection string</div>
           <div className="break-all rounded bg-slate-50 p-2 font-mono text-[11.5px] text-slate-800 dark:bg-slate-800 dark:text-slate-200">
             {active.uriRedacted}
           </div>
           <div className="mt-2 flex items-center justify-between">
-            <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
               Credentials redacted.
             </div>
             <button
               type="button"
               onClick={onCopy}
-              className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline"
             >
-              <IconCopy size={11} />
+              <IconCopy size={13} />
               {copied ? "Copied" : "Copy"}
             </button>
           </div>

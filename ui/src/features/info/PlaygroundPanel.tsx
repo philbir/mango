@@ -94,26 +94,20 @@ export const PlaygroundPanel = ({
             plan, then ask the assistant for optimization tips.
           </p>
         </div>
-        <div className="flex rounded border border-slate-300 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+        <div className="seg">
           <button
             type="button"
             onClick={() => setMode("find")}
-            className={`rounded px-2 py-1 ${
-              mode === "find"
-                ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="seg-item font-mono"
+            data-active={mode === "find"}
           >
             find
           </button>
           <button
             type="button"
             onClick={() => setMode("aggregate")}
-            className={`rounded px-2 py-1 ${
-              mode === "aggregate"
-                ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="seg-item font-mono"
+            data-active={mode === "aggregate"}
           >
             aggregate
           </button>
@@ -175,7 +169,7 @@ export const PlaygroundPanel = ({
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
+        <span className="eyebrow">
           Verbosity
         </span>
         <select
@@ -192,7 +186,7 @@ export const PlaygroundPanel = ({
           type="button"
           onClick={() => explain.mutate()}
           disabled={explain.isPending}
-          className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+          className="btn btn-primary"
         >
           {explain.isPending ? (
             <>
@@ -210,7 +204,7 @@ export const PlaygroundPanel = ({
           type="button"
           onClick={() => setAssistantOpen(true)}
           disabled={!explain.data}
-          className="flex items-center gap-1.5 rounded border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/40 dark:bg-violet-900/20 dark:text-violet-200 dark:hover:bg-violet-900/30"
+          className="btn border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/40 dark:bg-violet-900/20 dark:text-violet-200 dark:hover:bg-violet-900/30"
           title="Ask the assistant to optimize this query"
         >
           <IconSparkles size={14} />
@@ -249,13 +243,13 @@ const FieldGroup = ({
 }) => (
   <div className={full ? "md:col-span-2" : ""}>
     <div className="mb-1 flex items-center justify-between">
-      <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
+      <span className="eyebrow">
         {label}
       </span>
       <button
         type="button"
         onClick={onFormat}
-        className="text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
+        className="text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
       >
         Format
       </button>

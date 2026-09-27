@@ -42,7 +42,8 @@ export const ConfirmDialog = ({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+          className="btn-icon btn-ghost"
+          aria-label="Close"
         >
           <IconX size={14} />
         </button>
@@ -57,7 +58,7 @@ export const ConfirmDialog = ({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          className="btn btn-outline"
         >
           {cancelLabel}
         </button>
@@ -65,11 +66,7 @@ export const ConfirmDialog = ({
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className={`rounded px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${
-            danger
-              ? "bg-red-500 hover:bg-red-400"
-              : "bg-sky-500 hover:bg-sky-400"
-          }`}
+          className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
         >
           {busy ? "…" : confirmLabel}
         </button>

@@ -43,7 +43,7 @@ export const UpdateBanner = () => {
           type="button"
           onClick={() => void install()}
           disabled={installing}
-          className="rounded bg-green-600 px-2 py-1 text-[12px] font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          className="btn btn-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {installing ? "Installing…" : "Install & Restart"}
         </button>

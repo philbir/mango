@@ -463,57 +463,49 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
   return (
     <div className="flex h-full flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
-        <IconTable size={18} className="text-sky-600 dark:text-sky-400" />
-        <div className="flex-1">
-          <div className="font-mono text-base text-slate-900 dark:text-slate-100">
+      <header className="flex h-10 flex-shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 pl-4 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
+        <IconTable size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-[3rem] truncate font-mono text-[14px] font-medium text-slate-900 dark:text-slate-100">
             {name}
-            {active?.name && (
-              <span className="ml-1.5 font-sans text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                — {active.name}
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-500 dark:text-slate-500">
-            {data ? `${data.total.toLocaleString()} documents` : "…"}
-          </div>
+          </span>
+          <span className="flex-shrink-0 text-[11.5px] tabular-nums text-slate-500 dark:text-slate-400">
+            {data ? `${data.total.toLocaleString()} docs` : "…"}
+          </span>
+          {active?.name && (
+            <span className="hidden flex-shrink-0 text-[11.5px] text-slate-400 dark:text-slate-500 md:inline">
+              {active.name}
+              {database ? ` / ${database}` : ""}
+            </span>
+          )}
         </div>
-        <div className="flex rounded border border-slate-300 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+        <div className="seg">
           <button
             type="button"
             onClick={() => setPageMode("query")}
-            className={`flex items-center gap-1 rounded px-2 py-1 ${
-              pageMode === "query"
-                ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="seg-item"
+            data-active={pageMode === "query"}
           >
-            <IconTable size={14} />
+            <IconTable size={13} />
             Query
           </button>
           <button
             type="button"
             onClick={() => setPageMode("console")}
-            className={`flex items-center gap-1 rounded px-2 py-1 ${
-              pageMode === "console"
-                ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="seg-item"
+            data-active={pageMode === "console"}
           >
-            <IconTerminal2 size={14} />
+            <IconTerminal2 size={13} />
             Console
           </button>
           <button
             type="button"
             onClick={() => setPageMode("info")}
-            className={`flex items-center gap-1 rounded px-2 py-1 ${
-              pageMode === "info"
-                ? "bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
-                : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="seg-item"
+            data-active={pageMode === "info"}
             title="Stats, indexes, and query plan playground"
           >
-            <IconInfoCircle size={14} />
+            <IconInfoCircle size={13} />
             Info
           </button>
         </div>
@@ -558,72 +550,66 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         />
       ) : null}
       <section
-        className="relative flex flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
+        className="relative flex flex-col border-b border-slate-200 bg-slate-50/60 @container dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: filterHeight }}
       >
-        <div className="flex items-center gap-2 px-5 pb-1 pt-3">
-          <div className="flex rounded border border-slate-300 bg-white p-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex h-9 flex-shrink-0 items-center gap-2 px-4">
+          <span className="eyebrow">Filter</span>
+          <div className="seg">
             <button
               type="button"
               onClick={() => setQueryMode("raw")}
-              className={`rounded px-2 py-0.5 ${
-                queryMode === "raw"
-                  ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
+              className="seg-item"
+              data-active={queryMode === "raw"}
             >
               Raw
             </button>
             <button
               type="button"
               onClick={() => setQueryMode("builder")}
-              className={`rounded px-2 py-0.5 ${
-                queryMode === "builder"
-                  ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
+              className="seg-item"
+              data-active={queryMode === "builder"}
             >
               Builder
             </button>
           </div>
-          <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
-            Filter
+          {queryMode === "raw" && (
+            <button
+              type="button"
+              onClick={() => filterEditorRef.current?.format()}
+              className="btn btn-sm btn-ghost"
+              title="Format JSON (⇧⌥F)"
+            >
+              <IconBraces size={13} />
+              Format
+            </button>
+          )}
+          <div className="flex-1" />
+          <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
+            <kbd>⌘</kbd> <kbd>↵</kbd> runs
           </span>
+          <button
+            type="button"
+            onClick={() => onApplyFilter()}
+            className="btn btn-sm btn-primary"
+          >
+            <IconPlayerPlayFilled size={12} />
+            Run
+          </button>
         </div>
 
-        <div className="flex flex-1 gap-3 overflow-hidden px-5 pb-3 pt-1">
+        <div className="flex flex-1 gap-2 overflow-hidden px-4 pb-2">
           <div className="flex flex-1 flex-col overflow-hidden">
             {queryMode === "raw" && (
-              <div className="flex flex-1 items-stretch gap-2 overflow-hidden">
-                <div className="flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
-                  <MonacoJsonInput
-                    ref={filterEditorRef}
-                    value={filterDraft}
-                    onChange={setFilterDraft}
-                    minHeight="64px"
-                    completion={filterCompletion}
-                    onSubmit={() => onApplyFilter()}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5 self-start">
-                  <button
-                    type="button"
-                    onClick={() => onApplyFilter()}
-                    className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400"
-                  >
-                    <IconPlayerPlayFilled size={14} />
-                    Run
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => filterEditorRef.current?.format()}
-                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                    title="Format JSON (⇧⌥F)"
-                  >
-                    <IconBraces size={11} />
-                    Format
-                  </button>
-                </div>
+              <div className="flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <MonacoJsonInput
+                  ref={filterEditorRef}
+                  value={filterDraft}
+                  onChange={setFilterDraft}
+                  minHeight="64px"
+                  completion={filterCompletion}
+                  onSubmit={() => onApplyFilter()}
+                />
               </div>
             )}
             {queryMode === "builder" && (
@@ -637,7 +623,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
               </div>
             )}
           </div>
-          <div className="flex w-60 flex-col overflow-hidden">
+          <div className="hidden w-52 flex-col overflow-hidden @xl:flex @3xl:w-60">
             <FieldPicker
               fields={schema?.fields.map((f) => f.path) ?? []}
               selected={selectedFields}

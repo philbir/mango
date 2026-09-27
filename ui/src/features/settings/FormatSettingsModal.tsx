@@ -113,7 +113,7 @@ export const FormatSettingsModal = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
             title="Close (Esc)"
           >
             <IconX size={16} />
@@ -191,7 +191,7 @@ export const FormatSettingsModal = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
+            className="btn btn-primary"
           >
             Done
           </button>
@@ -211,7 +211,7 @@ const Group = ({
   children: React.ReactNode;
 }) => (
   <section>
-    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="eyebrow">
       {label}
     </div>
     {hint && (
@@ -224,7 +224,7 @@ const Group = ({
 );
 
 const PreviewLabel = ({ children }: { children: React.ReactNode }) => (
-  <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+  <div className="mb-1 eyebrow">
     {children}
   </div>
 );
@@ -263,7 +263,7 @@ function RadioList<T extends string>({
             <span className="block text-xs text-slate-800 dark:text-slate-100">
               {opt.label}
             </span>
-            <span className="block truncate font-mono text-[10.5px] text-slate-500 dark:text-slate-400">
+            <span className="block truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
               {opt.hint}
             </span>
           </span>

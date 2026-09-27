@@ -76,7 +76,7 @@ export const CreateIndexModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={16} />
           </button>
@@ -89,10 +89,10 @@ export const CreateIndexModal = ({
               onChange={(e) => setKeysJson(e.target.value)}
               rows={3}
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
               placeholder='{ "createdAt": -1, "status": 1 }'
             />
-            <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               Use 1 for ascending, -1 for descending, or "text" / "2dsphere" / "hashed".
             </div>
           </Field>
@@ -102,7 +102,7 @@ export const CreateIndexModal = ({
               onChange={(e) => setName(e.target.value)}
               placeholder="auto-generated if blank"
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
           </Field>
           <div className="flex flex-wrap gap-3 text-xs">
@@ -134,7 +134,7 @@ export const CreateIndexModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -163,7 +163,7 @@ const Field = ({
   children: React.ReactNode;
 }) => (
   <div>
-    <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="mb-1 eyebrow">
       {label}
     </div>
     {children}

@@ -426,6 +426,20 @@ export const api = {
     }>;
   },
 
+  async getUiSettings(): Promise<{ settings: Record<string, unknown> }> {
+    const res = await fetch("/api/system/ui-settings");
+    return handlePlainJson(res) as Promise<{ settings: Record<string, unknown> }>;
+  },
+
+  async putUiSettings(settings: Record<string, unknown>): Promise<{ ok: boolean }> {
+    const res = await fetch("/api/system/ui-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return handlePlainJson(res) as Promise<{ ok: boolean }>;
+  },
+
   async listBrowsers(): Promise<{ browsers: BrowserOption[] }> {
     const res = await fetch("/api/system/browsers");
     return handlePlainJson(res) as Promise<{ browsers: BrowserOption[] }>;

@@ -78,7 +78,7 @@ export const ConnectionTab = ({ cid }: Props) => {
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
-          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="btn btn-sm btn-outline"
         >
           <IconRefresh size={12} className={q.isFetching ? "animate-spin" : ""} />
           Refresh
@@ -279,7 +279,7 @@ const ConnectionString = ({ cid, info }: { cid: string; info: ServerInfo }) => {
 
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <h3 className="mb-2 eyebrow">
         Connection string
       </h3>
       <div className="flex items-center gap-2 rounded border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900/60">
@@ -338,7 +338,7 @@ const DetailTable = ({
   rows: Array<[string, string | null, boolean?]>;
 }) => (
   <section>
-    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <h3 className="mb-2 eyebrow">
       {title}
     </h3>
     <div className="overflow-hidden rounded border border-slate-200 dark:border-slate-700">

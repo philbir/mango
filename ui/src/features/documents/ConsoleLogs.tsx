@@ -28,9 +28,9 @@ export const ConsoleLogs = ({ logs }: { logs: ConsoleLogEntry[] }) => {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-1 px-4 py-1 text-[11px] text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900/40"
+        className="flex h-7 w-full items-center gap-1 px-4 text-[11.5px] font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900/40"
       >
-        {open ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
+        {open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
         Output
         <span className="text-slate-400 dark:text-slate-500">({logs.length})</span>
       </button>

@@ -47,7 +47,7 @@ export const AssistantPanel = () => {
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="btn-icon btn-ghost"
           title="Close (⌘/Ctrl + I)"
         >
           <IconX size={14} />

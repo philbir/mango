@@ -99,7 +99,7 @@ export const DevToolsTab = ({ cid, database }: Props) => {
                 setLastClearResult(null);
                 setConfirming("clear");
               }}
-              className="flex-shrink-0 rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline flex-shrink-0"
             >
               Clear collections
             </button>
@@ -135,7 +135,7 @@ export const DevToolsTab = ({ cid, database }: Props) => {
                 setDropTyped("");
                 setConfirming("drop");
               }}
-              className="flex-shrink-0 rounded bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-400"
+              className="btn btn-sm btn-danger flex-shrink-0"
             >
               Delete database
             </button>
@@ -188,7 +188,7 @@ export const DevToolsTab = ({ cid, database }: Props) => {
                 value={dropTyped}
                 onChange={(e) => setDropTyped(e.target.value)}
                 placeholder={database}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-sm text-slate-900 focus:border-red-400 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field w-full font-mono focus:border-red-400"
                 autoFocus
               />
               {errorMessage && (

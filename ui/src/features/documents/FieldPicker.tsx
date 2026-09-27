@@ -31,18 +31,23 @@ export const FieldPicker = ({ fields, selected, onChange }: Props) => {
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200 px-2 py-1 dark:border-slate-800">
-        <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Fields {selected.size > 0 && `· ${selected.size}`}
+      <div className="flex h-7 flex-shrink-0 items-center justify-between border-b border-slate-200 pl-2 pr-1 dark:border-slate-800">
+        <div className="eyebrow">
+          Fields
+          {selected.size > 0 && (
+            <span className="ml-1 rounded bg-sky-500/15 px-1 font-mono text-[10.5px] normal-case tracking-normal text-sky-700 dark:text-sky-200">
+              {selected.size}
+            </span>
+          )}
         </div>
         <button
           type="button"
           onClick={() => onChange(new Set())}
           disabled={allSelected}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800"
+          className="btn btn-sm btn-ghost h-5 min-h-0 px-1.5 text-[11px]"
           title="Show all fields"
         >
-          <IconCheck size={10} /> All
+          <IconCheck size={12} /> All
         </button>
       </div>
       <input
@@ -50,7 +55,7 @@ export const FieldPicker = ({ fields, selected, onChange }: Props) => {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Filter fields…"
-        className="border-b border-slate-200 bg-transparent px-2 py-1 text-[11px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:border-slate-800 dark:text-slate-100"
+        className="h-7 min-h-0 border-b border-slate-200 bg-transparent px-2 text-[11.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:border-slate-800 dark:text-slate-100"
       />
       <ul className="flex-1 overflow-y-auto py-0.5">
         {fields.length === 0 && (
@@ -72,12 +77,12 @@ export const FieldPicker = ({ fields, selected, onChange }: Props) => {
               >
                 {checked ? (
                   <IconSquareCheckFilled
-                    size={12}
+                    size={13}
                     className="flex-shrink-0 text-sky-500"
                   />
                 ) : (
                   <IconSquare
-                    size={12}
+                    size={13}
                     className="flex-shrink-0 text-slate-400"
                   />
                 )}

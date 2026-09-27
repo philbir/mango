@@ -79,7 +79,7 @@ export const OidcAuthDialog = ({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={16} />
           </button>
@@ -87,7 +87,7 @@ export const OidcAuthDialog = ({
 
         <div className="space-y-4 px-5 py-4">
           {!busy && <div>
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="mb-2 eyebrow">
               Browser
             </div>
             <BrowserPicker
@@ -176,7 +176,7 @@ export const OidcAuthDialog = ({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>}
@@ -197,7 +197,7 @@ export const OidcAuthDialog = ({
                 setBusy(false);
               }
             }}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {busy ? "Starting…" : confirmLabel}
           </button>}

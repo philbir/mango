@@ -235,19 +235,19 @@ export const DocumentEditor = ({
         className="fixed inset-y-0 right-0 z-30 flex w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
         data-doc-editor-locked={!isViewing || preview ? "" : undefined}
       >
-        <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
+        <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span className="flex-shrink-0 font-mono text-[12px] text-slate-500 dark:text-slate-400">
               {collectionName}
-              {!isViewing && (
-                <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-px text-[9px] font-semibold text-amber-700 dark:text-amber-300">
-                  EDITING
-                </span>
-              )}
-            </div>
-            <div className="truncate font-mono text-sm text-slate-900 dark:text-slate-100">
+            </span>
+            <span className="truncate font-mono text-[13px] font-medium text-slate-900 dark:text-slate-100">
               {id}
-            </div>
+            </span>
+            {!isViewing && (
+              <span className="flex-shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                Editing
+              </span>
+            )}
           </div>
 
           {isViewing && !readOnly && (
@@ -255,7 +255,7 @@ export const DocumentEditor = ({
               <button
                 type="button"
                 onClick={() => setMode("edit")}
-                className="flex items-center gap-1.5 rounded border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="btn btn-sm btn-outline"
               >
                 <IconPencil size={13} />
                 Update
@@ -264,7 +264,7 @@ export const DocumentEditor = ({
                 type="button"
                 onClick={onClickDelete}
                 disabled={remove.isPending}
-                className="flex items-center gap-1.5 rounded border border-red-300 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-700/40 dark:text-red-300 dark:hover:bg-red-900/20"
+                className="btn btn-sm btn-outline border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/20"
               >
                 <IconTrash size={13} />
                 {remove.isPending ? "Deleting…" : "Delete"}
@@ -276,7 +276,7 @@ export const DocumentEditor = ({
               <button
                 type="button"
                 onClick={onCancelEdit}
-                className="rounded border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="btn btn-sm btn-outline"
               >
                 Cancel
               </button>
@@ -284,7 +284,7 @@ export const DocumentEditor = ({
                 type="button"
                 onClick={onClickSave}
                 disabled={save.isPending}
-                className="flex items-center gap-1.5 rounded bg-sky-500 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+                className="btn btn-sm btn-primary"
               >
                 <IconDeviceFloppy size={13} />
                 {save.isPending ? "Saving…" : "Save"}
@@ -295,16 +295,17 @@ export const DocumentEditor = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn-icon btn-ghost ml-1"
             title="Close (Esc)"
+            aria-label="Close"
           >
-            <IconX size={18} />
+            <IconX size={16} />
           </button>
         </header>
 
         {!isViewing && (
           <div className="flex items-center gap-1.5 border-b border-amber-200 bg-amber-50 px-4 py-1 text-[11px] text-amber-800 dark:border-amber-700/30 dark:bg-amber-900/20 dark:text-amber-200">
-            <IconAlertTriangle size={11} />
+            <IconAlertTriangle size={13} />
             <span>
               <span className="font-mono">_id</span> is hidden — it can't be
               changed.
@@ -399,15 +400,13 @@ const DeleteConfirm = ({
         type="button"
         onClick={onConfirm}
         disabled={busy}
-        className="rounded bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400 disabled:opacity-50"
+        className="btn btn-danger"
       >
         {busy ? "…" : "Delete"}
       </button>
     }
   >
-    <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-      Will execute
-    </div>
+    <div className="eyebrow mb-1">Will execute</div>
     <pre className="overflow-auto rounded [tab-size:2] border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
       {command}
     </pre>
@@ -500,7 +499,7 @@ const UpdateConfirm = ({
       onCancel={onCancel}
       footer={
         <>
-          <div className="flex rounded border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="seg">
             <VariantTab
               value="update"
               current={variant}
@@ -523,14 +522,14 @@ const UpdateConfirm = ({
               onConfirm(variant, variant === "replace" ? replaceBody : updateBody)
             }
             disabled={busy || !canConfirm}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {busy ? "…" : variant === "replace" ? "Replace" : "Update"}
           </button>
         </>
       }
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="mb-1 eyebrow">
         Will execute
       </div>
       <pre className="overflow-auto rounded [tab-size:2] border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
@@ -560,11 +559,8 @@ const VariantTab = ({
     type="button"
     onClick={() => onChange(value)}
     title={hint}
-    className={`rounded px-2 py-0.5 text-[11px] ${
-      current === value
-        ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-        : "text-slate-600 dark:text-slate-300"
-    }`}
+    className="seg-item"
+    data-active={current === value}
   >
     {label}
   </button>
@@ -606,7 +602,8 @@ const PreviewShell = ({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+          className="btn-icon btn-ghost"
+          aria-label="Close"
         >
           <IconX size={14} />
         </button>
@@ -617,7 +614,7 @@ const PreviewShell = ({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          className="btn btn-outline"
         >
           Cancel
         </button>

@@ -273,7 +273,7 @@ export const GridFsViewer = ({
             href={inlineUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn-icon btn-ghost"
             title="Open in new tab"
           >
             <IconExternalLink size={14} />
@@ -281,7 +281,7 @@ export const GridFsViewer = ({
           <button
             type="button"
             onClick={onDownload}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn-icon btn-ghost"
             title="Download"
           >
             <IconDownload size={14} />
@@ -290,7 +290,7 @@ export const GridFsViewer = ({
             <button
               type="button"
               onClick={() => onDelete(file)}
-              className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+              className="btn-icon text-slate-500 hover:bg-red-100 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
               title="Delete"
             >
               <IconTrash size={14} />
@@ -299,7 +299,7 @@ export const GridFsViewer = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn-icon btn-ghost"
             title="Close"
           >
             <IconX size={14} />
@@ -320,7 +320,7 @@ export const GridFsViewer = ({
               <select
                 value={override}
                 onChange={(e) => setOverride(e.target.value)}
-                className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-[11.5px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 {VIEW_OVERRIDES.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -392,7 +392,7 @@ const TabButton = ({
 );
 
 const DocumentTab = ({ file }: { file: GridFsFileMeta }) => {
-  const { theme } = useSettings();
+  const { resolvedTheme: theme } = useSettings();
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const docText = useMemo(() => {
@@ -501,7 +501,7 @@ interface TextPreviewProps {
 }
 
 const TextPreview = ({ url, language, size, onDownload }: TextPreviewProps) => {
-  const { theme } = useSettings();
+  const { resolvedTheme: theme } = useSettings();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [content, setContent] = useState<string | null>(null);
@@ -575,7 +575,7 @@ const TextPreview = ({ url, language, size, onDownload }: TextPreviewProps) => {
         <button
           type="button"
           onClick={onDownload}
-          className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
+          className="btn btn-primary"
         >
           <IconDownload size={14} />
           Download
@@ -622,7 +622,7 @@ const BinaryFallback = ({
     <button
       type="button"
       onClick={onDownload}
-      className="mt-2 flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
+      className="btn btn-primary mt-2"
     >
       <IconDownload size={14} />
       Download

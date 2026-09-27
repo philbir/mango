@@ -51,7 +51,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="btn-icon btn-ghost"
             >
               <IconX size={16} />
             </button>
@@ -79,7 +79,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
                         {c.name}
                       </span>
                       {c.id === activeId && (
-                        <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                        <span className="rounded bg-sky-500/15 px-2 py-1 text-[11.5px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300">
                           Active
                         </span>
                       )}
@@ -92,7 +92,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
                   <button
                     type="button"
                     onClick={() => setEditing(c)}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                    className="btn-icon btn-ghost h-7 w-7"
                     title="Edit"
                   >
                     <IconPencil size={14} />
@@ -100,7 +100,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
                   <button
                     type="button"
                     onClick={() => setConfirmingDelete(c)}
-                    className="rounded p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="btn-icon btn-ghost h-7 w-7 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
                     title="Delete"
                   >
                     <IconTrash size={14} />
@@ -114,7 +114,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
+              className="btn btn-primary"
             >
               <IconPlus size={14} />
               New connection
@@ -123,7 +123,7 @@ export const ConnectionsManagerModal = ({ onClose }: Props) => {
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-outline"
             >
               Close
             </button>

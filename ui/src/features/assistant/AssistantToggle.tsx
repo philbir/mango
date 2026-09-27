@@ -8,7 +8,7 @@ export const AssistantToggle = () => {
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="absolute right-3 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 shadow-sm transition hover:border-violet-400 hover:text-violet-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-violet-500/40 dark:hover:text-violet-200"
+      className="absolute right-2 top-[6px] z-20 flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-violet-600 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 dark:border-slate-700 dark:bg-slate-900 dark:text-violet-300 dark:hover:border-violet-500/40 dark:hover:bg-violet-500/10"
       title="Open assistant (⌘/Ctrl + I)"
       aria-label="Open assistant"
     >

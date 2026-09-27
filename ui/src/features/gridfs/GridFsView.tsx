@@ -122,40 +122,38 @@ export const GridFsView = ({ tabId }: Props) => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-slate-950">
-      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-        <IconFiles size={16} className="text-emerald-500" />
-        <div className="flex items-baseline gap-1.5 text-sm">
-          <span className="font-semibold text-slate-800 dark:text-slate-100">
+      <header className="flex h-10 flex-shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 pl-4 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
+        <IconFiles size={16} className="flex-shrink-0 text-emerald-500" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-[3rem] truncate font-mono text-[14px] font-medium text-slate-900 dark:text-slate-100">
             {bucket}
           </span>
-          <span className="text-[11px] text-slate-400">GridFS bucket</span>
-          {database && (
-            <span className="text-[11px] text-slate-500">· {database}</span>
-          )}
+          <span className="flex-shrink-0 text-[11.5px] text-slate-500 dark:text-slate-400">
+            GridFS bucket{database ? ` · ${database}` : ""}
+          </span>
         </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950">
-          <IconSearch size={12} className="text-slate-400" />
+        <div className="flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2 focus-within:border-sky-500 dark:border-slate-700 dark:bg-slate-950">
+          <IconSearch size={13} className="text-slate-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter by filename…"
-            className="w-56 bg-transparent text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+            className="w-48 min-h-0 bg-transparent text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
           />
         </div>
         <button
           type="button"
           onClick={() => filesQuery.refetch()}
-          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="btn-icon btn-ghost"
           title="Refresh"
         >
           <IconRefresh
-            size={13}
+            size={15}
             className={filesQuery.isFetching ? "animate-spin" : ""}
           />
         </button>
-      </div>
+      </header>
 
       <div className="flex-1 overflow-auto">
         {filesQuery.isLoading && (
@@ -234,7 +232,7 @@ export const GridFsView = ({ tabId }: Props) => {
               type="button"
               onClick={() => setSkip(Math.max(0, skip - PAGE_SIZE))}
               disabled={skip === 0}
-              className="rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40 dark:border-slate-700"
+              className="btn btn-sm btn-outline"
             >
               Prev
             </button>
@@ -242,7 +240,7 @@ export const GridFsView = ({ tabId }: Props) => {
               type="button"
               onClick={() => setSkip(skip + PAGE_SIZE)}
               disabled={!hasMore}
-              className="rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40 dark:border-slate-700"
+              className="btn btn-sm btn-outline"
             >
               Next
             </button>

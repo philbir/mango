@@ -311,22 +311,22 @@ export const NotebookView = ({ tabId }: Props) => {
           <button
             type="button"
             onClick={() => editorRef.current?.format()}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-outline"
             title="Format (⇧⌥F)"
           >
-            <IconBraces size={11} />
+            <IconBraces size={13} />
             Format
           </button>
           <button
             type="button"
             onClick={onRunAll}
             disabled={!code.trim() || run.isFetching}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11.5px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             title="Run all"
           >
             Run all
           </button>
-          <kbd className="rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          <kbd className="rounded border border-slate-300 px-1 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
             ⌘/Ctrl + Enter
           </kbd>
         </div>
@@ -346,7 +346,7 @@ export const NotebookView = ({ tabId }: Props) => {
               type="button"
               onClick={onRunSmart}
               disabled={!code.trim() || run.isFetching}
-              className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="btn btn-primary"
               title="Run selection if any, else run all (⌘/Ctrl + Enter)"
             >
               {run.isFetching ? (

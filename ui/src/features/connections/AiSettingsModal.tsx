@@ -148,7 +148,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={16} />
           </button>
@@ -156,7 +156,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
 
         <div className="-mx-1 flex-1 space-y-3 overflow-y-auto px-1">
           <Field label="Provider">
-            <div className="flex rounded border border-slate-300 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-950">
+            <div className="seg w-full">
               <ProviderTab
                 value="openai"
                 current={provider}
@@ -204,7 +204,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                         setKeepExistingKey(false);
                         setApiKey("");
                       }}
-                      className="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="btn btn-sm btn-outline"
                     >
                       Replace
                     </button>
@@ -217,7 +217,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     placeholder="sk-..."
                     spellCheck={false}
                     autoComplete="off"
-                    className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className="field w-full font-mono"
                   />
                 )}
               </Field>
@@ -228,9 +228,9 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="https://api.openai.com/v1"
                   spellCheck={false}
-                  className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="field w-full font-mono"
                 />
-                <div className="mt-1 text-[10px] text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500">
                   Override for Azure OpenAI, GitHub Models, Ollama, etc.
                 </div>
               </Field>
@@ -253,13 +253,13 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     onChange={(e) => setCopilotCliPath(e.target.value)}
                     placeholder="/Users/you/.npm-global/bin/copilot"
                     spellCheck={false}
-                    className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className="field min-w-0 flex-1 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => detectCopilot.mutate()}
                     disabled={detectCopilot.isPending}
-                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="btn btn-sm btn-outline"
                     title="Detect Copilot CLI"
                   >
                     {detectCopilot.isPending ? (
@@ -270,23 +270,23 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     Detect
                   </button>
                 </div>
-                <div className="mt-1 text-[10px] text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500">
                   Uses server-side detection similar to where/command -v,
                   plus common install paths.
                 </div>
                 {detectCopilot.data?.ok && (
-                  <div className="mt-1 break-words text-[10px] text-emerald-700 dark:text-emerald-300">
+                  <div className="mt-1 break-words text-[11px] text-emerald-700 dark:text-emerald-300">
                     Found {detectCopilot.data.version ?? "Copilot CLI"} at{" "}
                     <span className="font-mono">{detectCopilot.data.path}</span>
                   </div>
                 )}
                 {detectCopilot.data && !detectCopilot.data.ok && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectCopilot.data.error ?? "Copilot CLI not found."}
                   </div>
                 )}
                 {detectCopilot.error && !detectCopilot.data && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectCopilot.error instanceof Error
                       ? detectCopilot.error.message
                       : String(detectCopilot.error)}
@@ -313,13 +313,13 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     onChange={(e) => setClaudeCliPath(e.target.value)}
                     placeholder="/Users/you/.claude/local/claude"
                     spellCheck={false}
-                    className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className="field min-w-0 flex-1 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => detectClaude.mutate()}
                     disabled={detectClaude.isPending}
-                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="btn btn-sm btn-outline"
                     title="Detect Claude Code CLI"
                   >
                     {detectClaude.isPending ? (
@@ -330,23 +330,23 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     Detect
                   </button>
                 </div>
-                <div className="mt-1 text-[10px] text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500">
                   Uses server-side detection similar to where/command -v,
                   plus common install paths.
                 </div>
                 {detectClaude.data?.ok && (
-                  <div className="mt-1 break-words text-[10px] text-emerald-700 dark:text-emerald-300">
+                  <div className="mt-1 break-words text-[11px] text-emerald-700 dark:text-emerald-300">
                     Found {detectClaude.data.version ?? "Claude Code CLI"} at{" "}
                     <span className="font-mono">{detectClaude.data.path}</span>
                   </div>
                 )}
                 {detectClaude.data && !detectClaude.data.ok && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectClaude.data.error ?? "Claude Code CLI not found."}
                   </div>
                 )}
                 {detectClaude.error && !detectClaude.data && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectClaude.error instanceof Error
                       ? detectClaude.error.message
                       : String(detectClaude.error)}
@@ -374,13 +374,13 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     onChange={(e) => setCodexCliPath(e.target.value)}
                     placeholder="/Users/you/.npm-global/bin/codex"
                     spellCheck={false}
-                    className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                    className="field min-w-0 flex-1 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => detectCodex.mutate()}
                     disabled={detectCodex.isPending}
-                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="btn btn-sm btn-outline"
                     title="Detect Codex CLI"
                   >
                     {detectCodex.isPending ? (
@@ -391,23 +391,23 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                     Detect
                   </button>
                 </div>
-                <div className="mt-1 text-[10px] text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500">
                   Uses server-side detection similar to where/command -v,
                   plus common install paths.
                 </div>
                 {detectCodex.data?.ok && (
-                  <div className="mt-1 break-words text-[10px] text-emerald-700 dark:text-emerald-300">
+                  <div className="mt-1 break-words text-[11px] text-emerald-700 dark:text-emerald-300">
                     Found {detectCodex.data.version ?? "Codex CLI"} at{" "}
                     <span className="font-mono">{detectCodex.data.path}</span>
                   </div>
                 )}
                 {detectCodex.data && !detectCodex.data.ok && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectCodex.data.error ?? "Codex CLI not found."}
                   </div>
                 )}
                 {detectCodex.error && !detectCodex.data && (
-                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                  <div className="mt-1 break-words text-[11px] text-red-600 dark:text-red-300">
                     {detectCodex.error instanceof Error
                       ? detectCodex.error.message
                       : String(detectCodex.error)}
@@ -431,7 +431,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                       : "gpt-4o-mini"
               }
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
           </Field>
 
@@ -537,7 +537,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                 if (confirm("Clear saved AI settings?")) clear.mutate();
               }}
               disabled={clear.isPending}
-              className="flex items-center gap-1 rounded border border-red-300 px-2 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-700/40 dark:text-red-300 dark:hover:bg-red-900/20"
+              className="btn btn-sm btn-outline border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/20"
             >
               <IconTrash size={12} />
               Clear
@@ -560,7 +560,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -568,7 +568,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
             type="button"
             onClick={() => save.mutate()}
             disabled={save.isPending}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {save.isPending ? "Saving…" : "Save"}
           </button>
@@ -586,7 +586,7 @@ const Field = ({
   children: React.ReactNode;
 }) => (
   <div>
-    <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="mb-1 eyebrow">
       {label}
     </div>
     {children}
@@ -612,12 +612,8 @@ const ProviderTab = ({
     type="button"
     onClick={() => onClick(value)}
     title={title}
-    className={[
-      "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded px-2 py-1.5",
-      current === value
-        ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-        : "text-slate-600 dark:text-slate-300",
-    ].join(" ")}
+    className="seg-item min-h-[26px] flex-1 justify-center"
+    data-active={current === value}
   >
     {icon}
     {label}

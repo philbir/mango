@@ -128,7 +128,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
             <select
               value={exportCol}
               onChange={(e) => setExportCol(e.target.value)}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full"
             >
               <option value="">Pick a collection…</option>
               {collections.map((c) => (
@@ -141,7 +141,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
               type="button"
               disabled={!exportCol || exportMut.isPending}
               onClick={() => exportMut.mutate()}
-              className="w-full rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="btn btn-primary w-full"
             >
               {exportMut.isPending ? "Exporting…" : "Export"}
             </button>
@@ -167,7 +167,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
               value={importCol}
               onChange={(e) => setImportCol(e.target.value)}
               placeholder="Target collection name"
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
             <input
               ref={importInputRef}
@@ -199,7 +199,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
               type="button"
               disabled={!importCol || !importFile || importMut.isPending}
               onClick={() => importMut.mutate()}
-              className="w-full rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="btn btn-primary w-full"
             >
               {importMut.isPending ? "Importing…" : "Import"}
             </button>
@@ -229,7 +229,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
               type="button"
               disabled={dumpMut.isPending}
               onClick={() => dumpMut.mutate()}
-              className="w-full rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="btn btn-primary w-full"
             >
               {dumpMut.isPending ? "Dumping…" : "Dump database"}
             </button>
@@ -271,7 +271,7 @@ export const ImportExportTab = ({ cid, database }: Props) => {
               type="button"
               disabled={!restoreFile || restoreMut.isPending}
               onClick={() => restoreMut.mutate()}
-              className="w-full rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+              className="btn btn-primary w-full"
             >
               {restoreMut.isPending ? "Restoring…" : "Restore"}
             </button>

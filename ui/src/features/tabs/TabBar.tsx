@@ -36,7 +36,7 @@ export const TabBar = () => {
   }
 
   return (
-    <div className="thin-scrollbar flex items-stretch gap-0.5 overflow-x-auto border-b border-slate-200 bg-slate-100 px-2 pt-1 dark:border-slate-800 dark:bg-slate-900/60">
+    <div className="thin-scrollbar flex h-10 flex-shrink-0 items-end gap-0.5 overflow-x-auto overflow-y-hidden border-b border-slate-200 bg-slate-100 px-2 dark:border-slate-800 dark:bg-slate-900/60">
       {tabs.map((tab) => {
         const active = tab.id === activeId;
         const idx =
@@ -49,30 +49,33 @@ export const TabBar = () => {
           <div
             key={tab.id}
             className={[
-              "group flex items-center gap-1 rounded-t border border-b-0 px-2 py-1 text-xs",
+              "group -mb-px flex h-[33px] flex-shrink-0 items-center gap-1 rounded-t border border-b-0 pl-2 pr-1 text-[12px]",
               active
-                ? "border-slate-300 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                : "border-transparent text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800",
+                ? "border-slate-300 bg-white text-slate-900 shadow-[inset_0_2px_0_var(--color-sky-500)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                : "border-transparent text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100",
             ].join(" ")}
           >
             <button
               type="button"
               onClick={() => activate(tab.id)}
-              className="flex items-center gap-1"
+              onAuxClick={(e) => {
+                if (e.button === 1) closeTab(tab.id);
+              }}
+              className="flex h-full items-center gap-1.5"
               title={labelFor(tab, idx)}
             >
               {tab.kind === "shell" ? (
-                <IconTerminal size={12} className="text-slate-400" />
+                <IconTerminal size={13} className="text-slate-500" />
               ) : tab.kind === "console" ? (
-                <IconTerminal2 size={12} className="text-slate-400" />
+                <IconTerminal2 size={13} className="text-slate-500" />
               ) : tab.kind === "notebook" ? (
-                <IconNotebook size={12} className="text-violet-500" />
+                <IconNotebook size={13} className="text-violet-500" />
               ) : tab.kind === "database" ? (
-                <IconDatabase size={12} className="text-amber-500" />
+                <IconDatabase size={13} className="text-amber-500" />
               ) : tab.kind === "gridfs" ? (
-                <IconFiles size={12} className="text-emerald-500" />
+                <IconFiles size={13} className="text-emerald-500" />
               ) : (
-                <IconTable size={12} className="text-slate-400" />
+                <IconTable size={13} className="text-sky-500" />
               )}
               <span className="max-w-[180px] truncate font-mono">
                 {labelFor(tab, idx)}
@@ -85,10 +88,13 @@ export const TabBar = () => {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-300 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+              className={[
+                "btn-icon min-h-[20px] min-w-[20px] text-slate-500 hover:bg-slate-300 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-slate-100",
+                active ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100",
+              ].join(" ")}
               title="Close tab"
             >
-              <IconX size={11} />
+              <IconX size={13} />
             </button>
           </div>
         );

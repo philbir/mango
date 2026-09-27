@@ -310,38 +310,52 @@ export const ConsoleView = ({
         className="relative flex flex-shrink-0 flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: editorHeight }}
       >
-        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-1.5 text-[11px] dark:border-slate-800">
+        <div className="flex h-9 flex-shrink-0 items-center gap-2 border-b border-slate-200 px-4 text-[11.5px] dark:border-slate-800">
+          <span className="eyebrow">Console</span>
           {collectionProp ? (
-            <span className="font-mono text-slate-500 dark:text-slate-400">
+            <span className="truncate font-mono text-slate-500 dark:text-slate-400">
               db.{collectionProp}.&lt;method&gt;(…)
             </span>
           ) : (
             // Standalone console: a free-form script against the active
             // database, not tied to any collection.
-            <span className="text-slate-500 dark:text-slate-400">
-              <span className="font-mono">Script</span>
-              {database && (
-                <span className="font-mono"> · {database}</span>
-              )}
-              <span className="ml-2 text-slate-400 dark:text-slate-500">
-                variables, loops, <span className="font-mono">print()</span> —
-                the last expression is the result
-              </span>
+            <span className="truncate text-slate-500 dark:text-slate-400">
+              {database && <span className="font-mono">{database} · </span>}
+              variables, loops, <span className="font-mono">print()</span> —
+              the last expression is the result
             </span>
           )}
           <div className="flex-1" />
           <button
             type="button"
             onClick={() => editorRef.current?.format()}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-ghost"
             title="Format command (⇧⌥F or ⌘⇧F)"
           >
-            <IconBraces size={11} />
+            <IconBraces size={13} />
             Format
           </button>
-          <kbd className="mr-12 rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            ⌘/Ctrl + Enter
-          </kbd>
+          <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
+            <kbd>⌘</kbd> <kbd>↵</kbd> runs
+          </span>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={!code.trim() || run.isFetching}
+            className="btn btn-sm btn-primary mr-9"
+          >
+            {run.isFetching ? (
+              <>
+                <IconLoader2 size={12} className="animate-spin" />
+                Running…
+              </>
+            ) : (
+              <>
+                <IconPlayerPlayFilled size={12} />
+                Run
+              </>
+            )}
+          </button>
         </div>
 
         <div className="flex flex-1 items-stretch overflow-hidden">
@@ -354,26 +368,6 @@ export const ConsoleView = ({
               onSubmit={onRun}
               showLineNumbers
             />
-          </div>
-          <div className="flex flex-col items-stretch border-l border-slate-200 px-2 py-2 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onRun}
-              disabled={!code.trim() || run.isFetching}
-              className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
-            >
-              {run.isFetching ? (
-                <>
-                  <IconLoader2 size={14} className="animate-spin" />
-                  Running…
-                </>
-              ) : (
-                <>
-                  <IconPlayerPlayFilled size={14} />
-                  Run
-                </>
-              )}
-            </button>
           </div>
         </div>
 

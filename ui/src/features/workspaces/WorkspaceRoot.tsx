@@ -166,7 +166,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
           <span
             title={`${git.data.branch ?? "(detached)"} @ ${git.data.shortSha ?? "?"}${git.data.dirty ? " · dirty" : ""}`}
             className={[
-              "rounded px-1 font-mono text-[10px]",
+              "rounded px-1 font-mono text-[11px]",
               git.data.dirty
                 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
                 : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
@@ -178,7 +178,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         <button
           type="button"
           onClick={() => startNew("file")}
-          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="btn-icon btn-ghost"
           title="New file"
         >
           <IconFilePlus size={12} />
@@ -186,7 +186,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         <button
           type="button"
           onClick={() => startNew("dir")}
-          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="btn-icon btn-ghost"
           title="New folder"
         >
           <IconFolderPlus size={12} />
@@ -194,7 +194,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         <button
           type="button"
           onClick={() => tree.refetch()}
-          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="btn-icon btn-ghost"
           title="Refresh"
         >
           <IconRefresh size={12} className={tree.isFetching ? "animate-spin" : ""} />
@@ -202,7 +202,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="btn-icon btn-ghost"
           title="Edit workspace"
         >
           <IconPencil size={12} />
@@ -210,7 +210,7 @@ export const WorkspaceRoot = ({ workspace }: Props) => {
         <button
           type="button"
           onClick={() => setConfirmingUnregister(true)}
-          className="rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-300"
+          className="btn-icon text-slate-500 hover:bg-red-100 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-950/50 dark:hover:text-red-300"
           title="Unregister workspace"
         >
           <IconTrash size={12} />

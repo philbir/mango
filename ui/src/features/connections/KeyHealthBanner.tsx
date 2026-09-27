@@ -57,14 +57,14 @@ export const KeyHealthBanner = () => {
                 type="button"
                 onClick={() => reset.mutate()}
                 disabled={reset.isPending}
-                className="rounded bg-red-600 px-2 py-1 text-[12px] font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="btn btn-sm btn-danger"
               >
                 {reset.isPending ? "Resetting…" : "Confirm reset"}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                className="rounded border border-red-300 bg-white px-2 py-1 text-[12px] font-medium text-red-900 hover:bg-red-50 dark:border-red-700/60 dark:bg-slate-900 dark:text-red-100 dark:hover:bg-slate-800"
+                className="btn btn-sm btn-outline border-red-300 text-red-800 hover:border-red-400 hover:bg-red-50 dark:border-red-700/60 dark:text-red-200 dark:hover:bg-red-900/20"
               >
                 Cancel
               </button>
@@ -73,7 +73,7 @@ export const KeyHealthBanner = () => {
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              className="rounded border border-red-300 bg-white px-2 py-1 text-[12px] font-medium text-red-900 hover:bg-red-50 dark:border-red-700/60 dark:bg-slate-900 dark:text-red-100 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline border-red-300 text-red-800 hover:border-red-400 hover:bg-red-50 dark:border-red-700/60 dark:text-red-200 dark:hover:bg-red-900/20"
             >
               Reset encrypted data
             </button>

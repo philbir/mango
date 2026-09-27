@@ -4,17 +4,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import type { UuidRepresentation } from "./api/client";
+import { api, type UuidRepresentation } from "./api/client";
 import type {
   DateDisplay,
   FormatOptions,
   JsonViewFormat,
 } from "./features/documents/docFormats";
+import { isTauri } from "./features/updater/useUpdater";
 
 export type { DateDisplay, JsonViewFormat, UuidRepresentation };
-export type Theme = "dark" | "light";
+export type Theme = "system" | "dark" | "light";
 export type PageSize = 50 | 100 | 200 | 500;
 export type CollectionMode = "query" | "console";
 
@@ -30,42 +32,72 @@ export interface Settings {
 }
 
 const DEFAULT: Settings = {
-  theme: "dark",
+  theme: "system",
   uuidRepresentation: "standard",
   pageSize: 50,
-  tabMode: false,
+  tabMode: true,
   defaultCollectionMode: "query",
   jsonFormat: "shell",
   dateDisplay: "local",
 };
 
+/*
+ * Persistence:
+ *  - Web (Docker / Aspire): sessionStorage — preferences live for the browser
+ *    tab only, so a shared deployment doesn't accumulate per-machine state.
+ *  - Desktop (Tauri): the server writes them to `ui-settings.json` in the app
+ *    data dir, so they survive WebView cache clears and updates. sessionStorage
+ *    is still used as a warm cache so the first paint doesn't flash defaults.
+ *  - `localStorage` under the legacy key is read once as a migration seed for
+ *    installs that predate this scheme, then left alone.
+ */
 const STORAGE_KEY = "mongo-manager:settings:v1";
 
-const loadSettings = (): Settings => {
-  if (typeof window === "undefined") return DEFAULT;
+const sanitize = (raw: unknown): Partial<Settings> => {
+  if (!raw || typeof raw !== "object") return {};
+  // `documentFormat` was the old per-viewer dropdown, superseded by the global
+  // `jsonFormat` — dropped rather than migrated since every install persisted
+  // its default, so it doesn't reflect a real choice.
+  const { documentFormat: _legacy, ...parsed } = raw as Partial<Settings> & {
+    documentFormat?: unknown;
+  };
+  const out: Partial<Settings> = { ...parsed };
+  if (out.theme !== "dark" && out.theme !== "light" && out.theme !== "system") {
+    delete out.theme;
+  }
+  return out;
+};
+
+const readStorage = (storage: Storage | undefined): Partial<Settings> => {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT;
-    // `documentFormat` was the old per-viewer dropdown, superseded by the
-    // global `jsonFormat` — dropped rather than migrated since every install
-    // persisted its default, so it doesn't reflect a real choice.
-    const { documentFormat: _legacy, ...parsed } = JSON.parse(
-      raw,
-    ) as Partial<Settings> & { documentFormat?: unknown };
-    return { ...DEFAULT, ...parsed };
+    const raw = storage?.getItem(STORAGE_KEY);
+    return raw ? sanitize(JSON.parse(raw)) : {};
   } catch {
-    return DEFAULT;
+    return {};
   }
 };
 
+const loadSettings = (): Settings => {
+  if (typeof window === "undefined") return DEFAULT;
+  const session = readStorage(window.sessionStorage);
+  if (Object.keys(session).length > 0) return { ...DEFAULT, ...session };
+  // First load in this tab: seed from the pre-migration localStorage copy.
+  return { ...DEFAULT, ...readStorage(window.localStorage) };
+};
+
+const systemPrefersDark = (): boolean =>
+  typeof window !== "undefined" &&
+  !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+
 const applyTheme = (theme: Theme) => {
   if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  if (theme === "dark") root.classList.add("dark");
-  else root.classList.remove("dark");
+  const dark = theme === "system" ? systemPrefersDark() : theme === "dark";
+  document.documentElement.classList.toggle("dark", dark);
 };
 
 interface SettingsContextValue extends Settings {
+  /** The theme actually in effect once "system" is resolved. */
+  resolvedTheme: "dark" | "light";
   setTheme: (t: Theme) => void;
   setUuidRepresentation: (r: UuidRepresentation) => void;
   setPageSize: (n: PageSize) => void;
@@ -81,17 +113,61 @@ const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export const SettingsProvider = ({ children }: { children: React.ReactNode }) => {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [systemDark, setSystemDark] = useState(() => systemPrefersDark());
+  // Desktop: don't write back to the server until we've read from it, or a
+  // fast first render would clobber the persisted file with defaults.
+  const hydratedRef = useRef(!isTauri());
+
+  // Desktop: hydrate from the server-side file.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    api
+      .getUiSettings()
+      .then(({ settings: remote }) => {
+        if (cancelled) return;
+        const parsed = sanitize(remote);
+        if (Object.keys(parsed).length > 0) {
+          setSettings((s) => ({ ...s, ...parsed }));
+        }
+      })
+      .catch(() => {
+        /* keep the local copy */
+      })
+      .finally(() => {
+        if (!cancelled) hydratedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     applyTheme(settings.theme);
+  }, [settings.theme, systemDark]);
+
+  // Follow OS theme changes live while on "system".
+  useEffect(() => {
+    if (settings.theme !== "system" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, [settings.theme]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch {
       /* ignore */
     }
+    if (!isTauri() || !hydratedRef.current) return;
+    const handle = window.setTimeout(() => {
+      api.putUiSettings(settings as unknown as Record<string, unknown>).catch(() => {
+        /* best effort — sessionStorage still has it */
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
   }, [settings]);
 
   const setTheme = useCallback(
@@ -132,9 +208,17 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     [settings.uuidRepresentation, settings.dateDisplay],
   );
 
+  const resolvedTheme: "dark" | "light" =
+    settings.theme === "system"
+      ? systemDark
+        ? "dark"
+        : "light"
+      : settings.theme;
+
   const value = useMemo(
     () => ({
       ...settings,
+      resolvedTheme,
       setTheme,
       setUuidRepresentation,
       setPageSize,
@@ -146,6 +230,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     }),
     [
       settings,
+      resolvedTheme,
       setTheme,
       setUuidRepresentation,
       setPageSize,

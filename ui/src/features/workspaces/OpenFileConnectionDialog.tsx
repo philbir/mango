@@ -84,7 +84,7 @@ export const OpenFileConnectionDialog = ({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={14} />
           </button>
@@ -112,13 +112,13 @@ export const OpenFileConnectionDialog = ({
         ) : (
           <>
             <label className="mb-2 block">
-              <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <span className="block eyebrow">
                 Connection
               </span>
               <select
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field mt-1 w-full"
                 autoFocus
               >
                 {connections.map((c) => (
@@ -133,7 +133,7 @@ export const OpenFileConnectionDialog = ({
             </label>
 
             <label className="mb-3 block">
-              <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <span className="block eyebrow">
                 Database
               </span>
               <input
@@ -141,7 +141,7 @@ export const OpenFileConnectionDialog = ({
                 value={database}
                 onChange={(e) => setDatabase(e.target.value)}
                 placeholder="(use connection default)"
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-[12px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field mt-1 w-full font-mono"
               />
             </label>
           </>
@@ -151,14 +151,14 @@ export const OpenFileConnectionDialog = ({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={!selectedId}
-            className="rounded bg-sky-500 px-3 py-1 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             Open
           </button>
