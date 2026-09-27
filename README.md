@@ -93,9 +93,9 @@ Download the installer for your OS from [Releases](https://github.com/philbir/ma
 To build locally:
 
 ```bash
-yarn install
-yarn compile-server     # builds the sidecar binary (requires Bun)
-yarn tauri:build        # produces a .dmg / .msi / .deb / .AppImage
+pnpm install
+pnpm compile-server     # builds the sidecar binary (requires Bun)
+pnpm tauri:build        # produces a .dmg / .msi / .deb / .AppImage
 ```
 
 ## Configuration
@@ -133,20 +133,20 @@ You can also configure the assistant from the UI (Settings menu); it'll be persi
 
 ### Prerequisites
 
-- Node.js 22+ with Corepack enabled for Yarn 4 (`corepack enable`).
-- Bun on `PATH` for `yarn compile-server` (`curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`).
+- Node.js 22+ with Corepack enabled for pnpm (`corepack enable`).
+- Bun on `PATH` for `pnpm compile-server` (`curl -fsSL https://bun.sh/install | bash` or `brew install oven-sh/bun/bun`).
 - Rust via rustup for Tauri desktop development and packaging (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
 - Platform WebView/build tools required by Tauri. On macOS this usually means Xcode Command Line Tools; Windows and Linux need the normal Tauri prerequisites for WebView2/WebKitGTK.
 
-`yarn compile-server` auto-detects the sidecar target from Rust when available, then falls back to Node's platform/architecture info. You can also pass a target explicitly, for example `yarn compile-server aarch64-apple-darwin`.
+`pnpm compile-server` auto-detects the sidecar target from Rust when available, then falls back to Node's platform/architecture info. You can also pass a target explicitly, for example `pnpm compile-server aarch64-apple-darwin`.
 
 ```bash
-yarn install
-yarn dev                # server (5180) + Vite (5173) concurrently
-yarn test               # vitest (server)
-yarn workspace @mango/ui typecheck
-yarn docs:dev           # landing page + docs site
-yarn docs:build         # static GitHub Pages build
+pnpm install
+pnpm dev                # server (5180) + Vite (5173) concurrently
+pnpm test               # vitest (server)
+pnpm --filter @mango/ui typecheck
+pnpm docs:dev           # landing page + docs site
+pnpm docs:build         # static GitHub Pages build
 ```
 
 The server is ESM Node 22 + [Hono](https://hono.dev) + the official `mongodb` driver. State (connections + AI settings) is persisted as plain JSON files under `MANGO_DATA_DIR`, with sensitive fields encrypted via AES-256-GCM. The UI is React 19 + Vite + Tailwind + Monaco. The desktop shell is Tauri 2.

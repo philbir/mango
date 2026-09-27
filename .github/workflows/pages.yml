@@ -7,7 +7,8 @@ on:
       - "docs-site/**"
       - ".github/workflows/pages.yml"
       - "package.json"
-      - "yarn.lock"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   workflow_dispatch:
 
 permissions:
@@ -30,15 +31,15 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          # See desktop-build.yml: avoid setup-node@v5's default yarn cache,
-          # which runs before corepack is enabled and trips on packageManager.
+          # See desktop-build.yml: avoid setup-node@v5's default package-manager
+          # cache, which runs before corepack is enabled.
           package-manager-cache: false
 
       - run: corepack enable
 
-      - run: yarn install --immutable
+      - run: pnpm install --frozen-lockfile
 
-      - run: yarn docs:build
+      - run: pnpm docs:build
 
       - uses: actions/configure-pages@v5
         with:

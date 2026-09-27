@@ -4,24 +4,24 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Commands
 
-Yarn 4 (Berry) workspace — always run from the repo root unless noted.
+pnpm workspace — always run from the repo root unless noted.
 
 ```bash
-yarn install                           # bootstrap all workspaces
-yarn dev:server                        # tsx watch on server (port 5180)
-yarn dev:ui                            # vite dev on 5173, proxies /api → 5180
-yarn build                             # UI build → server/public, then server tsc
-yarn start                             # node dist/index.js (after build)
-yarn test                              # vitest run (server only)
-yarn workspace @mango/server test:watch
-yarn workspace @mango/server test -- ejson    # single test file
-yarn workspace @mango/ui typecheck     # tsc -b --noEmit (UI has no test runner)
-yarn aspire                            # what Aspire's WithMango() invokes: install + UI build + server dev
+pnpm install                           # bootstrap all workspaces
+pnpm dev:server                        # tsx watch on server (port 5180)
+pnpm dev:ui                            # vite dev on 5173, proxies /api → 5180
+pnpm build                             # UI build → server/public, then server tsc
+pnpm start                             # node dist/index.js (after build)
+pnpm test                              # vitest run (server only)
+pnpm --filter @mango/server test:watch
+pnpm --filter @mango/server test ejson    # single test file
+pnpm --filter @mango/ui typecheck     # tsc -b --noEmit (UI has no test runner)
+pnpm aspire                            # what Aspire's WithMango() invokes: install + UI build + server dev
 
 # Desktop (Tauri 2)
-yarn compile-server                    # bun build --compile → desktop/bin/mango-server-<triple>
-yarn tauri:dev                         # native shell + Vite HMR (sidecar NOT used here)
-yarn tauri:build                       # full bundle (.dmg / .msi / .deb / .AppImage)
+pnpm compile-server                    # bun build --compile → desktop/bin/mango-server-<triple>
+pnpm tauri:dev                         # native shell + Vite HMR (sidecar NOT used here)
+pnpm tauri:build                       # full bundle (.dmg / .msi / .deb / .AppImage)
 ```
 
 The UI has no separate test runner — all tests live in `server/test/` and run under vitest. There's no repo-wide linter; rely on `tsc` strict-mode (the server has `noUncheckedIndexedAccess`).
@@ -50,7 +50,7 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 
 ### Desktop sidecar
 
-`yarn compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by ****`tauri:build`**** and ****`tauri:dev`** — when you change server code, re-run `yarn compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
+`pnpm compile-server` runs `bun build --compile` on the server entry, producing a single self-contained binary at `desktop/bin/mango-server-<rust-target-triple>`. Tauri's `externalBin` in `desktop/src-tauri/tauri.conf.json` references `../bin/mango-server` and Tauri appends the host triple at bundle time. **The sidecar binary is only used by ****`tauri:build`**** and ****`tauri:dev`** — when you change server code, re-run `pnpm compile-server` for `tauri:build`, but `tauri:dev` runs the UI via Vite HMR and is unrelated to the sidecar (see `desktop/README.md`).
 
 ### Aspire integration
 
@@ -61,4 +61,4 @@ Two providers behind a single `AiProvider` interface (`server/src/providers/type
 - **Server** is ESM (`"type": "module"`) — relative imports must include the `.js` extension even from `.ts` source. `tsconfig.json` uses `module: NodeNext`.
 - **Ports:** server 5180 (Hono default), Vite 5173 (matches Tauri's `devUrl`). Override with `PORT` and `VITE_PORT`.
 - The `desktop/` workspace has no `node_modules` of its own beyond `@tauri-apps/cli`; the actual server it ships is the compiled bun binary, not a Node install.
-- The `docker/Dockerfile` currently references the old workspace names `@antoniq/mongo-manager-{ui,server}` — they were renamed to `@mango/{ui,server}`. Fix when you next touch it.
+- **pnpm isolation:** dependencies aren't hoisted, so every workspace must declare what it imports in its own `package.json` (yarn used to mask missing ones). Security pins live under `overrides:` in `pnpm-workspace.yaml`, alongside `minimumReleaseAge` (48h supply-chain cooldown, in minutes).

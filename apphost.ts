@@ -23,7 +23,7 @@ const mongo = await builder
 // as the seed finishes.
 const seed = await builder
   .addJavaScriptApp("mango-seed", "./server", { runScriptName: "seed:mongo" })
-  .withYarn({ install: false })
+  .withPnpm({ install: false })
   .withEnvironment("MONGO_URL", "mongodb://localhost:27017")
   .waitFor(mongo);
 void seed; // referenced for the compose graph; nothing else depends on it.
@@ -35,14 +35,13 @@ void seed; // referenced for the compose graph; nothing else depends on it.
 // seedFromEnvIfEmpty() creates a "Default" connection from it on first boot.
 // withOtlpExporter() injects OTEL_EXPORTER_OTLP_ENDPOINT pointing at the
 // Aspire dashboard — server/src/instrumentation.ts picks that up automatically.
-// withYarn({ install: false }): we manage dependencies via Yarn 4 Berry
-// workspaces at the repo root (`yarn install` covers every workspace in one
-// pass). Aspire's per-resource installer would shell out a separate install
-// here that gets the lockfile format wrong and leaves node_modules out of sync
-// with what Berry produced, so we disable it.
+// withPnpm({ install: false }): we manage dependencies via pnpm workspaces at
+// the repo root (`pnpm install` covers every workspace in one pass). Aspire's
+// per-resource installer would run a separate install inside each workspace
+// dir, which fights the root lockfile, so we disable it.
 const server = await builder
   .addJavaScriptApp("mango-server", "./server", { runScriptName: "dev" })
-  .withYarn({ install: false })
+  .withPnpm({ install: false })
   .withHttpEndpoint({ env: "PORT" })
   .withEnvironment("MONGO_URL", "mongodb://localhost:27017")
   // Local AppHost runs are for development — surface the destructive
@@ -59,7 +58,7 @@ const server = await builder
 // /api/* to mango-server).
 const ui = await builder
   .addViteApp("mango-ui", "./ui")
-  .withYarn({ install: false })
+  .withPnpm({ install: false })
   .withReference(server)
   .withEnvironment("VITE_MANGO_API", await server.getEndpoint("http"))
   .withExternalHttpEndpoints()
@@ -70,7 +69,7 @@ const ui = await builder
 // can be previewed alongside the workbench during local dev.
 const docs = await builder
   .addViteApp("mango-docs", "./docs-site")
-  .withYarn({ install: false })
+  .withPnpm({ install: false })
   .withExternalHttpEndpoints();
 
 // Suppress unused-var warnings — `ui` and `docs` exist so the compose graph wires up.

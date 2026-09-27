@@ -4,9 +4,9 @@
   "version": "0.5.0",
   "identifier": "dev.mango.app",
   "build": {
-    "beforeDevCommand": "yarn --cwd ../ui dev",
+    "beforeDevCommand": "pnpm --dir ../ui dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "yarn --cwd ../ui build",
+    "beforeBuildCommand": "pnpm --dir ../ui build",
     "frontendDist": "../../server/public"
   },
   "app": {

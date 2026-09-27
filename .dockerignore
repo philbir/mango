@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+server/public
+desktop/src-tauri/target
+desktop/bin
+.git
+.mango
+.modules
+.aspire

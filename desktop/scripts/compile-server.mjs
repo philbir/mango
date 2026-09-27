@@ -2,8 +2,8 @@
 // Compile the @mango/server source into a single native binary using `bun build --compile`.
 // The output is named after the Rust target triple Tauri expects in `externalBin`.
 //
-// Usage:  yarn compile-server          (builds for current platform)
-//         yarn compile-server <triple> (e.g. aarch64-apple-darwin, x86_64-pc-windows-msvc)
+// Usage:  pnpm compile-server          (builds for current platform)
+//         pnpm compile-server <triple> (e.g. aarch64-apple-darwin, x86_64-pc-windows-msvc)
 //
 // Requires: bun installed and on PATH (https://bun.sh).
 
