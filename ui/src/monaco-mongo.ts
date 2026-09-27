@@ -1,18 +1,7 @@
 import * as monaco from "monaco-editor";
-// Monaco 0.55 deprecated `monaco.languages.json.jsonDefaults` in its public
-// types (the namespace is now declared as `{ deprecated: true }`). The runtime
-// export still exists in the JSON contribution module, so reach for it
-// directly and re-type just the bit we use.
-import * as monacoJson from "monaco-editor/esm/vs/language/json/monaco.contribution.js";
-interface JsonDiagnosticsOptions {
-  validate?: boolean;
-  allowComments?: boolean;
-  schemas?: readonly unknown[];
-  enableSchemaRequest?: boolean;
-}
-const { jsonDefaults } = monacoJson as unknown as {
-  jsonDefaults: { setDiagnosticsOptions(options: JsonDiagnosticsOptions): void };
-};
+// Monaco 0.57 moved the JSON language service to a top-level `json` export
+// (`monaco.languages.json` is deprecated).
+const { jsonDefaults } = monaco.json;
 
 export interface MongoCompletionConfig {
   fields?: string[];

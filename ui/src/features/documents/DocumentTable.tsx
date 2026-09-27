@@ -1,7 +1,9 @@
 import {
+  columnResizingFeature,
+  columnSizingFeature,
   flexRender,
-  getCoreRowModel,
-  useReactTable,
+  tableFeatures,
+  useTable,
   type ColumnDef,
 } from "@tanstack/react-table";
 import { useMemo } from "react";
@@ -79,6 +81,9 @@ const formatCell = (
 
 const COLUMN_LIMIT = 12;
 
+const features = tableFeatures({ columnSizingFeature, columnResizingFeature });
+type Doc = Record<string, unknown>;
+
 export const DocumentTable = ({
   documents,
   loading,
@@ -115,7 +120,7 @@ export const DocumentTable = ({
     return Array.from(seen);
   }, [documents]);
 
-  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
+  const columns = useMemo<ColumnDef<typeof features, Doc>[]>(
     () =>
       columnNames.map((name) => ({
         id: name,
@@ -133,10 +138,10 @@ export const DocumentTable = ({
     [columnNames, uuidRepresentation],
   );
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data: documents,
     columns,
-    getCoreRowModel: getCoreRowModel(),
     enableColumnResizing: true,
     columnResizeMode: "onChange",
   });
@@ -254,7 +259,7 @@ export const DocumentTable = ({
                     />
                   </td>
                 )}
-                {row.getVisibleCells().map((cell) => (
+                {row.getAllCells().map((cell) => (
                   <td
                     key={cell.id}
                     className="truncate border-b border-slate-200 px-3 py-1.5 dark:border-slate-800"
