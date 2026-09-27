@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import {
   type AiChatInput,
@@ -9,15 +9,12 @@ import {
   type ModelOption,
 } from "./types.js";
 
+// Used only when the live query below fails. The CLI's aliases always resolve
+// to its current latest model, so they don't go stale.
 const FALLBACK_MODELS: ModelOption[] = [
   { id: "sonnet", name: "Claude Sonnet (latest)", vendor: "anthropic" },
   { id: "opus", name: "Claude Opus (latest)", vendor: "anthropic" },
   { id: "haiku", name: "Claude Haiku (latest)", vendor: "anthropic" },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", vendor: "anthropic" },
-  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", vendor: "anthropic" },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6", vendor: "anthropic" },
-  { id: "claude-opus-4-5", name: "Claude Opus 4.5", vendor: "anthropic" },
-  { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", vendor: "anthropic" },
 ];
 
 interface LocatedCli {
@@ -287,6 +284,138 @@ const runQuery = async (
   });
 };
 
+interface ClaudeCliModel {
+  value?: unknown;
+  displayName?: unknown;
+  description?: unknown;
+}
+
+interface ClaudeControlResponse {
+  type: "control_response";
+  response?: {
+    subtype?: string;
+    request_id?: string;
+    error?: string;
+    response?: { models?: ClaudeCliModel[] };
+  };
+}
+
+// Claude Code has no `models` subcommand, but its stream-json control protocol
+// (the one the Agent SDK's `supportedModels()` uses) returns the account's
+// model picker list in the `initialize` response. Send that one request and
+// kill the process — no prompt is ever sent, so nothing is billed.
+const queryModelsViaCli = async (cliPath: string): Promise<ModelOption[]> =>
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      cliPath,
+      [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+      ],
+      {
+        cwd: tmpdir(),
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, NO_COLOR: "1" },
+      },
+    );
+    let buffered = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (err: Error | null, models?: ModelOption[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stdin.end();
+      child.kill();
+      if (err) reject(err);
+      else resolve(models ?? []);
+    };
+    const timer = setTimeout(
+      () => finish(new Error("Claude CLI model list timed out.")),
+      30_000,
+    );
+
+    child.stdout.on("data", (b: Buffer) => {
+      buffered += b.toString();
+      let nl: number;
+      while ((nl = buffered.indexOf("\n")) !== -1) {
+        const line = buffered.slice(0, nl).trim();
+        buffered = buffered.slice(nl + 1);
+        if (!line) continue;
+        let msg: ClaudeControlResponse;
+        try {
+          msg = JSON.parse(line) as ClaudeControlResponse;
+        } catch {
+          continue;
+        }
+        if (msg.type !== "control_response" || msg.response?.request_id !== "models") {
+          continue;
+        }
+        if (msg.response.subtype === "error") {
+          return finish(
+            new Error(`Claude CLI: ${msg.response.error ?? "initialize failed"}`),
+          );
+        }
+        // `default` is a picker entry, not a model ID `--model` accepts.
+        const models = (msg.response.response?.models ?? []).flatMap(
+          (m): ModelOption[] =>
+            typeof m.value === "string" && m.value !== "default"
+              ? [
+                  {
+                    id: m.value,
+                    name: typeof m.displayName === "string" ? m.displayName : m.value,
+                    ...(typeof m.description === "string"
+                      ? { description: m.description }
+                      : {}),
+                    vendor: "anthropic",
+                  },
+                ]
+              : [],
+        );
+        if (models.length === 0) {
+          return finish(new Error("Claude CLI returned no models."));
+        }
+        return finish(null, models);
+      }
+    });
+    child.stderr.on("data", (b: Buffer) => (stderr += b.toString()));
+    child.on("error", (e) =>
+      finish(new Error(`Could not run Claude CLI at "${cliPath}": ${e.message}`)),
+    );
+    child.on("close", (code) =>
+      finish(
+        new Error(
+          `Claude CLI exited with ${code} before listing models: ${stderr.trim() || "(no stderr)"}`,
+        ),
+      ),
+    );
+
+    child.stdin.write(
+      `${JSON.stringify({
+        type: "control_request",
+        request_id: "models",
+        request: { subtype: "initialize" },
+      })}\n`,
+    );
+  });
+
+// Cache per CLI path; failures aren't cached so the next call retries.
+const MODEL_CACHE_TTL_MS = 10 * 60_000;
+const modelCache = new Map<string, { at: number; models: ModelOption[] }>();
+
+const listCliModels = async (cliPath: string): Promise<ModelOption[]> => {
+  const hit = modelCache.get(cliPath);
+  if (hit && Date.now() - hit.at < MODEL_CACHE_TTL_MS) return hit.models;
+  const models = await queryModelsViaCli(cliPath);
+  modelCache.set(cliPath, { at: Date.now(), models });
+  return models;
+};
+
 export interface ClaudeCodeBuildOptions {
   model?: string;
   cliPath?: string | null;
@@ -315,14 +444,19 @@ export const buildClaudeCodeProvider = (
     async validate(): Promise<Record<string, string | number | boolean | null>> {
       const detection = await detectClaudeCli(cli.command);
       if (!detection.ok) throw new Error(detection.error ?? "Claude Code CLI not found.");
+      await listCliModels(cli.command);
       return {
         cliPath: detection.path,
         cliVersion: detection.version,
-        modelSource: "built-in Claude Code model catalog",
+        modelSource: "Claude Code CLI (live account catalog)",
       };
     },
     async listModels(): Promise<ModelOption[]> {
-      return FALLBACK_MODELS;
+      try {
+        return await listCliModels(cli.command);
+      } catch {
+        return FALLBACK_MODELS;
+      }
     },
     async chat(input: AiChatInput): Promise<AiChatResult> {
       const useModel = input.model ?? model;
