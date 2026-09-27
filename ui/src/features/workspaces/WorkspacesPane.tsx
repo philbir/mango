@@ -1,5 +1,6 @@
 import { IconFolderPlus } from "@tabler/icons-react";
 import { useState } from "react";
+import { useSettings } from "../../settings";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 import { WorkspaceRoot } from "./WorkspaceRoot";
 import { useActiveWorkspace } from "./useActiveWorkspace";
@@ -7,6 +8,7 @@ import { useActiveWorkspace } from "./useActiveWorkspace";
 export const WorkspacesPane = () => {
   const { workspaces, active, enabled, isLoading, error } = useActiveWorkspace();
   const [showNew, setShowNew] = useState(false);
+  const { tabMode } = useSettings();
 
   // When workspaces are enabled and at least one exists, WorkspaceRoot owns the
   // entire pane chrome (selector + actions + tree) — no outer header here, so
@@ -21,18 +23,20 @@ export const WorkspacesPane = () => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1 dark:border-slate-800">
-        <span className="flex-1 text-[10.5px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div
+        className={`flex ${tabMode ? "h-10" : "h-8"} flex-shrink-0 items-center gap-1 border-b border-slate-200 px-2 dark:border-slate-800`}
+      >
+        <span className="eyebrow flex-1 pl-1">
           Workspaces
         </span>
         {enabled && (
           <button
             type="button"
             onClick={() => setShowNew(true)}
-            className="flex items-center gap-1 rounded px-1 py-0.5 text-[10.5px] text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn btn-sm btn-ghost px-1.5"
             title="New workspace"
           >
-            <IconFolderPlus size={11} />
+            <IconFolderPlus size={13} />
             New
           </button>
         )}
@@ -61,9 +65,9 @@ export const WorkspacesPane = () => {
             <button
               type="button"
               onClick={() => setShowNew(true)}
-              className="mt-2 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="btn btn-sm btn-outline mt-2"
             >
-              <IconFolderPlus size={11} />
+              <IconFolderPlus size={13} />
               Add a workspace
             </button>
           </div>

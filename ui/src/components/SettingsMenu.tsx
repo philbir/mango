@@ -1,5 +1,6 @@
 import {
   IconBraces,
+  IconDeviceDesktop,
   IconMoon,
   IconSettings,
   IconSparkles,
@@ -43,21 +44,23 @@ export const SettingsMenu = () => {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="btn-icon btn-ghost h-7 w-7"
         title="Settings"
+        aria-label="Settings"
       >
         <IconSettings size={16} />
       </button>
       {open && (
         <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-md border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center justify-between pb-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">
               Settings
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="btn-icon btn-ghost"
+              aria-label="Close"
             >
               <IconX size={14} />
             </button>
@@ -68,8 +71,13 @@ export const SettingsMenu = () => {
               value={settings.theme}
               onChange={settings.setTheme}
               options={[
-                { value: "dark", label: "Dark", icon: <IconMoon size={12} /> },
-                { value: "light", label: "Light", icon: <IconSun size={12} /> },
+                {
+                  value: "system",
+                  label: "System",
+                  icon: <IconDeviceDesktop size={13} />,
+                },
+                { value: "dark", label: "Dark", icon: <IconMoon size={13} /> },
+                { value: "light", label: "Light", icon: <IconSun size={13} /> },
               ]}
             />
           </Section>
@@ -98,12 +106,12 @@ export const SettingsMenu = () => {
           </Section>
 
           <Section label="Tabs">
-            <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={settings.tabMode}
                 onChange={(e) => settings.setTabMode(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-sky-500 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800"
+                className="rounded"
               />
               Tab mode (open each collection in its own tab)
             </label>
@@ -116,9 +124,9 @@ export const SettingsMenu = () => {
                 setOpen(false);
                 setFormatsOpen(true);
               }}
-              className="flex w-full items-center gap-1.5 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline w-full justify-start"
             >
-              <IconBraces size={12} />
+              <IconBraces size={13} />
               Configure formats
             </button>
           </Section>
@@ -130,9 +138,9 @@ export const SettingsMenu = () => {
                 setOpen(false);
                 setAiOpen(true);
               }}
-              className="flex w-full items-center gap-1.5 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline w-full justify-start"
             >
-              <IconSparkles size={12} />
+              <IconSparkles size={13} />
               Configure provider
             </button>
           </Section>
@@ -154,9 +162,7 @@ const Section = ({
   children: React.ReactNode;
 }) => (
   <div className="mt-2 first:mt-0">
-    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-      {label}
-    </div>
+    <div className="eyebrow mb-1">{label}</div>
     {children}
   </div>
 );
@@ -184,10 +190,10 @@ function ToggleGroup<T extends string | number>({
           type="button"
           onClick={() => onChange(opt.value)}
           className={[
-            "flex items-center gap-1 rounded px-2 py-1 text-xs",
+            "btn btn-sm",
             value === opt.value
-              ? "bg-sky-500/15 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300"
-              : "border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800",
+              ? "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
+              : "btn-outline font-normal",
           ].join(" ")}
         >
           {opt.icon}

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   IconAlertTriangle,
-  IconPlayerPlayFilled,
   IconPlus,
   IconX,
 } from "@tabler/icons-react";
@@ -14,7 +13,7 @@ interface Props {
   collectionName: string;
   filterJson: string;
   onChange: (json: string) => void;
-  onRun: (json: string) => void;
+  onRun?: (json: string) => void;
 }
 
 type Operator =
@@ -400,7 +399,6 @@ export const QueryBuilder = ({
   collectionName,
   filterJson,
   onChange,
-  onRun,
 }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
@@ -458,10 +456,6 @@ export const QueryBuilder = ({
     setConditions((arr) => [...arr, newCondition()]);
   };
 
-  const onRunClicked = () => {
-    onRun(filterToJson(conditions, combinator));
-  };
-
   const resetFromRaw = () => {
     const empty = [newCondition()];
     setConditions(empty);
@@ -486,7 +480,7 @@ export const QueryBuilder = ({
         <button
           type="button"
           onClick={resetFromRaw}
-          className="rounded border border-amber-400 px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/30"
+          className="btn btn-sm border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/30"
         >
           Reset
         </button>
@@ -502,14 +496,14 @@ export const QueryBuilder = ({
           return (
             <div key={c.id} className="flex flex-wrap items-center gap-1.5">
               {idx === 0 ? (
-                <span className="w-12 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
+                <span className="eyebrow w-14">
                   Where
                 </span>
               ) : (
                 <select
                   value={combinator}
                   onChange={(e) => setCombinator(e.target.value as "and" | "or")}
-                  className="w-12 rounded border border-slate-300 bg-white px-1 py-1 text-[11px] uppercase text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  className="h-[26px] w-14 rounded border border-slate-300 bg-white px-1 text-[11px] font-medium uppercase text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 >
                   <option value="and">AND</option>
                   <option value="or">OR</option>
@@ -520,14 +514,14 @@ export const QueryBuilder = ({
                 value={c.field}
                 onChange={(e) => updateCondition(c.id, { field: e.target.value })}
                 placeholder="field"
-                className="w-44 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="h-[26px] w-48 rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
               <select
                 value={c.operator}
                 onChange={(e) =>
                   updateCondition(c.id, { operator: e.target.value as Operator })
                 }
-                className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="h-[26px] rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 {OPERATORS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -540,13 +534,14 @@ export const QueryBuilder = ({
                   value={c.value}
                   onChange={(e) => updateCondition(c.id, { value: e.target.value })}
                   placeholder={op.placeholder ?? "value"}
-                  className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="h-[26px] flex-1 rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               )}
               <button
                 type="button"
                 onClick={() => removeCondition(c.id)}
-                className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="btn-icon btn-ghost"
+                title="Remove condition"
               >
                 <IconX size={14} />
               </button>
@@ -563,19 +558,14 @@ export const QueryBuilder = ({
         <button
           type="button"
           onClick={addCondition}
-          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="btn btn-sm btn-outline"
         >
-          <IconPlus size={12} />
+          <IconPlus size={13} />
           Add condition
         </button>
-        <button
-          type="button"
-          onClick={onRunClicked}
-          className="flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400"
-        >
-          <IconPlayerPlayFilled size={14} />
-          Run
-        </button>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+          Run with the toolbar button or <kbd>⌘</kbd> <kbd>↵</kbd>
+        </span>
       </div>
     </div>
   );

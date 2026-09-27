@@ -113,14 +113,14 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={14} />
           </button>
         </div>
 
         <label className="mb-2 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Name
           </span>
           <input
@@ -138,7 +138,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
         </label>
 
         <label className="mb-3 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Folder
           </span>
           <div className="mt-1 flex gap-1">
@@ -151,7 +151,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
             <button
               type="button"
               onClick={onPick}
-              className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[12px] hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="btn btn-sm btn-outline"
               title={native ? "Pick folder" : "Browse server filesystem"}
             >
               <IconFolder size={12} />
@@ -159,7 +159,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
             </button>
           </div>
           {trimmedFolder !== workspace.folderPath && (
-            <p className="mt-1 text-[10.5px] text-amber-600 dark:text-amber-400">
+            <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
               Changing the folder re-points the workspace. Open files from the
               previous folder will need to be reopened.
             </p>
@@ -167,7 +167,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
         </label>
 
         <label className="mb-3 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Color
           </span>
           <div className="mt-1 flex gap-1.5">
@@ -198,7 +198,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -207,7 +207,7 @@ export const EditWorkspaceDialog = ({ workspace, onClose }: Props) => {
             disabled={
               update.isPending || !trimmedName || !trimmedFolder || nameInvalid
             }
-            className="rounded bg-sky-500 px-3 py-1 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>

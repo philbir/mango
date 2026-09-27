@@ -84,7 +84,7 @@ export const CodeBlock = ({ lang, code }: Props) => {
 
   return (
     <div className="my-2 overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
+      <div className="flex items-center justify-between border-b border-slate-200 px-2 py-1 text-[11px] uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
         <span className="font-mono normal-case">{langLabel(lang)}</span>
         <div className="flex items-center gap-1">
           {canApply && kind && (
@@ -92,7 +92,7 @@ export const CodeBlock = ({ lang, code }: Props) => {
               type="button"
               onClick={onApply}
               className={[
-                "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium normal-case",
+                "flex items-center gap-1 rounded px-2 py-1 text-[11.5px] font-medium normal-case",
                 applied
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                   : kind === "shell" || kind === "console"
@@ -102,17 +102,17 @@ export const CodeBlock = ({ lang, code }: Props) => {
             >
               {applied ? (
                 <>
-                  <IconCheck size={11} />
+                  <IconCheck size={13} />
                   Applied
                 </>
               ) : kind === "shell" || kind === "console" ? (
                 <>
-                  <IconPlayerPlayFilled size={11} />
+                  <IconPlayerPlayFilled size={13} />
                   {labelFor(kind)}
                 </>
               ) : (
                 <>
-                  <IconWand size={11} />
+                  <IconWand size={13} />
                   {labelFor(kind)}
                 </>
               )}
@@ -121,16 +121,16 @@ export const CodeBlock = ({ lang, code }: Props) => {
           <button
             type="button"
             onClick={onCopy}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100 normal-case"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11.5px] text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100 normal-case"
           >
             {copied ? (
               <>
-                <IconCheck size={11} />
+                <IconCheck size={13} />
                 Copied
               </>
             ) : (
               <>
-                <IconCopy size={11} />
+                <IconCopy size={13} />
                 Copy
               </>
             )}

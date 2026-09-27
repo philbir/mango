@@ -53,7 +53,7 @@ export const WorkspaceFileHeader = ({
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/60 px-3 py-1.5 text-[12px] dark:border-slate-800 dark:bg-slate-900/30">
+      <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50/60 px-4 text-[12px] dark:border-slate-800 dark:bg-slate-900/30">
         <span
           className="h-2 w-2 shrink-0 rounded-full"
           style={{ background: workspace?.color ?? "#94a3b8" }}
@@ -62,7 +62,7 @@ export const WorkspaceFileHeader = ({
           {workspace?.name}/{mangoFileDisplayName(filePath)}
         </span>
         {dirty && (
-          <span className="rounded bg-amber-200/60 px-1 text-[10px] font-medium text-amber-800 dark:bg-amber-700/30 dark:text-amber-200">
+          <span className="rounded bg-amber-200/60 px-1 text-[11px] font-medium text-amber-800 dark:bg-amber-700/30 dark:text-amber-200">
             unsaved
           </span>
         )}
@@ -70,15 +70,15 @@ export const WorkspaceFileHeader = ({
           <button
             type="button"
             onClick={onReload}
-            className="flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10.5px] text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
+            className="btn btn-sm border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
             title="File changed on disk — reload"
           >
-            <IconAlertTriangle size={10} />
+            <IconAlertTriangle size={12} />
             Changed on disk · Reload
           </button>
         )}
         {deleted && (
-          <span className="text-[10.5px] text-red-600 dark:text-red-400">
+          <span className="text-[11px] text-red-600 dark:text-red-400">
             File deleted on disk — Save will recreate it.
           </span>
         )}
@@ -87,30 +87,30 @@ export const WorkspaceFileHeader = ({
           type="button"
           onClick={onSave}
           disabled={!dirty || saving}
-          className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
+          className="btn btn-sm btn-outline"
           title="Save (⌘/Ctrl+S)"
         >
-          <IconDeviceFloppy size={11} />
+          <IconDeviceFloppy size={13} />
           {saving ? "Saving…" : dirty ? "Save" : "Saved"}
         </button>
         <button
           type="button"
           onClick={() => setConfirming(true)}
           disabled={del.isPending}
-          className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-slate-700 dark:text-red-400 dark:hover:bg-red-950/30"
+          className="btn btn-sm btn-outline text-red-700 hover:border-red-400 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
           title="Delete file"
         >
-          <IconTrash size={11} />
+          <IconTrash size={13} />
           Delete
         </button>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="btn-icon btn-ghost"
             title="Close"
           >
-            <IconX size={11} />
+            <IconX size={14} />
           </button>
         )}
       </div>

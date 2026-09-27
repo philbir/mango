@@ -508,7 +508,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={16} />
           </button>
@@ -521,7 +521,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Production"
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field w-full"
               />
             </Field>
             <Field label="Color">
@@ -545,7 +545,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
 
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className="eyebrow">
                 Connection string
               </div>
               <div className="flex items-center gap-1">
@@ -585,7 +585,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
               rows={2}
               placeholder="mongodb://user:pass@host:27017/db?authSource=admin"
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
             {aspireRef ? (
               <div className="mt-1 flex items-start gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400">
@@ -602,7 +602,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
                   className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Detach from Aspire"
                 >
-                  <IconX size={11} />
+                  <IconX size={13} />
                 </button>
               </div>
             ) : (
@@ -639,7 +639,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
               value={defaultDatabaseOverride}
               onChange={(e) => setDefaultDatabaseOverride(e.target.value)}
               placeholder="leave blank to use the URI's database"
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
           </Field>
 
@@ -648,7 +648,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
               type="button"
               onClick={onTest}
               disabled={!effectiveUri || testing}
-              className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-outline"
             >
               <IconPlugConnected size={14} />
               {testing ? "Testing…" : "Test connection"}
@@ -678,7 +678,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
               type="button"
               onClick={() => setConfirmingDelete(true)}
               disabled={remove.isPending}
-              className="flex items-center gap-1 rounded border border-red-300 px-2 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:border-red-700/40 dark:text-red-300 dark:hover:bg-red-900/20"
+              className="btn btn-sm btn-outline border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 dark:border-red-700/50 dark:text-red-300 dark:hover:bg-red-900/20"
             >
               <IconTrash size={12} />
               Delete
@@ -688,7 +688,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -696,7 +696,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
             type="button"
             onClick={() => save.mutate()}
             disabled={save.isPending || !canSave}
-            className="rounded bg-sky-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {save.isPending ? "Saving…" : mode === "create" ? "Create" : "Save"}
           </button>
@@ -795,7 +795,7 @@ const ServerTab = ({ builder, setB }: TabProps) => {
                 : "localhost:27017"
           }
           spellCheck={false}
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          className="field w-full font-mono"
         />
       </Field>
 
@@ -806,7 +806,7 @@ const ServerTab = ({ builder, setB }: TabProps) => {
             onChange={(e) => setB("replicaSetName", e.target.value)}
             placeholder="rs0"
             spellCheck={false}
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field w-full font-mono"
           />
         </Field>
       )}
@@ -818,7 +818,7 @@ const ServerTab = ({ builder, setB }: TabProps) => {
             onChange={(e) => setB("defaultDatabase", e.target.value)}
             placeholder="myapp"
             spellCheck={false}
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field w-full font-mono"
           />
         </Field>
         <Field label="Auth source (optional)">
@@ -827,7 +827,7 @@ const ServerTab = ({ builder, setB }: TabProps) => {
             onChange={(e) => setB("authSource", e.target.value)}
             placeholder="admin"
             spellCheck={false}
-            className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field w-full font-mono"
           />
         </Field>
       </div>
@@ -892,7 +892,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
                 onChange={(e) => setB("username", e.target.value)}
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field w-full"
               />
             </Field>
             <Field label="Password">
@@ -901,7 +901,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
                 value={builder.password}
                 onChange={(e) => setB("password", e.target.value)}
                 autoComplete="new-password"
-                className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="field w-full"
               />
             </Field>
           </div>
@@ -909,7 +909,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
             <select
               value={builder.basicMechanism}
               onChange={(e) => setB("basicMechanism", e.target.value)}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full"
             >
               <option value="">Default (SCRAM-SHA-256)</option>
               <option value="SCRAM-SHA-256">SCRAM-SHA-256</option>
@@ -926,7 +926,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
             <select
               value={builder.oidcProvider ?? "azure-browser"}
               onChange={(e) => setB("oidcProvider", e.target.value as OidcProvider)}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full"
             >
               <option value="azure-browser">Azure AD — Interactive browser (recommended)</option>
               <option value="azure-cli">Azure CLI (az login + admin consent)</option>
@@ -940,7 +940,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
                 selected browser for Azure AD authentication.
               </p>
               <div>
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <div className="mb-1 eyebrow">
                   Browser
                 </div>
                 <BrowserPicker
@@ -971,7 +971,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
                       placeholder="built-in Mango app (leave blank)"
                       autoComplete="off"
                       spellCheck={false}
-                      className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="field w-full font-mono"
                     />
                   </Field>
                   <Field label="Tenant ID (override)">
@@ -981,7 +981,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
                       placeholder="auto-detected from server"
                       autoComplete="off"
                       spellCheck={false}
-                      className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="field w-full font-mono"
                     />
                   </Field>
                 </div>
@@ -1003,7 +1003,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
               onChange={(e) => setB("oidcTokenAudience", e.target.value)}
               placeholder="auto-detected from server (e.g. api://your-atlas-app-id)"
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full font-mono"
             />
           </Field>
           <Field label="Principal name (optional)">
@@ -1013,7 +1013,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
               placeholder="user@example.com"
               autoComplete="off"
               spellCheck={false}
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="field w-full"
             />
           </Field>
         </>
@@ -1046,9 +1046,9 @@ const DockerDiscoveryPanel = ({
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
-          className="ml-auto flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          className="btn btn-sm btn-outline ml-auto"
         >
-          <IconRefresh size={11} />
+          <IconRefresh size={13} />
           {q.isFetching ? "Scanning…" : "Rescan"}
         </button>
       </div>
@@ -1106,7 +1106,7 @@ const DockerDiscoveryPanel = ({
                 type="button"
                 onClick={() => onPick(c)}
                 disabled={!c.uri}
-                className="rounded bg-sky-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+                className="btn btn-sm btn-primary"
               >
                 Use
               </button>
@@ -1116,7 +1116,7 @@ const DockerDiscoveryPanel = ({
       )}
 
       {data?.socket && (
-        <div className="mt-2 truncate text-[10px] text-slate-400 dark:text-slate-500">
+        <div className="mt-2 truncate text-[11px] text-slate-400 dark:text-slate-500">
           via {data.socket}
         </div>
       )}
@@ -1148,9 +1148,9 @@ const AspireDiscoveryPanel = ({
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
-          className="ml-auto flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          className="btn btn-sm btn-outline ml-auto"
         >
-          <IconRefresh size={11} />
+          <IconRefresh size={13} />
           {q.isFetching ? "Scanning…" : "Rescan"}
         </button>
       </div>
@@ -1210,14 +1210,14 @@ const AspireAppHostBlock = ({
           <span className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
             {appHost.appHostName}
           </span>
-          <span className="text-[10px] text-slate-400">
+          <span className="text-[11px] text-slate-400">
             pid {appHost.appHostPid}
           </span>
-          <span className="ml-auto text-[10px] text-slate-400">
+          <span className="ml-auto text-[11px] text-slate-400">
             {mongoCount} mongo · {appHost.resources.length} total
           </span>
         </div>
-        <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+        <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">
           {appHost.appHostPath}
         </div>
       </div>
@@ -1265,17 +1265,17 @@ const AspireResourceRow = ({
         <div className="flex items-center gap-2">
           <span className="truncate font-mono">{resource.displayName}</span>
           {resource.kind === "mongo-database" && (
-            <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="rounded bg-emerald-500/15 px-1 py-px text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
               mongo db
             </span>
           )}
           {resource.kind === "mongo-server" && (
-            <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="rounded bg-emerald-500/15 px-1 py-px text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
               mongo server
             </span>
           )}
         </div>
-        <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+        <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">
           {resource.resourceType}
           {resource.warning && (
             <span className="ml-2 text-amber-600 dark:text-amber-400">
@@ -1288,7 +1288,7 @@ const AspireResourceRow = ({
         <button
           type="button"
           onClick={onPick}
-          className="rounded bg-sky-500 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-sky-400"
+          className="btn btn-sm btn-primary"
         >
           Use
         </button>
@@ -1308,7 +1308,7 @@ const AspireLogo = ({ className }: { className?: string }) => (
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
-    <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="mb-1 eyebrow">
       {label}
     </div>
     {children}

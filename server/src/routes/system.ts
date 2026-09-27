@@ -4,6 +4,11 @@ import { Hono } from "hono";
 import { listAvailableBrowsers } from "../browser.js";
 import { clearAiSettings } from "../store/aiSettings.js";
 import {
+  readUiSettings,
+  type UiSettings,
+  writeUiSettings,
+} from "../store/uiSettings.js";
+import {
   countUndecryptableConnections,
   deleteAllConnections,
 } from "../store/connections.js";
@@ -19,6 +24,24 @@ systemRoute.post("/reset-encrypted", (c) => {
   const removed = deleteAllConnections();
   clearAiSettings();
   return c.json({ ok: true, removedConnections: removed });
+});
+
+systemRoute.get("/ui-settings", (c) => {
+  return c.json({ settings: readUiSettings() });
+});
+
+systemRoute.put("/ui-settings", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Body must be a JSON object." }, 400);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return c.json({ error: "Body must be a JSON object." }, 400);
+  }
+  writeUiSettings(body as UiSettings);
+  return c.json({ ok: true });
 });
 
 systemRoute.get("/browsers", (c) => {

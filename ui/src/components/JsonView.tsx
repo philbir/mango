@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const InteractiveJsonView = ({ value, collapsed = 2, className }: Props) => {
-  const { theme } = useSettings();
+  const { resolvedTheme: theme } = useSettings();
   return (
     <div className={className}>
       <JsonView

@@ -169,7 +169,7 @@ export const SaveToWorkspaceDialog = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={14} />
           </button>
@@ -188,14 +188,14 @@ export const SaveToWorkspaceDialog = ({
         )}
 
         <label className="mb-2 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Workspace
           </span>
           <select
             value={workspaceId}
             onChange={(e) => setWorkspaceId(e.target.value)}
             disabled={!enabled || workspaces.length === 0}
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field mt-1 w-full"
           >
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
@@ -206,7 +206,7 @@ export const SaveToWorkspaceDialog = ({
         </label>
 
         <label className="mb-2 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Folder (within workspace, optional)
           </span>
           <input
@@ -214,19 +214,19 @@ export const SaveToWorkspaceDialog = ({
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
             placeholder="queries/users"
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-[12px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field mt-1 w-full font-mono"
           />
         </label>
 
         <label className="mb-3 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Name
           </span>
           <input
             type="text"
             value={filename}
             onChange={(e) => setFilename(e.target.value)}
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 font-mono text-[12px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="field mt-1 w-full font-mono"
             autoFocus
           />
         </label>
@@ -241,14 +241,14 @@ export const SaveToWorkspaceDialog = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={busy || !enabled || workspaces.length === 0}
-            className="rounded bg-sky-500 px-3 py-1 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {busy ? "Saving…" : "Save"}
           </button>

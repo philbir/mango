@@ -120,7 +120,7 @@ export const StatsTab = ({ cid, database }: Props) => {
           type="button"
           onClick={() => q.refetch()}
           disabled={q.isFetching}
-          className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="btn btn-sm btn-outline"
         >
           <IconRefresh
             size={12}
@@ -187,12 +187,12 @@ export const StatsTab = ({ cid, database }: Props) => {
       </div>
 
       <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <h3 className="mb-2 eyebrow">
           Collections
         </h3>
         <div className="overflow-hidden rounded border border-slate-200 dark:border-slate-700">
           <table className="w-full text-[12.5px]">
-            <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+            <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <tr>
                 <th className="px-3 py-1.5">Name</th>
                 <th className="px-3 py-1.5 text-right">Documents</th>
@@ -236,7 +236,7 @@ export const StatsTab = ({ cid, database }: Props) => {
                             setConfirming({ kind: "clear", name: c.name });
                           }}
                           title="Clear collection (delete all documents)"
-                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                          className="btn-icon btn-ghost"
                         >
                           <IconEraser size={14} />
                         </button>
@@ -247,7 +247,7 @@ export const StatsTab = ({ cid, database }: Props) => {
                             setConfirming({ kind: "drop", name: c.name });
                           }}
                           title="Delete collection (drop)"
-                          className="rounded p-1 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
+                          className="btn-icon text-slate-500 hover:bg-red-100 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-900/30 dark:hover:text-red-400"
                         >
                           <IconTrash size={14} />
                         </button>
@@ -358,7 +358,7 @@ export const Card = ({ icon, label, value, subtitle, accent }: CardProps) => {
           : "text-slate-600 dark:text-slate-300";
   return (
     <div className="rounded border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/60">
-      <div className="flex items-center gap-1 text-[10.5px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-1 eyebrow">
         {icon && <span className={accentClass}>{icon}</span>}
         {label}
       </div>

@@ -13,18 +13,18 @@ interface Props {
  * Save-to-workspace action.
  */
 export const UnboundSaveHeader = ({ canSave, onSave }: Props) => (
-  <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/60 px-3 py-1.5 text-[12px] dark:border-slate-800 dark:bg-slate-900/30">
-    <span className="text-slate-400 dark:text-slate-500">Unsaved</span>
+  <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50/60 px-4 text-[11.5px] dark:border-slate-800 dark:bg-slate-900/30">
+    <span className="text-slate-500 dark:text-slate-400">Not saved to a workspace</span>
     <div className="flex-1" />
     <button
       type="button"
       onClick={onSave}
       disabled={!canSave}
-      className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
+      className="btn btn-sm btn-outline"
       title="Save to workspace (⌘/Ctrl+S)"
     >
-      <IconDeviceFloppy size={11} />
-      Save…
+      <IconDeviceFloppy size={13} />
+      Save to workspace…
     </button>
   </div>
 );

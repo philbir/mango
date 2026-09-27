@@ -54,7 +54,7 @@ export const MonacoJsonInput = forwardRef<MonacoJsonInputHandle, Props>(
     onChangeRef.current = onChange;
     const onSubmitRef = useRef(onSubmit);
     onSubmitRef.current = onSubmit;
-    const { theme } = useSettings();
+    const { resolvedTheme: theme } = useSettings();
     const idHint = useId();
 
     useImperativeHandle(

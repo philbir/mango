@@ -303,7 +303,7 @@ export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
     onChangeRef.current = onChange;
     const onSubmitRef = useRef(onSubmit);
     onSubmitRef.current = onSubmit;
-    const { theme } = useSettings();
+    const { resolvedTheme: theme } = useSettings();
     const idHint = useId();
 
     // Keep collections list current for the global completion provider.

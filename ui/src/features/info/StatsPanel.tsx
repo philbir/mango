@@ -155,7 +155,7 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
                     clear.reset();
                     setConfirming("clear");
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="flex h-8 w-full items-center gap-2 px-3 text-left text-[12px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <IconEraser size={13} />
                   Clear collection
@@ -167,7 +167,7 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
                     drop.reset();
                     setConfirming("drop");
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  className="flex h-8 w-full items-center gap-2 px-3 text-left text-[12px] text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                 >
                   <IconTrash size={13} />
                   Drop collection
@@ -179,7 +179,7 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
             type="button"
             onClick={() => stats.refetch()}
             disabled={stats.isFetching}
-            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-outline"
           >
             <IconRefresh
               size={12}
@@ -239,12 +239,12 @@ export const StatsPanel = ({ cid, database, collection }: Props) => {
 
       {Object.keys(data.indexSizes).length > 0 && (
         <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <h3 className="mb-2 eyebrow">
             Index sizes
           </h3>
           <div className="overflow-hidden rounded border border-slate-200 dark:border-slate-700">
             <table className="w-full text-[12.5px]">
-              <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
                   <th className="px-3 py-1.5">Name</th>
                   <th className="px-3 py-1.5 text-right">Size</th>
@@ -346,7 +346,7 @@ const Card = ({ icon, label, value, subtitle, accent }: CardProps) => {
           : "text-slate-600 dark:text-slate-300";
   return (
     <div className="rounded border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/60">
-      <div className="flex items-center gap-1 text-[10.5px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-1 eyebrow">
         {icon && <span className={accentClass}>{icon}</span>}
         {label}
       </div>

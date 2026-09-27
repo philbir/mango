@@ -93,7 +93,7 @@ export const ServerFolderPicker = ({ initialPath, onPick, onCancel }: Props) => 
           <button
             type="button"
             onClick={onCancel}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={14} />
           </button>
@@ -104,29 +104,29 @@ export const ServerFolderPicker = ({ initialPath, onPick, onCancel }: Props) => 
             type="button"
             onClick={() => view?.parent && load(view.parent)}
             disabled={!view?.parent || loading}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-outline"
             title="Up one level"
           >
-            <IconArrowUp size={11} />
+            <IconArrowUp size={13} />
           </button>
           <button
             type="button"
             onClick={() => view && load(view.home)}
             disabled={!view || loading}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-outline"
             title="Home"
           >
-            <IconHome size={11} />
+            <IconHome size={13} />
           </button>
           <button
             type="button"
             onClick={() => view && load(view.path)}
             disabled={!view || loading}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-outline"
             title="Refresh"
           >
             <IconRefresh
-              size={11}
+              size={13}
               className={loading ? "animate-spin" : ""}
             />
           </button>
@@ -205,7 +205,7 @@ export const ServerFolderPicker = ({ initialPath, onPick, onCancel }: Props) => 
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -213,7 +213,7 @@ export const ServerFolderPicker = ({ initialPath, onPick, onCancel }: Props) => 
             type="button"
             disabled={!view || loading}
             onClick={() => view && onPick(view.path)}
-            className="flex items-center gap-1 rounded bg-sky-500 px-3 py-1 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-accent px-3 py-1 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             <IconFolder size={12} />
             Pick this folder

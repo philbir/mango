@@ -112,31 +112,29 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
 
   return (
     <div className="flex h-full flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
-        <IconTerminal2 size={18} className="text-sky-600 dark:text-sky-400" />
-        <div className="flex-1">
-          <div className="font-mono text-base text-slate-900 dark:text-slate-100">
+      <header className="flex h-10 flex-shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 pl-4 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
+        <IconTerminal2 size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="flex-shrink-0 font-mono text-[14px] font-medium text-slate-900 dark:text-slate-100">
             Shell
-          </div>
-          <div className="text-xs text-slate-500 dark:text-slate-500">
-            Send a raw <span className="font-mono">db.runCommand</span> document
-            — JSON or shell syntax (<span className="font-mono">ObjectId("…")</span>,{" "}
+          </span>
+          <span className="truncate text-[11.5px] text-slate-500 dark:text-slate-400">
+            Raw <span className="font-mono">db.runCommand</span> — JSON or shell syntax
+            (<span className="font-mono">ObjectId("…")</span>,{" "}
             <span className="font-mono">ISODate("…")</span>)
-          </div>
+          </span>
         </div>
       </header>
 
-      <section className="border-b border-slate-200 bg-slate-50/60 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/30">
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
-            Presets
-          </span>
+      <section className="border-b border-slate-200 bg-slate-50/60 px-4 pb-2 dark:border-slate-800 dark:bg-slate-900/30">
+        <div className="flex h-9 flex-wrap items-center gap-1.5">
+          <span className="eyebrow mr-1">Presets</span>
           {PRESETS.map((p) => (
             <button
               key={p.label}
               type="button"
               onClick={() => setText(p.command)}
-              className="rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="btn btn-sm btn-outline h-[22px] min-h-0 px-1.5 font-mono font-normal"
             >
               {p.label}
             </button>
@@ -145,49 +143,47 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
           <button
             type="button"
             onClick={() => editorRef.current?.format()}
-            className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="btn btn-sm btn-ghost"
             title="Format (⇧⌥F)"
           >
-            <IconBraces size={11} />
+            <IconBraces size={13} />
             Format
           </button>
-        </div>
-        <div className="flex items-stretch gap-2">
-          <div className="min-h-[140px] flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
-            <MonacoJsonInput
-              ref={editorRef}
-              value={text}
-              language={MONGO_SHELL_LANGUAGE}
-              onChange={onTextChange}
-              minHeight="140px"
-              showLineNumbers
-              completion={shellCompletion}
-              onSubmit={onRun}
-            />
-          </div>
+          <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
+            <kbd>⌘</kbd> <kbd>↵</kbd> runs · <kbd>⌃</kbd> <kbd>Space</kbd> completes
+          </span>
           <button
             type="button"
             onClick={onRun}
             disabled={running}
-            className="flex items-center gap-1.5 self-start rounded bg-sky-500 px-3 py-2 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-sm btn-primary"
           >
-            <IconPlayerPlayFilled size={14} />
+            <IconPlayerPlayFilled size={12} />
             {running ? "Running…" : "Run"}
           </button>
         </div>
-        <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-          Tip: <kbd className="rounded border border-slate-300 px-1 dark:border-slate-700">⌘/Ctrl + Enter</kbd> to run · <kbd className="rounded border border-slate-300 px-1 dark:border-slate-700">⌃Space</kbd> for completions
+        <div className="min-h-[140px] overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+          <MonacoJsonInput
+            ref={editorRef}
+            value={text}
+            language={MONGO_SHELL_LANGUAGE}
+            onChange={onTextChange}
+            minHeight="140px"
+            showLineNumbers
+            completion={shellCompletion}
+            onSubmit={onRun}
+          />
         </div>
       </section>
 
-      <section className="flex min-h-0 flex-1 flex-col p-5">
+      <section className="flex min-h-0 flex-1 flex-col p-4">
         {error && (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
             {error}
           </div>
         )}
         {!error && result === null && (
-          <div className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="text-[13px] text-slate-500 dark:text-slate-400">
             Run a command to see the response.
           </div>
         )}

@@ -78,7 +78,7 @@ export const BrowserPicker = ({
 
       {selectedBrowser?.supportsProfiles && (
         <div className="space-y-2">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <div className="eyebrow">
             Profiles
           </div>
           <div className="flex flex-wrap gap-2">

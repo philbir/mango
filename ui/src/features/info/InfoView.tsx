@@ -46,26 +46,26 @@ export const InfoView = ({ cid, database, collection, threadKey }: Props) => {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex flex-shrink-0 items-center gap-1 border-b border-slate-200 bg-slate-50/60 px-4 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900/30">
+      <div className="flex h-9 flex-shrink-0 items-center gap-1 border-b border-slate-200 bg-slate-50/60 px-4 dark:border-slate-800 dark:bg-slate-900/30"><div className="seg">
         <SubTabButton
-          icon={<IconChartBar size={12} />}
+          icon={<IconChartBar size={13} />}
           label="Stats"
           active={tab === "stats"}
           onClick={() => setTab("stats")}
         />
         <SubTabButton
-          icon={<IconKey size={12} />}
+          icon={<IconKey size={13} />}
           label="Indexes"
           active={tab === "indexes"}
           onClick={() => setTab("indexes")}
         />
         <SubTabButton
-          icon={<IconBolt size={12} />}
+          icon={<IconBolt size={13} />}
           label="Playground"
           active={tab === "playground"}
           onClick={() => setTab("playground")}
         />
-      </div>
+      </div></div>
 
       <div className="flex-1 overflow-auto">
         {tab === "stats" && (
@@ -107,11 +107,8 @@ const SubTabButton = ({ icon, label, active, onClick }: TabBtnProps) => (
   <button
     type="button"
     onClick={onClick}
-    className={`flex items-center gap-1 rounded px-2 py-1 ${
-      active
-        ? "bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
-        : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-    }`}
+    className="seg-item data-[active=true]:bg-violet-500/15 data-[active=true]:text-violet-700 dark:data-[active=true]:bg-violet-500/20 dark:data-[active=true]:text-violet-200"
+    data-active={active}
   >
     {icon}
     {label}

@@ -120,13 +120,11 @@ export const ResultPanel = ({
 
   return (
     <section className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px] dark:border-slate-800 dark:bg-slate-900/40">
-        <span className="font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Result
-        </span>
+      <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 text-[11.5px] dark:border-slate-800 dark:bg-slate-900/40">
+        <span className="eyebrow">Result</span>
         {isLoading && (
           <span className="flex items-center gap-1 text-sky-600 dark:text-sky-300">
-            <IconLoader2 size={11} className="animate-spin" /> running…
+            <IconLoader2 size={13} className="animate-spin" /> running…
           </span>
         )}
         {!isLoading && errorMessage && (
@@ -134,63 +132,63 @@ export const ResultPanel = ({
             className="flex items-center gap-1 truncate text-red-600 dark:text-red-400"
             title={errorMessage}
           >
-            <IconAlertCircle size={11} />
+            <IconAlertCircle size={13} />
             <span className="truncate">{errorMessage}</span>
           </span>
         )}
         {!isLoading && !errorMessage && hasResult && elapsedMs != null && (
-          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-            <IconCheck size={11} /> done · {formatElapsed(elapsedMs)}
+          <span className="flex items-center gap-1 tabular-nums text-emerald-600 dark:text-emerald-400">
+            <IconCheck size={13} /> {formatElapsed(elapsedMs)}
           </span>
         )}
         {selection && selection.count > 0 && (
-          <div className="flex items-center gap-1.5 rounded border border-sky-300 bg-sky-50 px-1.5 py-0.5 dark:border-sky-500/40 dark:bg-sky-500/10">
-            <span className="font-medium text-sky-700 dark:text-sky-200">
+          <div className="flex items-center gap-0.5 rounded border border-sky-300 bg-sky-50 py-0.5 pl-2 pr-0.5 dark:border-sky-500/40 dark:bg-sky-500/10">
+            <span className="mr-1 font-medium tabular-nums text-sky-700 dark:text-sky-200">
               {selection.count} selected
             </span>
             <button
               type="button"
               onClick={selection.onUpdate}
               title="Update selected documents"
-              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-sky-700 hover:bg-sky-100 dark:text-sky-200 dark:hover:bg-sky-500/20"
+              className="btn btn-sm gap-1 px-1.5 text-sky-700 hover:bg-sky-100 dark:text-sky-200 dark:hover:bg-sky-500/20"
             >
-              <IconPencil size={12} />
+              <IconPencil size={13} />
               Update
             </button>
             <button
               type="button"
               onClick={selection.onDelete}
               title="Delete selected documents"
-              className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-red-600 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-500/20"
+              className="btn btn-sm gap-1 px-1.5 text-red-600 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-500/20"
             >
-              <IconTrash size={12} />
+              <IconTrash size={13} />
               Delete
             </button>
             <button
               type="button"
               onClick={selection.onClear}
               title="Clear selection"
-              className="flex items-center rounded p-0.5 text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700"
+              className="btn-icon text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
             >
-              <IconX size={12} />
+              <IconX size={13} />
             </button>
           </div>
         )}
         <div className="flex-1" />
         {canTable && (
-          <div className="flex rounded border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="seg">
             <FormatTab
               value="table"
               current={format}
               onChange={onFormatChange}
-              icon={<IconTable size={11} />}
+              icon={<IconTable size={13} />}
               label="Table"
             />
             <FormatTab
               value="json"
               current={format}
               onChange={onFormatChange}
-              icon={<IconBraces size={11} />}
+              icon={<IconBraces size={13} />}
               label="JSON"
             />
           </div>
@@ -206,7 +204,7 @@ export const ResultPanel = ({
 
       <div className="flex-1 overflow-auto">
         {!hasResult && !isLoading && !errorMessage && (
-          <div className="p-3 text-sm text-slate-400">
+          <div className="p-4 text-[13px] text-slate-500 dark:text-slate-400">
             {emptyHint ?? "—"}
           </div>
         )}
@@ -237,14 +235,14 @@ export const ResultPanel = ({
       </div>
 
       {paging && (
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900/40">
-          <div className="text-slate-500 dark:text-slate-400">
+        <div className="flex h-8 flex-shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 text-[11.5px] dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="tabular-nums text-slate-600 dark:text-slate-400">
             {showRange ?? "—"}
           </div>
           <div className="flex items-center gap-3">
             {paging.onPageSizeChange && paging.pageSizes && (
-              <label className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                <span>Page size</span>
+              <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                <span>Rows</span>
                 <select
                   value={paging.pageSize}
                   onChange={(e) =>
@@ -252,7 +250,7 @@ export const ResultPanel = ({
                       Number(e.target.value) as PageSize,
                     )
                   }
-                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="h-6 min-h-0 rounded border border-slate-300 bg-white px-1 text-[11.5px] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 >
                   {paging.pageSizes.map((s) => (
                     <option key={s} value={s}>
@@ -262,12 +260,13 @@ export const ResultPanel = ({
                 </select>
               </label>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={paging.onPrev}
                 disabled={paging.skip === 0 || isLoading}
-                className="flex items-center rounded border border-slate-300 px-2 py-1 text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"
+                className="btn-icon btn-outline"
+                title="Previous page"
               >
                 <IconChevronLeft size={14} />
               </button>
@@ -275,7 +274,8 @@ export const ResultPanel = ({
                 type="button"
                 onClick={paging.onNext}
                 disabled={!paging.hasMore || isLoading}
-                className="flex items-center rounded border border-slate-300 px-2 py-1 text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"
+                className="btn-icon btn-outline"
+                title="Next page"
               >
                 <IconChevronRight size={14} />
               </button>
@@ -303,11 +303,8 @@ const FormatTab = ({
   <button
     type="button"
     onClick={() => onChange(value)}
-    className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
-      current === value
-        ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
-        : "text-slate-600 dark:text-slate-300"
-    }`}
+    className="seg-item min-h-[20px] px-1.5 text-[11px]"
+    data-active={current === value}
   >
     {icon}
     {label}

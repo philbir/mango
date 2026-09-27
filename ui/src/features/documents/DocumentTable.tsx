@@ -96,7 +96,7 @@ export const DocumentTable = ({
         minSize: 60,
         maxSize: 800,
         cell: (ctx) => (
-          <span className="font-mono text-[12px] text-slate-700 dark:text-slate-200">
+          <span className="font-mono text-[12px] text-slate-800 dark:text-slate-200">
             {formatCellValue(ctx.getValue(), formatOptions)}
           </span>
         ),
@@ -152,7 +152,7 @@ export const DocumentTable = ({
             <tr key={hg.id}>
               {selection && (
                 <th
-                  className="border-b border-slate-200 px-2 py-2 text-center dark:border-slate-700"
+                  className="border-b border-slate-300 px-2 py-1.5 text-center dark:border-slate-700"
                   style={{ width: SELECT_COL_WIDTH }}
                 >
                   <input
@@ -174,7 +174,7 @@ export const DocumentTable = ({
               {hg.headers.map((h) => (
                 <th
                   key={h.id}
-                  className="group relative select-none border-b border-slate-200 px-3 py-2 text-left text-[12px] font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                  className="group relative select-none border-b border-slate-300 px-3 py-1.5 text-left font-mono text-[11.5px] font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
                   style={{ width: h.getSize() }}
                 >
                   <span className="block truncate">
@@ -188,7 +188,7 @@ export const DocumentTable = ({
                       className={[
                         "absolute right-0 top-0 z-20 h-full w-1 cursor-col-resize touch-none",
                         h.column.getIsResizing()
-                          ? "bg-sky-500"
+                          ? "bg-accent"
                           : "bg-transparent group-hover:bg-slate-300 dark:group-hover:bg-slate-600",
                       ].join(" ")}
                     />
@@ -203,7 +203,7 @@ export const DocumentTable = ({
             <tr>
               <td
                 colSpan={columns.length + (selection ? 1 : 0) || 1}
-                className="px-3 py-6 text-center text-sm text-slate-400"
+                className="px-3 py-6 text-center text-sm text-slate-500"
               >
                 Loading…
               </td>
@@ -213,7 +213,7 @@ export const DocumentTable = ({
             <tr>
               <td
                 colSpan={columns.length + (selection ? 1 : 0) || 1}
-                className="px-3 py-6 text-center text-sm text-slate-400"
+                className="px-3 py-6 text-center text-sm text-slate-500"
               >
                 No documents.
               </td>

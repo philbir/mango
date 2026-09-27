@@ -232,9 +232,9 @@ export const ChatBox = () => {
             <button
               type="button"
               onClick={() => setConfigOpen(true)}
-              className="mt-2 inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-amber-500"
+              className="btn btn-sm mt-2 bg-amber-600 text-white hover:bg-amber-700"
             >
-              <IconSparkles size={11} />
+              <IconSparkles size={13} />
               Configure
             </button>
           </div>
@@ -329,12 +329,12 @@ export const ChatBox = () => {
               )}
           </select>
           {status.data?.provider && (
-            <span className="hidden truncate text-[10px] text-slate-500 dark:text-slate-400 sm:inline">
+            <span className="hidden truncate text-[11px] text-slate-500 dark:text-slate-400 sm:inline">
               {status.data.provider}
             </span>
           )}
           <div className="flex-1" />
-          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
             <kbd className="rounded border border-slate-300 px-1 dark:border-slate-700">
               ↵
             </kbd>{" "}
@@ -347,7 +347,7 @@ export const ChatBox = () => {
           <button
             type="button"
             onClick={() => setConfigOpen(true)}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            className="btn-icon btn-ghost"
             title="AI provider settings"
           >
             <IconSettings size={13} />
@@ -431,7 +431,7 @@ const MessageBubble = ({ message }: BubbleProps) => {
               )}
             />
             {message.meta && (
-              <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                 {message.meta.provider} · {message.meta.model}
               </div>
             )}
@@ -482,8 +482,8 @@ const EmptyHints = ({ mode, collection, suggestions, onPick }: EmptyHintsProps) 
         </button>
       ))}
     </div>
-    <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-      <IconRefresh size={10} className="mb-0.5 mr-0.5 inline" />
+    <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+      <IconRefresh size={12} className="mb-0.5 mr-0.5 inline" />
       Code blocks tagged{" "}
       <code className="font-mono">mango-filter</code> /{" "}
       <code className="font-mono">mango-console</code> /{" "}

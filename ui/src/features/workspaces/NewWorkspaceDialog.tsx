@@ -151,14 +151,14 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="btn-icon btn-ghost"
           >
             <IconX size={14} />
           </button>
         </div>
 
         <label className="mb-2 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Name
           </span>
           <input
@@ -174,7 +174,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
             ].join(" ")}
             autoFocus
           />
-          <p className="mt-1 flex items-center gap-1 text-[10.5px] text-slate-500 dark:text-slate-400">
+          <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
             Letters, digits, space, <span className="font-mono">_</span>,{" "}
             <span className="font-mono">-</span>, and{" "}
             <span className="font-mono">.</span> only.
@@ -182,7 +182,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
         </label>
 
         <label className="mb-2 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Parent folder
           </span>
           <div className="mt-1 flex gap-1">
@@ -199,7 +199,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
             <button
               type="button"
               onClick={onPick}
-              className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[12px] hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="btn btn-sm btn-outline"
               title={native ? "Pick folder" : "Browse server filesystem"}
             >
               <IconFolder size={12} />
@@ -207,7 +207,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
             </button>
           </div>
           {!native && (
-            <p className="mt-1 text-[10.5px] text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               Browses the server filesystem (workspaces live where the Mango
               server runs).
             </p>
@@ -232,7 +232,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
 
         {pickedFolder && (
           <div className="mb-3 rounded border border-slate-200 bg-slate-50 p-2 text-[11px] dark:border-slate-800 dark:bg-slate-900/50">
-            <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <div className="eyebrow">
               Workspace folder
             </div>
             <div className="mt-0.5 break-all font-mono text-slate-700 dark:text-slate-200">
@@ -242,7 +242,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
         )}
 
         <label className="mb-3 block">
-          <span className="block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="block eyebrow">
             Color
           </span>
           <div className="mt-1 flex gap-1.5">
@@ -273,7 +273,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="btn btn-outline"
           >
             Cancel
           </button>
@@ -282,7 +282,7 @@ export const NewWorkspaceDialog = ({ onClose }: Props) => {
             disabled={
               create.isPending || !trimmedName || !pickedFolder || nameInvalid
             }
-            className="rounded bg-sky-500 px-3 py-1 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-50"
+            className="btn btn-primary"
           >
             {create.isPending ? "Adding…" : "Add"}
           </button>

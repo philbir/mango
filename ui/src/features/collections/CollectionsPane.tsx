@@ -21,9 +21,11 @@ import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { useConnectionHealth } from "../connections/useConnectionHealth";
 import { useTabs } from "../tabs/TabsContext";
+import { useSettings } from "../../settings";
 
 export const CollectionsPane = () => {
   const { activeId, active } = useActiveConnection();
+  const { tabMode } = useSettings();
   const health = useConnectionHealth(activeId);
   const { database, setDatabase } = useActiveDatabase();
   const {
@@ -133,29 +135,31 @@ export const CollectionsPane = () => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1 dark:border-slate-800">
+      <div
+        className={`flex ${tabMode ? "h-10" : "h-8"} flex-shrink-0 items-center gap-1 border-b border-slate-200 px-2 dark:border-slate-800`}
+      >
         {canQuery && database && (
           <>
             <button
               type="button"
               onClick={() => setDatabase(null)}
-              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="btn-icon btn-ghost"
               title="Switch database"
             >
-              <IconChevronLeft size={14} />
+              <IconChevronLeft size={15} />
             </button>
-            <IconDatabase size={13} className="text-slate-400" />
-            <span className="flex-1 truncate font-mono text-[12px] text-slate-700 dark:text-slate-200">
+            <IconDatabase size={14} className="text-amber-500" />
+            <span className="flex-1 truncate font-mono text-[12.5px] font-medium text-slate-800 dark:text-slate-200">
               {database}
             </span>
             <button
               type="button"
               onClick={() => openDatabase(activeId!, database)}
-              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="btn-icon btn-ghost"
               title={`Database info: ${database}`}
               aria-label={`Open database info for ${database}`}
             >
-              <IconInfoCircle size={14} />
+              <IconInfoCircle size={15} />
             </button>
             <NewMenu
               onNewConsole={() => openConsole(activeId!)}
@@ -164,31 +168,31 @@ export const CollectionsPane = () => {
           </>
         )}
         {!(canQuery && database) && (
-          <span className="flex-1 text-[10.5px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Collections
-          </span>
+          <span className="eyebrow flex-1 pl-1">Databases</span>
         )}
         <button
           type="button"
           onClick={onRefresh}
           disabled={!activeId}
-          className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+          className="btn-icon btn-ghost"
           title="Refresh"
         >
-          <IconRefresh size={14} className={isFetching ? "animate-spin" : ""} />
+          <IconRefresh size={15} className={isFetching ? "animate-spin" : ""} />
         </button>
       </div>
 
       {canQuery && database && (
-        <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <div className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950">
-            <IconSearch size={12} className="text-slate-400" />
+        <div
+          className={`flex ${tabMode ? "h-8" : "h-9"} flex-shrink-0 items-center border-b border-slate-200 px-2 dark:border-slate-800`}
+        >
+          <div className="flex h-6 w-full items-center gap-1.5 rounded border border-slate-300 bg-white px-2 focus-within:border-sky-500 dark:border-slate-700 dark:bg-slate-950">
+            <IconSearch size={13} className="text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter collections…"
-              className="flex-1 bg-transparent text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              className="min-h-0 flex-1 bg-transparent text-[12px] text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
             />
           </div>
         </div>
@@ -277,17 +281,17 @@ export const CollectionsPane = () => {
                       onClick={onClick}
                       title={title}
                       className={[
-                        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] leading-tight",
+                        "flex h-7 w-full items-center gap-2 rounded px-2 text-left text-[12.5px] leading-tight",
                         isActive
-                          ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
+                          ? "bg-sky-500/15 font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200"
                           : isChunks
                             ? "text-slate-500 hover:bg-slate-200 dark:text-slate-500 dark:hover:bg-slate-800"
                             : "text-slate-700 hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-slate-800",
                       ].join(" ")}
                     >
-                      <Icon size={16} className={iconClass} />
+                      <Icon size={15} className={iconClass} />
                       <span className="flex-1 truncate font-mono">{c.name}</span>
-                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                      <span className="text-[11px] tabular-nums text-slate-500 dark:text-slate-500">
                         {c.count?.toLocaleString() ?? "—"}
                       </span>
                     </button>
@@ -325,19 +329,19 @@ const NewMenu = ({ onNewConsole, onNewShell }: NewMenuProps) => {
       <button
         type="button"
         onClick={onNewConsole}
-        className="flex items-center gap-0.5 rounded-l px-1.5 py-1 text-[11.5px] font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="btn btn-sm btn-ghost gap-0.5 rounded-r-none px-1.5"
         title="New console"
       >
-        <IconPlus size={12} />
+        <IconPlus size={13} />
         New
       </button>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="rounded-r border-l border-slate-300/60 px-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:border-slate-700/80 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        className="btn-icon btn-ghost min-w-[18px] rounded-l-none"
         title="New…"
       >
-        <IconChevronDown size={12} />
+        <IconChevronDown size={13} />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-36 rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -347,9 +351,9 @@ const NewMenu = ({ onNewConsole, onNewShell }: NewMenuProps) => {
               setOpen(false);
               onNewConsole();
             }}
-            className="flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex h-7 w-full items-center gap-2 px-2 text-left text-[12px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <IconTerminal2 size={12} className="text-slate-400" />
+            <IconTerminal2 size={13} className="text-slate-400" />
             New console
           </button>
           <button
@@ -358,9 +362,9 @@ const NewMenu = ({ onNewConsole, onNewShell }: NewMenuProps) => {
               setOpen(false);
               onNewShell();
             }}
-            className="flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex h-7 w-full items-center gap-2 px-2 text-left text-[12px] text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <IconTerminal size={12} className="text-slate-400" />
+            <IconTerminal size={13} className="text-slate-400" />
             New shell
           </button>
         </div>
@@ -412,9 +416,6 @@ const DatabaseList = ({
   }
   return (
     <>
-      <div className="px-2 pb-1 pt-1.5 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Databases
-      </div>
       <ul>
         {databases.map((d) => (
           <li key={d.name} className="group">
@@ -422,12 +423,12 @@ const DatabaseList = ({
               <button
                 type="button"
                 onClick={() => onPick(d.name)}
-                className="flex flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] leading-tight text-slate-700 dark:text-slate-200"
+                className="flex h-7 flex-1 items-center gap-2 rounded px-2 text-left text-[12.5px] leading-tight text-slate-700 dark:text-slate-200"
               >
-                <IconDatabase size={16} className="text-slate-400" />
+                <IconDatabase size={15} className="text-amber-500" />
                 <span className="flex-1 truncate font-mono">{d.name}</span>
                 {d.sizeOnDisk != null && (
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <span className="text-[11px] tabular-nums text-slate-500 dark:text-slate-500">
                     {formatBytes(d.sizeOnDisk)}
                   </span>
                 )}
@@ -438,7 +439,7 @@ const DatabaseList = ({
                   e.stopPropagation();
                   onOpenInfo(d.name);
                 }}
-                className="mr-1 rounded p-1 text-slate-400 opacity-0 hover:bg-slate-300 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                className="btn-icon btn-ghost mr-0.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                 title={`Database info: ${d.name}`}
                 aria-label={`Open database info for ${d.name}`}
               >
@@ -478,9 +479,9 @@ const NotConnectedPanel = ({
         type="button"
         onClick={onRetry}
         disabled={isFetching}
-        className="flex items-center gap-1 rounded border border-red-300 bg-white px-2 py-1 text-[11px] text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/40"
+        className="btn btn-sm border-red-300 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/40"
       >
-        <IconRefresh size={11} className={isFetching ? "animate-spin" : ""} />
+        <IconRefresh size={13} className={isFetching ? "animate-spin" : ""} />
         {isFetching ? "Retrying…" : "Retry"}
       </button>
     </div>

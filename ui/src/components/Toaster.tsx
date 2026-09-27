@@ -69,7 +69,7 @@ export const Toaster = () => {
                         onClick={() => {
                           void a.onClick();
                         }}
-                        className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        className="btn btn-sm btn-outline"
                       >
                         {a.label}
                       </button>
@@ -81,7 +81,7 @@ export const Toaster = () => {
                 type="button"
                 aria-label="Dismiss"
                 onClick={() => dismissToast(t.id)}
-                className="ml-1 flex-shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                className="btn-icon btn-ghost ml-1 flex-shrink-0"
               >
                 <IconX size={14} />
               </button>
