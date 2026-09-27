@@ -1,6 +1,7 @@
 import * as monaco from "monaco-editor";
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef } from "react";
 import {
+  MONGO_SHELL_LANGUAGE,
   type MongoCompletionConfig,
   clearModelMongoConfig,
   ensureMongoCompletionRegistered,
@@ -19,14 +20,13 @@ interface Props {
   completion?: MongoCompletionConfig;
   onSubmit?: () => void;
   /**
-   * Editor language. Defaults to `"json"`. Use `"javascript"` for read-only
-   * shell-literal views (e.g. `ObjectId("…")`) so the built-in JSON validator
-   * doesn't flag them as invalid. Only the JSON language worker is bundled
-   * (see monaco-setup.ts), so `"javascript"` gives monarch highlighting with no
-   * diagnostics. The language is fixed at mount — change the component `key` to
-   * switch it.
+   * Editor language. Defaults to `"json"`. Use `"mongo-shell"` for documents
+   * in shell-literal syntax (e.g. `ObjectId("…")`) so the JSON validator
+   * doesn't flag them — it's a highlighting-only language registered in
+   * monaco-mongo.ts. The language is fixed at mount — change the component
+   * `key` to switch it.
    */
-  language?: "json" | "javascript";
+  language?: "json" | typeof MONGO_SHELL_LANGUAGE;
 }
 
 export interface MonacoJsonInputHandle {
@@ -84,7 +84,7 @@ export const MonacoJsonInput = forwardRef<MonacoJsonInputHandle, Props>(
       ensureMongoCompletionRegistered();
 
       const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
-      const ext = language === "javascript" ? "js" : "json";
+      const ext = language === MONGO_SHELL_LANGUAGE ? "js" : "json";
       const uri = monaco.Uri.parse(`inmemory://mongo-manager/${safeId}.${ext}`);
       const existing = monaco.editor.getModel(uri);
       const model =

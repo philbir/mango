@@ -7,8 +7,9 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import { useEffect, useMemo, useRef } from "react";
-import { extractIdString, formatUuid } from "../../api/client";
-import { useSettings, type UuidRepresentation } from "../../settings";
+import { extractIdString } from "../../api/client";
+import { useSettings } from "../../settings";
+import { formatCellValue } from "./docFormats";
 
 export interface TableSelection {
   /** Currently-selected row id strings (may span pages). */
@@ -39,56 +40,6 @@ const isEditableTarget = (target: EventTarget | null): boolean =>
     'input:not([type="checkbox"]), textarea, select, [contenteditable="true"], .monaco-editor',
   );
 
-const formatCell = (
-  value: unknown,
-  uuidRepresentation: UuidRepresentation,
-): string => {
-  if (value === null || value === undefined) return "—";
-  const uuid = formatUuid(value, uuidRepresentation);
-  if (uuid !== null) return uuid;
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
-  if (value instanceof Date) return value.toISOString();
-  if (
-    typeof value === "object" &&
-    "$oid" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$oid);
-  }
-  if (
-    typeof value === "object" &&
-    "$date" in (value as Record<string, unknown>)
-  ) {
-    const v = (value as Record<string, unknown>).$date;
-    return typeof v === "string" ? v : JSON.stringify(v);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberDecimal" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberDecimal);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberInt" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberInt);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberLong" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberLong);
-  }
-  try {
-    const s = JSON.stringify(value);
-    return s.length > 80 ? `${s.slice(0, 77)}…` : s;
-  } catch {
-    return String(value);
-  }
-};
-
 const COLUMN_LIMIT = 12;
 
 // Left accent bar on the active row's first cell.
@@ -104,7 +55,7 @@ export const DocumentTable = ({
   activeRowId,
   selection,
 }: Props) => {
-  const { uuidRepresentation } = useSettings();
+  const { formatOptions } = useSettings();
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
 
   // Rows of the current page as {id, rawId} for select-all + header state.
@@ -146,11 +97,11 @@ export const DocumentTable = ({
         maxSize: 800,
         cell: (ctx) => (
           <span className="font-mono text-[12px] text-slate-700 dark:text-slate-200">
-            {formatCell(ctx.getValue(), uuidRepresentation)}
+            {formatCellValue(ctx.getValue(), formatOptions)}
           </span>
         ),
       })),
-    [columnNames, uuidRepresentation],
+    [columnNames, formatOptions],
   );
 
   const table = useTable({

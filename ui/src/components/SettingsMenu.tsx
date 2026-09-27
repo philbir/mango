@@ -1,4 +1,5 @@
 import {
+  IconBraces,
   IconMoon,
   IconSettings,
   IconSparkles,
@@ -12,18 +13,10 @@ import {
   type CollectionMode,
   type PageSize,
   type Theme,
-  type UuidRepresentation,
   useSettings,
 } from "../settings";
 import { AiSettingsModal } from "../features/connections/AiSettingsModal";
-
-const UUID_REPRESENTATION_LABELS: Record<UuidRepresentation, string> = {
-  standard: "Standard (subtype 4, RFC 4122)",
-  csharpLegacy: "CSharpLegacy (subtype 3, .NET byte order)",
-  javaLegacy: "JavaLegacy (subtype 3, Java byte order)",
-  pythonLegacy: "PythonLegacy (subtype 3, standard order)",
-  unspecified: "Unspecified (subtype 3, no swap)",
-};
+import { FormatSettingsModal } from "../features/settings/FormatSettingsModal";
 
 const PAGE_SIZES: PageSize[] = [50, 100, 200, 500];
 
@@ -31,6 +24,7 @@ export const SettingsMenu = () => {
   const settings = useSettings();
   const [open, setOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [formatsOpen, setFormatsOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -80,26 +74,6 @@ export const SettingsMenu = () => {
             />
           </Section>
 
-          <Section label="UUID representation">
-            <select
-              value={settings.uuidRepresentation}
-              onChange={(e) =>
-                settings.setUuidRepresentation(
-                  e.target.value as UuidRepresentation,
-                )
-              }
-              className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {(
-                Object.keys(UUID_REPRESENTATION_LABELS) as UuidRepresentation[]
-              ).map((r) => (
-                <option key={r} value={r}>
-                  {UUID_REPRESENTATION_LABELS[r]}
-                </option>
-              ))}
-            </select>
-          </Section>
-
           <Section label="Page size">
             <ToggleGroup<PageSize>
               value={settings.pageSize}
@@ -135,6 +109,20 @@ export const SettingsMenu = () => {
             </label>
           </Section>
 
+          <Section label="Formats">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setFormatsOpen(true);
+              }}
+              className="flex w-full items-center gap-1.5 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <IconBraces size={12} />
+              Configure formats
+            </button>
+          </Section>
+
           <Section label="AI">
             <button
               type="button"
@@ -151,6 +139,9 @@ export const SettingsMenu = () => {
         </div>
       )}
       {aiOpen && <AiSettingsModal onClose={() => setAiOpen(false)} />}
+      {formatsOpen && (
+        <FormatSettingsModal onClose={() => setFormatsOpen(false)} />
+      )}
     </div>
   );
 };

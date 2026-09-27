@@ -133,6 +133,18 @@ const PIPELINE_STAGES: OperatorSpec[] = [
 ];
 
 let registered = false;
+// BSON type constructors understood by features/documents/shellParse.ts.
+const SHELL_CONSTRUCTORS: OperatorSpec[] = [
+  { label: "ObjectId", detail: "ObjectId", insertText: 'ObjectId("${1}")' },
+  { label: "ISODate", detail: "Date", insertText: 'ISODate("${1}")' },
+  { label: "NumberInt", detail: "Int32", insertText: "NumberInt(${1})" },
+  { label: "NumberLong", detail: "Int64", insertText: 'NumberLong("${1}")' },
+  { label: "Decimal128", detail: "Decimal128", insertText: 'Decimal128("${1}")' },
+  { label: "UUID", detail: "Binary subtype 4", insertText: 'UUID("${1}")' },
+  { label: "BinData", detail: "Binary", insertText: 'BinData(${1:0}, "${2}")' },
+  { label: "Timestamp", detail: "Timestamp", insertText: "Timestamp(${1:0}, ${2:0})" },
+];
+
 const configByUri = new Map<string, MongoCompletionConfig>();
 
 export const setModelMongoConfig = (
@@ -146,9 +158,62 @@ export const clearModelMongoConfig = (uri: monaco.Uri) => {
   configByUri.delete(uri.toString());
 };
 
+/**
+ * Language id for documents in mongo-shell literal syntax (`ObjectId("…")`,
+ * `ISODate("…")`). Highlighting only — Monaco's built-in "javascript" mode
+ * would pull in the TypeScript worker (not bundled, see monaco-setup.ts) and
+ * flag a bare `{ … }` document as a syntax error.
+ */
+export const MONGO_SHELL_LANGUAGE = "mongo-shell";
+
+const registerMongoShellLanguage = () => {
+  monaco.languages.register({ id: MONGO_SHELL_LANGUAGE });
+  monaco.languages.setLanguageConfiguration(MONGO_SHELL_LANGUAGE, {
+    comments: { lineComment: "//", blockComment: ["/*", "*/"] },
+    brackets: [
+      ["{", "}"],
+      ["[", "]"],
+      ["(", ")"],
+    ],
+    autoClosingPairs: [
+      { open: "{", close: "}" },
+      { open: "[", close: "]" },
+      { open: "(", close: ")" },
+      { open: '"', close: '"', notIn: ["string"] },
+      { open: "'", close: "'", notIn: ["string"] },
+    ],
+  });
+  monaco.languages.setMonarchTokensProvider(MONGO_SHELL_LANGUAGE, {
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, "comment"],
+        [/\/\*/, "comment", "@comment"],
+        [/"(?:[^"\\]|\\.)*"(?=\s*:)/, "string.key.json"],
+        [/'(?:[^'\\]|\\.)*'(?=\s*:)/, "string.key.json"],
+        [/"(?:[^"\\]|\\.)*"/, "string"],
+        [/'(?:[^'\\]|\\.)*'/, "string"],
+        [/\b(?:true|false|null|undefined|new)\b/, "keyword"],
+        [/[A-Za-z_$][\w$]*(?=\s*\()/, "type.identifier"],
+        [/[A-Za-z_$][\w$]*(?=\s*:)/, "string.key.json"],
+        [/-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|-?Infinity\b|NaN\b/, "number"],
+        [/\/(?:[^/\\\n]|\\.)+\/[a-z]*/, "regexp"],
+        [/[{}()[\]]/, "@brackets"],
+        [/[,:.]/, "delimiter"],
+      ],
+      comment: [
+        [/[^*]+/, "comment"],
+        [/\*\//, "comment", "@pop"],
+        [/\*/, "comment"],
+      ],
+    },
+  });
+};
+
 export const ensureMongoCompletionRegistered = () => {
   if (registered) return;
   registered = true;
+
+  registerMongoShellLanguage();
 
   jsonDefaults.setDiagnosticsOptions({
     validate: true,
@@ -157,7 +222,7 @@ export const ensureMongoCompletionRegistered = () => {
     enableSchemaRequest: false,
   });
 
-  monaco.languages.registerCompletionItemProvider("json", {
+  const provider: monaco.languages.CompletionItemProvider = {
     triggerCharacters: ['"', "$", " ", ":"],
     provideCompletionItems: (model, position) => {
       const cfg = configByUri.get(model.uri.toString()) ?? {};
@@ -221,7 +286,24 @@ export const ensureMongoCompletionRegistered = () => {
         }
       }
 
+      if (model.getLanguageId() === MONGO_SHELL_LANGUAGE) {
+        for (const ctor of SHELL_CONSTRUCTORS) {
+          suggestions.push({
+            label: ctor.label,
+            kind: monaco.languages.CompletionItemKind.Constructor,
+            detail: ctor.detail,
+            insertText: ctor.insertText,
+            insertTextRules:
+              monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+            range,
+          });
+        }
+      }
+
       return { suggestions };
     },
-  });
+  };
+
+  monaco.languages.registerCompletionItemProvider("json", provider);
+  monaco.languages.registerCompletionItemProvider(MONGO_SHELL_LANGUAGE, provider);
 };
