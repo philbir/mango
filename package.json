@@ -9,32 +9,26 @@
     "type": "git",
     "url": "https://github.com/philbir/mango.git"
   },
-  "workspaces": [
-    "server",
-    "ui",
-    "docs-site",
-    "desktop"
-  ],
   "scripts": {
-    "dev": "concurrently --names \"server,ui\" --prefix-colors \"blue,magenta\" --kill-others-on-fail \"yarn dev:server\" \"yarn dev:ui\"",
-    "dev:server": "yarn workspace @mango/server dev",
-    "dev:ui": "yarn workspace @mango/ui dev",
-    "build": "yarn workspace @mango/ui build && yarn workspace @mango/server build",
-    "start": "yarn workspace @mango/server start",
-    "test": "yarn workspace @mango/server test",
-    "docs:dev": "yarn workspace @mango/docs-site dev",
-    "docs:build": "yarn workspace @mango/docs-site build",
-    "docs:preview": "yarn workspace @mango/docs-site preview",
-    "aspire": "yarn install && yarn workspace @mango/ui build && yarn workspace @mango/server dev",
-    "tauri": "yarn workspace @mango/desktop tauri",
-    "tauri:dev": "yarn workspace @mango/desktop dev",
-    "tauri:build": "yarn workspace @mango/desktop build",
-    "compile-server": "yarn workspace @mango/desktop compile-server",
+    "dev": "concurrently --names \"server,ui\" --prefix-colors \"blue,magenta\" --kill-others-on-fail \"pnpm dev:server\" \"pnpm dev:ui\"",
+    "dev:server": "pnpm --filter @mango/server dev",
+    "dev:ui": "pnpm --filter @mango/ui dev",
+    "build": "pnpm --filter @mango/ui build && pnpm --filter @mango/server build",
+    "start": "pnpm --filter @mango/server start",
+    "test": "pnpm --filter @mango/server test",
+    "docs:dev": "pnpm --filter @mango/docs-site dev",
+    "docs:build": "pnpm --filter @mango/docs-site build",
+    "docs:preview": "pnpm --filter @mango/docs-site preview",
+    "aspire": "pnpm install && pnpm --filter @mango/ui build && pnpm --filter @mango/server dev",
+    "tauri": "pnpm --filter @mango/desktop tauri",
+    "tauri:dev": "pnpm --filter @mango/desktop dev",
+    "tauri:build": "pnpm --filter @mango/desktop build",
+    "compile-server": "pnpm --filter @mango/desktop compile-server",
     "aspire:lint": "eslint apphost.ts",
     "aspire:start": "aspire run",
     "aspire:build": "tsc -p tsconfig.apphost.json",
     "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
-    "lint": "npm run aspire:lint"
+    "lint": "pnpm aspire:lint"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
@@ -45,20 +39,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1"
   },
-  "packageManager": "yarn@4.15.0",
+  "packageManager": "pnpm@10.30.3",
   "dependencies": {
     "vscode-jsonrpc": "^8.2.1"
-  },
-  "resolutions": {
-    "dompurify": "^3.4.16",
-    "protobufjs": "^7.6.6",
-    "vite": "8.3.1",
-    "@grpc/grpc-js": "^1.14.5",
-    "@opentelemetry/core": "^2.11.0",
-    "undici": "^6.29.0",
-    "tar": "^7.5.22",
-    "brace-expansion": "^5.0.12",
-    "shell-quote": "^1.10.0"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"

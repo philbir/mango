@@ -19,7 +19,7 @@ Tauri 2 wrapper that runs Mango as a native desktop app. Bundles the server as a
 └───────────────────────────────────────────┘
 ```
 
-The sidecar is a single self-contained binary built with `bun build --compile`. No Node, npm, or yarn required on the user's machine.
+The sidecar is a single self-contained binary built with `bun build --compile`. No Node, npm, or pnpm required on the user's machine.
 
 ## One-time prerequisites
 
@@ -33,8 +33,8 @@ curl -fsSL https://bun.sh/install | bash
 # Or with Homebrew
 brew install oven-sh/bun/bun
 
-# Tauri CLI is pulled in by `yarn install` in this workspace
-yarn install
+# Tauri CLI is pulled in by `pnpm install` in this workspace
+pnpm install
 ```
 
 ## Dev workflow
@@ -47,10 +47,10 @@ You don't need Tauri running at all if you're working on the UI:
 
 ```bash
 # terminal 1 — server
-yarn dev:server
+pnpm dev:server
 
 # terminal 2 — Vite with HMR
-yarn dev:ui
+pnpm dev:ui
 # → open http://localhost:5173
 ```
 
@@ -60,28 +60,28 @@ Vite proxies `/api` to the server on `:5180`. UI hot-reloads, server auto-restar
 
 ```bash
 # 1. Build the sidecar binary for your machine (one-time per server change).
-yarn compile-server
+pnpm compile-server
 
 # 2. Build the UI assets the sidecar will serve.
-yarn build         # from repo root — runs UI + server tsc
+pnpm build         # from repo root — runs UI + server tsc
 
 # 3. Launch the desktop app.
-yarn tauri:dev
+pnpm tauri:dev
 ```
 
-For each iteration on the server, re-run `yarn compile-server`. For each iteration on the UI, re-run `yarn workspace @mango/ui build` (the sidecar serves from `server/public`).
+For each iteration on the server, re-run `pnpm compile-server`. For each iteration on the UI, re-run `pnpm --filter @mango/ui build` (the sidecar serves from `server/public`).
 
 ## Production builds
 
 ```bash
 # build sidecar for your platform
-yarn compile-server
+pnpm compile-server
 
 # build UI
-yarn build
+pnpm build
 
 # package
-yarn tauri:build
+pnpm tauri:build
 # → src-tauri/target/release/bundle/{dmg,msi,deb,AppImage}/...
 ```
 
@@ -98,7 +98,7 @@ desktop/bin/mango-server-x86_64-pc-windows-msvc.exe
 desktop/bin/mango-server-x86_64-unknown-linux-gnu
 ```
 
-`yarn compile-server` produces the file named for **your** host triple. It auto-detects from `rustc -vV` when Rust is installed, then falls back to Node's platform/architecture info for the supported host targets. To build for a non-host triple, pass it explicitly: `yarn compile-server x86_64-pc-windows-msvc`.
+`pnpm compile-server` produces the file named for **your** host triple. It auto-detects from `rustc -vV` when Rust is installed, then falls back to Node's platform/architecture info for the supported host targets. To build for a non-host triple, pass it explicitly: `pnpm compile-server x86_64-pc-windows-msvc`.
 
 ## Auth mode
 
@@ -129,7 +129,7 @@ This is **not yet implemented** — see [../docs/ROADMAP.md](../docs/ROADMAP.md)
 ## App icons
 
 ```bash
-yarn icons path/to/source-1024.png
+pnpm icons path/to/source-1024.png
 # generates the full set in src-tauri/icons/
 ```
 

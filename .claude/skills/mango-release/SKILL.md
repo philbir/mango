@@ -39,9 +39,9 @@ git pull --ff-only origin main
 
 ```bash
 # 3. Run sanity checks before committing
-yarn workspace @mango/server test       # 20+ tests
-yarn workspace @mango/ui typecheck      # silent on success
-yarn workspace @mango/server tsc --noEmit
+pnpm --filter @mango/server test       # 20+ tests
+pnpm --filter @mango/ui typecheck      # silent on success
+pnpm --filter @mango/server exec tsc --noEmit
 ```
 
 ```bash
@@ -100,9 +100,9 @@ If the workflow fails partway, the release will exist but be missing assets. Re-
 
 ## Test plan
 
-- [ ] `yarn install && yarn workspace @mango/server test`
-- [ ] `yarn workspace @mango/ui typecheck` clean
-- [ ] `yarn compile-server && yarn tauri:dev` — sidecar boots
+- [ ] `pnpm install && pnpm --filter @mango/server test`
+- [ ] `pnpm --filter @mango/ui typecheck` clean
+- [ ] `pnpm compile-server && pnpm tauri:dev` — sidecar boots
 - [ ] <feature-specific manual checks>
 - [ ] Tag `X.Y.Z` push triggers `desktop-build.yml` to publish artifacts
 

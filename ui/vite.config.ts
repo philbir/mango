@@ -9,7 +9,7 @@ import { defineConfig } from "vite";
 const apiTarget = process.env.VITE_MANGO_API ?? "http://localhost:5180";
 
 // Tauri's default devUrl is http://localhost:5173 — keep Vite on that port so
-// `yarn tauri:dev` finds it. Override with VITE_PORT for browser-only dev if
+// `pnpm tauri:dev` finds it. Override with VITE_PORT for browser-only dev if
 // you have a port collision. PORT is honored too so the Aspire AppHost's
 // default-allocated endpoint (apphost.ts) just works.
 const port = Number(process.env.PORT ?? process.env.VITE_PORT ?? 5173);

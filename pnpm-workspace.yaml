@@ -1,0 +1,28 @@
+packages:
+  - server
+  - ui
+  - docs-site
+  - desktop
+
+# Supply-chain cooldown: refuse package versions published less than 48h ago.
+# Value is in MINUTES (2880 = 48h) — carried over from Yarn's npmMinimalAgeGate.
+minimumReleaseAge: 2880
+
+# Security pins (formerly Yarn `resolutions`).
+overrides:
+  dompurify: ^3.4.16
+  protobufjs: ^7.6.6
+  vite: 8.3.1
+  '@grpc/grpc-js': ^1.14.5
+  '@opentelemetry/core': ^2.11.0
+  undici: ^6.29.0
+  tar: ^7.5.22
+  brace-expansion: ^5.0.12
+  shell-quote: ^1.10.0
+
+# Install scripts stay off (parity with Yarn's enableScripts: false). esbuild
+# ships prebuilt platform binaries via optionalDependencies, so its postinstall
+# isn't needed.
+ignoredBuiltDependencies:
+  - esbuild
+  - protobufjs

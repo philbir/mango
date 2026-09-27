@@ -3,21 +3,26 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 RUN corepack enable
-COPY package.json yarn.lock* .yarnrc.yml* ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json ./server/
 COPY ui/package.json ./ui/
+COPY docs-site/package.json ./docs-site/
 COPY desktop/package.json ./desktop/
-RUN yarn install --immutable || yarn install
+RUN pnpm install --frozen-lockfile
 
 FROM deps AS build-ui
 WORKDIR /app
 COPY ui ./ui
-RUN yarn workspace @mango/ui build
+RUN pnpm --filter @mango/ui build
 
 FROM deps AS build-server
 WORKDIR /app
 COPY server ./server
-RUN yarn workspace @mango/server build
+RUN pnpm --filter @mango/server build
+# Self-contained prod-only node_modules for the runtime image (pnpm's workspace
+# node_modules is symlinked into the root store, so it can't be copied as-is).
+# --legacy: the server has no workspace:* deps, so no injection is needed.
+RUN pnpm --filter @mango/server deploy --legacy --prod /out
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -32,10 +37,8 @@ ENV MANGO_DATA_DIR=/data
 # the UI hides the section.
 RUN apk add --no-cache mongodb-tools
 COPY --from=build-server /app/server/dist ./dist
-COPY --from=build-server /app/server/package.json ./package.json
-# Yarn 4 (`nodeLinker: node-modules`) hoists deps to the workspace root —
-# the per-workspace `server/node_modules` only holds a sliver, if anything.
-COPY --from=build-server /app/node_modules ./node_modules
+COPY --from=build-server /out/package.json ./package.json
+COPY --from=build-server /out/node_modules ./node_modules
 COPY --from=build-ui /app/server/public ./public
 RUN mkdir -p /data
 VOLUME ["/data"]
