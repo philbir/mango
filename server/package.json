@@ -26,6 +26,7 @@
     "@opentelemetry/sdk-metrics": "^2.11.0",
     "@opentelemetry/sdk-node": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
+    "acorn": "^8.16.0",
     "bson": "^7.3.3",
     "hono": "^4.13.9",
     "mongodb": "^7.6.0",

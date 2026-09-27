@@ -1,9 +1,10 @@
 import { Binary, Decimal128, ObjectId, UUID } from "bson";
 import { Hono } from "hono";
-import type { Collection, Db } from "mongodb";
+import type { Collection, Db, MongoClient } from "mongodb";
 import vm from "node:vm";
 import { z } from "zod";
 import { config, databaseNameFor, getMongoClientFor } from "../config.js";
+import { prepareConsoleScript } from "../console-script.js";
 import { stringifyEJSON } from "../ejson.js";
 import { redactErrorMessage } from "../security.js";
 
@@ -41,12 +42,19 @@ const ALLOWED_COLLECTION_METHODS = new Set([
   "getIndexes",
 ]);
 
+// Properties runtime machinery probes on arbitrary values (promise
+// resolution checks `then`, serializers check `toJSON`/`toBSON`). The proxies
+// must answer "not here" instead of treating them as collection names or
+// disallowed methods.
+const PROBED_PROPS = new Set(["then", "toJSON", "toBSON", "_bsontype", "constructor"]);
+
 const buildCollectionProxy = (col: Collection): unknown =>
   new Proxy(
     {},
     {
       get(_target, prop: string | symbol) {
         if (typeof prop !== "string") return undefined;
+        if (PROBED_PROPS.has(prop)) return undefined;
         if (prop === "getName") return () => col.collectionName;
         if (!ALLOWED_COLLECTION_METHODS.has(prop)) {
           throw new Error(`Method "${prop}" is not allowed in console.`);
@@ -58,13 +66,20 @@ const buildCollectionProxy = (col: Collection): unknown =>
     },
   );
 
-const buildDbProxy = (db: Db): unknown =>
+const buildDbProxy = (client: MongoClient, db: Db): unknown =>
   new Proxy(
     {},
     {
       get(_target, prop: string | symbol) {
         if (typeof prop !== "string") return undefined;
+        if (PROBED_PROPS.has(prop)) return undefined;
         if (prop === "getName") return () => db.databaseName;
+        if (prop === "getSiblingDB") {
+          return (name: string) => buildDbProxy(client, client.db(name));
+        }
+        if (prop === "getCollection") {
+          return (name: string) => buildCollectionProxy(db.collection(name));
+        }
         if (prop === "getCollectionNames") {
           return async () => {
             const cols = await db
@@ -114,8 +129,28 @@ const consumeCursor = async (
   return { docs, truncated };
 };
 
+interface ConsoleLog {
+  level: "log" | "info" | "warn" | "error";
+  args: unknown[];
+}
+
+const MAX_LOG_ENTRIES = 1000;
+
+// Logged values are serialized with the response; anything EJSON can't
+// represent (cursors, proxies, circular objects) is logged as a string.
+const toLoggable = (value: unknown): unknown => {
+  if (isCursor(value)) return "[Cursor — use .toArray()]";
+  try {
+    stringifyEJSON(value);
+    return value;
+  } catch {
+    return String(value);
+  }
+};
+
 interface EvalResult {
   result: unknown;
+  logs: ConsoleLog[];
   skip: number;
   limit: number;
   hasMore: boolean;
@@ -123,22 +158,42 @@ interface EvalResult {
 }
 
 /**
- * Evaluate a single JavaScript expression against a `db` proxy. The result is
- * awaited; if it's a cursor (find/aggregate without an explicit toArray) we
- * apply server-side skip/limit paging so we never load huge collections into
- * memory.
+ * Evaluate a JavaScript script against a `db` proxy. Scripts may declare
+ * variables, loop, define functions and `print(...)`; see
+ * `prepareConsoleScript` for how the last expression becomes the result and
+ * where `await` is implied. The result is awaited; if it's a cursor
+ * (find/aggregate without an explicit toArray) we apply server-side
+ * skip/limit paging so we never load huge collections into memory.
  *
  * NB: This is a local development tool. The vm context keeps Node globals such
  * as process and dynamic import out of the console, but it is still not a
  * multi-tenant security boundary.
  */
 const evalCommand = async (
+  client: MongoClient,
   db: Db,
   code: string,
   skip: number,
   limit: number,
+  // Owned by the caller so output printed before a failure still reaches
+  // the client alongside the error.
+  logs: ConsoleLog[],
 ): Promise<EvalResult> => {
-  const dbProxy = buildDbProxy(db);
+  const dbProxy = buildDbProxy(client, db);
+  const logger =
+    (level: ConsoleLog["level"]) =>
+    (...args: unknown[]) => {
+      if (logs.length < MAX_LOG_ENTRIES) {
+        logs.push({ level, args: args.map(toLoggable) });
+      }
+    };
+  const consoleShim = {
+    log: logger("log"),
+    info: logger("info"),
+    debug: logger("log"),
+    warn: logger("warn"),
+    error: logger("error"),
+  };
   const ISODate = (s?: string) => (s ? new Date(s) : new Date());
   const NumberDecimal = (v: string | number) =>
     Decimal128.fromString(typeof v === "number" ? String(v) : v);
@@ -153,6 +208,9 @@ const evalCommand = async (
       ISODate,
       NumberDecimal,
       BinData,
+      print: consoleShim.log,
+      printjson: consoleShim.log,
+      console: consoleShim,
     },
     {
       name: "mango-console",
@@ -160,21 +218,14 @@ const evalCommand = async (
     },
   );
 
-  // Try as expression first; fall back to block (user can use return-style code).
-  let result: unknown;
-  try {
-    const script = new vm.Script(`"use strict"; (async () => (${code}))();`);
-    result = script.runInContext(sandbox, {
-      timeout: config.consoleTimeoutMS,
-      breakOnSigint: true,
-    });
-  } catch {
-    const script = new vm.Script(`"use strict"; (async () => { ${code} })();`);
-    result = script.runInContext(sandbox, {
-      timeout: config.consoleTimeoutMS,
-      breakOnSigint: true,
-    });
-  }
+  const script = new vm.Script(
+    `"use strict"; (async () => {\n${prepareConsoleScript(code)}\n})();`,
+    { filename: "console.js", lineOffset: -1 },
+  );
+  let result: unknown = script.runInContext(sandbox, {
+    timeout: config.consoleTimeoutMS,
+    breakOnSigint: true,
+  });
 
   result = await result;
 
@@ -213,6 +264,7 @@ const evalCommand = async (
     if (hasMore) docs = docs.slice(0, limit);
     return {
       result: docs,
+      logs,
       skip,
       limit,
       hasMore,
@@ -221,6 +273,7 @@ const evalCommand = async (
   }
   return {
     result,
+    logs,
     skip,
     limit,
     hasMore: false,
@@ -246,11 +299,20 @@ consoleRoute.post("/", async (c) => {
   const skip = parsed.data.skip ?? 0;
   const limit = parsed.data.limit ?? DEFAULT_RESULT_LIMIT;
   const start = performance.now();
+  const logs: ConsoleLog[] = [];
   try {
-    const evaled = await evalCommand(db, parsed.data.command, skip, limit);
+    const evaled = await evalCommand(
+      client,
+      db,
+      parsed.data.command,
+      skip,
+      limit,
+      logs,
+    );
     return c.body(
       stringifyEJSON({
         result: evaled.result,
+        logs: evaled.logs,
         skip: evaled.skip,
         limit: evaled.limit,
         hasMore: evaled.hasMore,
@@ -262,17 +324,19 @@ consoleRoute.post("/", async (c) => {
       { "content-type": "application/json; charset=utf-8" },
     );
   } catch (e) {
-    return c.json(
-      {
+    return c.body(
+      stringifyEJSON({
         result: null,
+        logs,
         skip,
         limit,
         hasMore: false,
         paged: false,
         elapsedMs: performance.now() - start,
         error: redactErrorMessage(e),
-      },
+      }),
       400,
+      { "content-type": "application/json; charset=utf-8" },
     );
   }
 });

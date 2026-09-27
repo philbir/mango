@@ -16,6 +16,7 @@ import { useResize } from "../../components/useResize";
 import { type PageSize, useSettings } from "../../settings";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import { ConsoleLogs } from "../documents/ConsoleLogs";
 import { ResultPanel, type ResultFormat } from "../documents/ResultPanel";
 import { useTabs } from "../tabs/TabsContext";
 import {
@@ -376,6 +377,8 @@ export const NotebookView = ({ tabId }: Props) => {
         </div>
       )}
 
+      <ConsoleLogs logs={run.data?.logs ?? []} />
+
       <ResultPanel
         format={resultView}
         onFormatChange={setResultView}
@@ -402,7 +405,11 @@ export const NotebookView = ({ tabId }: Props) => {
               }
             : null
         }
-        emptyHint="Select a fragment or press ⌘/Ctrl + Enter to run."
+        emptyHint={
+          run.data && !run.data.error
+            ? "Script finished — no value returned. End with an expression to see a result."
+            : "Select a fragment or press ⌘/Ctrl + Enter to run."
+        }
       />
 
       {selectedDoc && (

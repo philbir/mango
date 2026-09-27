@@ -2,6 +2,23 @@ import { EJSON } from "bson";
 
 export type EJSONValue = unknown;
 
+export interface ConsoleLogEntry {
+  level: "log" | "info" | "warn" | "error";
+  args: unknown[];
+}
+
+export interface ConsoleRunResult {
+  result: unknown;
+  /** Output of `print(...)` / `console.*` calls, in call order. */
+  logs: ConsoleLogEntry[];
+  skip: number;
+  limit: number;
+  hasMore: boolean;
+  paged: boolean;
+  elapsedMs: number;
+  error: string | null;
+}
+
 const handleJson = async (res: Response): Promise<unknown> => {
   const text = await res.text();
   if (!res.ok) {
@@ -15,7 +32,7 @@ const handleJson = async (res: Response): Promise<unknown> => {
     throw new ApiError(res.status, message);
   }
   if (!text) return null;
-  return EJSON.parse(text, { relaxed: false });
+  return parseResponseEJSON(text);
 };
 
 /**
@@ -843,15 +860,7 @@ export const api = {
     database?: string;
     skip?: number;
     limit?: number;
-  }): Promise<{
-    result: unknown;
-    skip: number;
-    limit: number;
-    hasMore: boolean;
-    paged: boolean;
-    elapsedMs: number;
-    error: string | null;
-  }> {
+  }): Promise<ConsoleRunResult> {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
@@ -864,15 +873,21 @@ export const api = {
         limit: params.limit,
       }),
     });
-    return handleJson(res) as Promise<{
-      result: unknown;
-      skip: number;
-      limit: number;
-      hasMore: boolean;
-      paged: boolean;
-      elapsedMs: number;
-      error: string | null;
-    }>;
+    // A failing script answers 400 with the full result envelope (error plus
+    // whatever it printed before failing) — surface that instead of a bare
+    // ApiError so the output isn't lost.
+    if (res.status === 400) {
+      const text = await res.clone().text();
+      try {
+        const body = parseResponseEJSON(text) as ConsoleRunResult;
+        if (body && typeof body.error === "string" && Array.isArray(body.logs)) {
+          return body;
+        }
+      } catch {
+        /* fall through to handleJson's error handling */
+      }
+    }
+    return handleJson(res) as Promise<ConsoleRunResult>;
   },
 
   async runShell(cid: string, commandJson: string, database?: string): Promise<unknown> {
@@ -1432,6 +1447,48 @@ export const stringifyEJSON = (value: unknown, pretty = true): string =>
 
 export const parseEJSON = (text: string): unknown =>
   EJSON.parse(text, { relaxed: false });
+
+// Type wrappers ({$oid}, {$regex,$options}, {$ref,$id,$db}, …) carry at most
+// three `$` keys. Larger all-`$` objects are ordinary data.
+const MAX_WRAPPER_KEYS = 3;
+
+const reviveLenient = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(reviveLenient);
+  if (value === null || typeof value !== "object") return value;
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  const looksLikeWrapper =
+    keys.length > 0 &&
+    ((keys.length <= MAX_WRAPPER_KEYS && keys.every((k) => k.startsWith("$"))) ||
+      ("$ref" in obj && "$id" in obj));
+  if (looksLikeWrapper) {
+    try {
+      return EJSON.deserialize(obj, { relaxed: false });
+    } catch {
+      /* not a real wrapper — keep it as a plain object */
+    }
+  }
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    // defineProperty so a JSON "__proto__" key stays data, not a prototype.
+    Object.defineProperty(out, k, {
+      value: reviveLenient(obj[k]),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return out;
+};
+
+/**
+ * Canonical EJSON parse for server responses that tolerates plain objects
+ * whose keys collide with EJSON type markers. `EJSON.parse` rejects e.g.
+ * serverStatus' `metrics.operatorCounters.match` (`{"$all":0,…,"$regex":0}`)
+ * as a malformed BSONRegExp; here such objects stay plain data.
+ */
+export const parseResponseEJSON = (text: string): unknown =>
+  reviveLenient(JSON.parse(text));
 
 export type UuidRepresentation =
   | "standard"

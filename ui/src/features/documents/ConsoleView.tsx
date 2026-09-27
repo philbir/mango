@@ -26,6 +26,7 @@ import {
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { DocumentEditor } from "../editor/DocumentEditor";
+import { ConsoleLogs } from "./ConsoleLogs";
 import { ResultPanel, type ResultFormat } from "./ResultPanel";
 
 interface Props {
@@ -310,9 +311,24 @@ export const ConsoleView = ({
         style={{ height: editorHeight }}
       >
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-1.5 text-[11px] dark:border-slate-800">
-          <span className="font-mono text-slate-500 dark:text-slate-400">
-            db.&lt;collection&gt;.&lt;method&gt;(…)
-          </span>
+          {collectionProp ? (
+            <span className="font-mono text-slate-500 dark:text-slate-400">
+              db.{collectionProp}.&lt;method&gt;(…)
+            </span>
+          ) : (
+            // Standalone console: a free-form script against the active
+            // database, not tied to any collection.
+            <span className="text-slate-500 dark:text-slate-400">
+              <span className="font-mono">Script</span>
+              {database && (
+                <span className="font-mono"> · {database}</span>
+              )}
+              <span className="ml-2 text-slate-400 dark:text-slate-500">
+                variables, loops, <span className="font-mono">print()</span> —
+                the last expression is the result
+              </span>
+            </span>
+          )}
           <div className="flex-1" />
           <button
             type="button"
@@ -368,6 +384,8 @@ export const ConsoleView = ({
         />
       </div>
 
+      <ConsoleLogs logs={run.data?.logs ?? []} />
+
       <ResultPanel
         format={resultView}
         onFormatChange={setResultView}
@@ -392,7 +410,11 @@ export const ConsoleView = ({
               }
             : null
         }
-        emptyHint="Press ⌘/Ctrl + Enter to run."
+        emptyHint={
+          run.data && !run.data.error
+            ? "Script finished — no value returned. End with an expression to see a result."
+            : "Press ⌘/Ctrl + Enter to run."
+        }
         onRowClick={(id) => setSelectedId(id)}
         activeRowId={selectedDoc ? selectedId : null}
       />

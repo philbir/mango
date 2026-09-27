@@ -23,17 +23,10 @@ const PRESETS: Array<{ label: string; command: string }> = [
   { label: "dbStats", command: '{"dbStats":1}' },
   { label: "serverStatus", command: '{"serverStatus":1}' },
   {
-    label: "collStats: dossier",
-    command: '{"collStats":"dossier"}',
+    label: "listCollections",
+    command: '{"listCollections":1,"nameOnly":true}',
   },
-  {
-    label: "aggregate sample",
-    command: `{
-  "aggregate": "dossier",
-  "pipeline": [{ "$sample": { "size": 3 } }],
-  "cursor": {}
-}`,
-  },
+  { label: "connectionStatus", command: '{"connectionStatus":1}' },
 ];
 
 interface ShellViewProps {
