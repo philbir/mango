@@ -272,6 +272,54 @@ export interface ConnectionPublic {
   oidcBrowserProfile: string | null;
 }
 
+export interface ServerInfo {
+  connection: {
+    name: string;
+    uriRedacted: string;
+    defaultDatabase: string | null;
+    source: ConnectionSource;
+    aspire: AspireRef | null;
+    oidcProvider: OidcProvider;
+    /** False in standalone mode, where `/secret` is disabled. */
+    revealable: boolean;
+  };
+  client: {
+    hosts: string[];
+    srvHost: string | null;
+    username: string | null;
+    authSource: string | null;
+    authMechanism: string | null;
+    tls: boolean;
+    replicaSet: string | null;
+    directConnection: boolean;
+    appName: string | null;
+    readPreference: string;
+    compressors: string[];
+  };
+  server: {
+    version: string | null;
+    gitVersion: string | null;
+    edition: string;
+    topology: string;
+    setName: string | null;
+    primary: string | null;
+    me: string | null;
+    hosts: string[];
+    isWritablePrimary: boolean;
+    maxWireVersion: number | null;
+    openssl: string | null;
+    host: string | null;
+    process: string | null;
+    uptimeSeconds: number | null;
+    storageEngine: string | null;
+    connectionsCurrent: number | null;
+    connectionsAvailable: number | null;
+    /** False when the user lacks `serverStatus` privileges. */
+    serverStatusAvailable: boolean;
+  };
+  pingMs: number;
+}
+
 export interface DiscoveredMongo {
   containerId: string;
   containerName: string;
@@ -433,6 +481,13 @@ export const api = {
       `/api/connections/${encodeURIComponent(id)}/secret`,
     );
     return handlePlainJson(res) as Promise<{ uri: string }>;
+  },
+
+  async getServerInfo(id: string): Promise<ServerInfo> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/server-info`,
+    );
+    return handlePlainJson(res) as Promise<ServerInfo>;
   },
 
   async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {

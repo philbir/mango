@@ -347,7 +347,7 @@ interface CardProps {
   accent?: "sky" | "emerald" | "violet";
 }
 
-const Card = ({ icon, label, value, subtitle, accent }: CardProps) => {
+export const Card = ({ icon, label, value, subtitle, accent }: CardProps) => {
   const accentClass =
     accent === "sky"
       ? "text-sky-600 dark:text-sky-300"

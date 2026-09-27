@@ -2,15 +2,17 @@ import {
   IconBolt,
   IconChartBar,
   IconDatabase,
+  IconPlugConnected,
   IconTransfer,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { useServerConfig } from "../connections/useServerConfig";
+import { ConnectionTab } from "./ConnectionTab";
 import { DevToolsTab } from "./DevToolsTab";
 import { ImportExportTab } from "./ImportExportTab";
 import { StatsTab } from "./StatsTab";
 
-type SubTab = "stats" | "devtools" | "tools";
+type SubTab = "stats" | "connection" | "devtools" | "tools";
 
 interface Props {
   cid: string;
@@ -36,6 +38,12 @@ export const DatabaseView = ({ cid, database }: Props) => {
           active={tab === "stats"}
           onClick={() => setTab("stats")}
         />
+        <SubTabButton
+          icon={<IconPlugConnected size={12} />}
+          label="Connection"
+          active={tab === "connection"}
+          onClick={() => setTab("connection")}
+        />
         {dbToolsAvailable && (
           <SubTabButton
             icon={<IconTransfer size={12} />}
@@ -57,6 +65,7 @@ export const DatabaseView = ({ cid, database }: Props) => {
 
       <div className="flex-1 overflow-auto">
         {tab === "stats" && <StatsTab cid={cid} database={database} />}
+        {tab === "connection" && <ConnectionTab cid={cid} />}
         {tab === "tools" && dbToolsAvailable && (
           <ImportExportTab cid={cid} database={database} />
         )}
