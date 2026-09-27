@@ -96,10 +96,13 @@ export const ChatBox = () => {
     else if (status.data?.model) setSelectedModel(status.data.model);
   }, [provider, status.data?.model]);
 
+  // Fall back to the first listed model when nothing valid is selected —
+  // e.g. Codex has no configured default and lists the account default first.
   useEffect(() => {
-    if (!provider || !models.data || !selectedModel) return;
+    if (!provider || !models.data) return;
     const isValid =
-      models.data.length === 0 || models.data.some((m) => m.id === selectedModel);
+      !!selectedModel &&
+      (models.data.length === 0 || models.data.some((m) => m.id === selectedModel));
     if (!isValid && models.data.length > 0) {
       setSelectedModel(models.data[0]?.id ?? null);
     }

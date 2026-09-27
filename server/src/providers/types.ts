@@ -5,7 +5,7 @@ export interface ModelOption {
   vendor?: string;
 }
 
-export type AiProviderName = "openai" | "copilot" | "claude-code";
+export type AiProviderName = "openai" | "copilot" | "claude-code" | "codex";
 
 export type ChatRole = "system" | "user" | "assistant";
 

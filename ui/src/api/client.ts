@@ -67,7 +67,7 @@ export class ApiError extends Error {
   }
 }
 
-export type AiProviderId = "openai" | "copilot" | "claude-code";
+export type AiProviderId = "openai" | "copilot" | "claude-code" | "codex";
 
 export interface AiConfig {
   provider: AiProviderId | null;
@@ -75,6 +75,7 @@ export interface AiConfig {
   model: string | null;
   copilotCliPath: string | null;
   claudeCliPath: string | null;
+  codexCliPath: string | null;
   apiKeySet: boolean;
   allowDataSampling: boolean;
   persisted: boolean;
@@ -930,6 +931,7 @@ export const api = {
     model?: string | null;
     copilotCliPath?: string | null;
     claudeCliPath?: string | null;
+    codexCliPath?: string | null;
     allowDataSampling?: boolean;
   }): Promise<AiConfig> {
     const res = await fetch("/api/ai/config", {
@@ -990,6 +992,27 @@ export const api = {
     }>;
   },
 
+  async detectCodexCli(input?: { path?: string | null }): Promise<{
+    ok: boolean;
+    path: string | null;
+    source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+    version: string | null;
+    error?: string;
+  }> {
+    const res = await fetch("/api/ai/codex-cli/detect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: input?.path ?? null }),
+    });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      path: string | null;
+      source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+      version: string | null;
+      error?: string;
+    }>;
+  },
+
   async testAiConfig(input: {
     provider: AiProviderId;
     apiKey?: string | null;
@@ -997,6 +1020,7 @@ export const api = {
     model?: string | null;
     copilotCliPath?: string | null;
     claudeCliPath?: string | null;
+    codexCliPath?: string | null;
   }): Promise<{
     ok: boolean;
     provider?: AiProviderId;
