@@ -46,7 +46,7 @@ The AI provider's filter output is also EJSON (see the system prompt in `server/
 
 ### AI provider abstraction
 
-Two providers behind a single `AiProvider` interface (`server/src/providers/types.ts`): `openai` (any OpenAI-compatible endpoint — OpenAI, GitHub Models, Azure, Ollama) and `copilot` (`@github/copilot-sdk`, falls back to logged-in Copilot CLI session). Switched by `AI_PROVIDER` env. Both must implement `query()` (returns a structured filter via tool-call) and `listModels()`. The `/api/ai/query` route samples 30 documents from the target collection (`schema-sampling.ts`) and renders a schema text into the system prompt before calling the provider.
+Four providers behind a single `AiProvider` interface (`server/src/providers/types.ts`): `openai` (any OpenAI-compatible endpoint — OpenAI, GitHub Models, Azure, Ollama) plus three that spawn the user's installed CLI per request — `copilot`, `claude-code` and `codex`. Switched by `AI_PROVIDER` env or the saved AI settings. Each implements `chat()` and `listModels()`; the CLI providers query the live account catalog (Copilot: `copilot --acp` `session/new`; Claude Code: stream-json `initialize` control request; Codex: `codex app-server` `model/list`) and cache it for 10 minutes — don't reintroduce hardcoded model lists, they go stale. The `/api/ai/query` route samples 30 documents from the target collection (`schema-sampling.ts`) and renders a schema text into the system prompt before calling the provider.
 
 ### Desktop sidecar
 

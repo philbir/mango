@@ -12,9 +12,14 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useMemo } from "react";
-import { prettifyUuids } from "../../api/client";
-import { InteractiveJsonView } from "../../components/JsonView";
+import { MonacoJsonInput } from "../../components/MonacoJsonInput";
+import { MONGO_SHELL_LANGUAGE } from "../../monaco-mongo";
 import { type PageSize, useSettings } from "../../settings";
+import {
+  formatDocument,
+  formatDocumentList,
+  isShellFormat,
+} from "./docFormats";
 import { DocumentTable, type TableSelection } from "./DocumentTable";
 
 export type ResultFormat = "table" | "json";
@@ -49,6 +54,8 @@ interface Props {
   truncated?: boolean;
   truncatedHint?: string | null;
   onRowClick?: (id: string) => void;
+  /** Id of the row whose document is open in the detail drawer. */
+  activeRowId?: string | null;
   emptyHint?: string;
   /** Enables row multi-select + a batch action bar. Table view only. */
   selection?: ResultSelection;
@@ -81,15 +88,23 @@ export const ResultPanel = ({
   truncated,
   truncatedHint,
   onRowClick,
+  activeRowId,
   emptyHint,
   selection,
 }: Props) => {
-  const { uuidRepresentation } = useSettings();
+  const { jsonFormat, formatOptions } = useSettings();
   const documents = useMemo(() => asDocumentArray(rawValue), [rawValue]);
   const canTable = !!documents;
-  const jsonValue = useMemo(
-    () => prettifyUuids(rawValue, uuidRepresentation),
-    [rawValue, uuidRepresentation],
+  // Same global format as the document drawer, so a document reads the same
+  // in the list as when opened.
+  const jsonText = useMemo(
+    () =>
+      rawValue === null || rawValue === undefined
+        ? ""
+        : documents
+          ? formatDocumentList(documents, jsonFormat, formatOptions)
+          : formatDocument(rawValue, jsonFormat, formatOptions),
+    [documents, rawValue, jsonFormat, formatOptions],
   );
 
   // Effective format: if no tabular shape is available, force JSON.
@@ -200,12 +215,23 @@ export const ResultPanel = ({
             documents={documents}
             loading={isLoading}
             onRowClick={onRowClick}
+            activeRowId={activeRowId}
             selection={selection}
           />
         )}
         {hasResult && effectiveFormat === "json" && (
-          <div className="p-3">
-            <InteractiveJsonView value={jsonValue} collapsed={2} />
+          <div className="h-full">
+            <MonacoJsonInput
+              key={`result-${jsonFormat}`}
+              value={jsonText}
+              language={isShellFormat(jsonFormat) ? MONGO_SHELL_LANGUAGE : "json"}
+              onChange={() => {
+                /* read-only */
+              }}
+              minHeight="100%"
+              showLineNumbers
+              readOnly
+            />
           </div>
         )}
       </div>

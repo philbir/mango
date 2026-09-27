@@ -6,9 +6,10 @@ import {
   useTable,
   type ColumnDef,
 } from "@tanstack/react-table";
-import { useMemo } from "react";
-import { extractIdString, formatUuid } from "../../api/client";
-import { useSettings, type UuidRepresentation } from "../../settings";
+import { useEffect, useMemo, useRef } from "react";
+import { extractIdString } from "../../api/client";
+import { useSettings } from "../../settings";
+import { formatCellValue } from "./docFormats";
 
 export interface TableSelection {
   /** Currently-selected row id strings (may span pages). */
@@ -26,60 +27,23 @@ interface Props {
   documents: Array<Record<string, unknown>>;
   loading?: boolean;
   onRowClick?: (id: string) => void;
+  /** Row whose document is open in the detail drawer — highlighted, and the
+   * anchor for ↑/↓ keyboard navigation. */
+  activeRowId?: string | null;
   selection?: TableSelection;
 }
 
-const formatCell = (
-  value: unknown,
-  uuidRepresentation: UuidRepresentation,
-): string => {
-  if (value === null || value === undefined) return "—";
-  const uuid = formatUuid(value, uuidRepresentation);
-  if (uuid !== null) return uuid;
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
-  if (value instanceof Date) return value.toISOString();
-  if (
-    typeof value === "object" &&
-    "$oid" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$oid);
-  }
-  if (
-    typeof value === "object" &&
-    "$date" in (value as Record<string, unknown>)
-  ) {
-    const v = (value as Record<string, unknown>).$date;
-    return typeof v === "string" ? v : JSON.stringify(v);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberDecimal" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberDecimal);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberInt" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberInt);
-  }
-  if (
-    typeof value === "object" &&
-    "$numberLong" in (value as Record<string, unknown>)
-  ) {
-    return String((value as Record<string, unknown>).$numberLong);
-  }
-  try {
-    const s = JSON.stringify(value);
-    return s.length > 80 ? `${s.slice(0, 77)}…` : s;
-  } catch {
-    return String(value);
-  }
-};
+// Keys typed into these belong to the control, not to row navigation.
+const isEditableTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  !!target.closest(
+    'input:not([type="checkbox"]), textarea, select, [contenteditable="true"], .monaco-editor',
+  );
 
 const COLUMN_LIMIT = 12;
+
+// Left accent bar on the active row's first cell.
+const ACTIVE_BAR = "shadow-[inset_3px_0_0_var(--color-sky-500)]";
 
 const features = tableFeatures({ columnSizingFeature, columnResizingFeature });
 type Doc = Record<string, unknown>;
@@ -88,9 +52,11 @@ export const DocumentTable = ({
   documents,
   loading,
   onRowClick,
+  activeRowId,
   selection,
 }: Props) => {
-  const { uuidRepresentation } = useSettings();
+  const { formatOptions } = useSettings();
+  const activeRowRef = useRef<HTMLTableRowElement | null>(null);
 
   // Rows of the current page as {id, rawId} for select-all + header state.
   const pageRows = useMemo(
@@ -131,11 +97,11 @@ export const DocumentTable = ({
         maxSize: 800,
         cell: (ctx) => (
           <span className="font-mono text-[12px] text-slate-700 dark:text-slate-200">
-            {formatCell(ctx.getValue(), uuidRepresentation)}
+            {formatCellValue(ctx.getValue(), formatOptions)}
           </span>
         ),
       })),
-    [columnNames, uuidRepresentation],
+    [columnNames, formatOptions],
   );
 
   const table = useTable({
@@ -147,6 +113,30 @@ export const DocumentTable = ({
   });
 
   const SELECT_COL_WIDTH = 38;
+
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeRowId]);
+
+  // ↑/↓ steps the open document through the rows of the current page. Only
+  // active while a drawer is open, and paused while the drawer is editing or
+  // showing a confirm dialog so navigation can't discard pending work.
+  useEffect(() => {
+    if (!activeRowId || !onRowClick) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (isEditableTarget(e.target)) return;
+      if (document.querySelector("[data-doc-editor-locked]")) return;
+      const idx = pageRows.findIndex((r) => r.id === activeRowId);
+      if (idx === -1) return;
+      const next = pageRows[idx + (e.key === "ArrowDown" ? 1 : -1)];
+      e.preventDefault();
+      if (next) onRowClick(next.id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeRowId, onRowClick, pageRows]);
 
   return (
     <div className="h-full overflow-auto">
@@ -232,19 +222,26 @@ export const DocumentTable = ({
           {table.getRowModel().rows.map((row) => {
             const id = extractIdString(row.original._id);
             const isSelected = selection?.selectedIds.has(id) ?? false;
+            const isActive = activeRowId === id;
             return (
               <tr
                 key={id}
+                ref={isActive ? activeRowRef : undefined}
+                aria-current={isActive ? "true" : undefined}
                 onClick={() => onRowClick?.(id)}
                 className={`cursor-pointer ${
-                  isSelected
-                    ? "bg-sky-50 hover:bg-sky-100 dark:bg-sky-500/10 dark:hover:bg-sky-500/20"
-                    : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                  isActive
+                    ? "bg-sky-100 dark:bg-sky-500/25"
+                    : isSelected
+                      ? "bg-sky-50 hover:bg-sky-100 dark:bg-sky-500/10 dark:hover:bg-sky-500/20"
+                      : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
                 }`}
               >
                 {selection && (
                   <td
-                    className="border-b border-slate-200 px-2 py-1.5 text-center dark:border-slate-800"
+                    className={`border-b border-slate-200 px-2 py-1.5 text-center dark:border-slate-800 ${
+                      isActive ? ACTIVE_BAR : ""
+                    }`}
                     style={{ width: SELECT_COL_WIDTH }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -259,10 +256,12 @@ export const DocumentTable = ({
                     />
                   </td>
                 )}
-                {row.getAllCells().map((cell) => (
+                {row.getAllCells().map((cell, i) => (
                   <td
                     key={cell.id}
-                    className="truncate border-b border-slate-200 px-3 py-1.5 dark:border-slate-800"
+                    className={`truncate border-b border-slate-200 px-3 py-1.5 dark:border-slate-800 ${
+                      isActive && !selection && i === 0 ? ACTIVE_BAR : ""
+                    }`}
                     style={{ width: cell.column.getSize() }}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

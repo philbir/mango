@@ -2,6 +2,23 @@ import { EJSON } from "bson";
 
 export type EJSONValue = unknown;
 
+export interface ConsoleLogEntry {
+  level: "log" | "info" | "warn" | "error";
+  args: unknown[];
+}
+
+export interface ConsoleRunResult {
+  result: unknown;
+  /** Output of `print(...)` / `console.*` calls, in call order. */
+  logs: ConsoleLogEntry[];
+  skip: number;
+  limit: number;
+  hasMore: boolean;
+  paged: boolean;
+  elapsedMs: number;
+  error: string | null;
+}
+
 const handleJson = async (res: Response): Promise<unknown> => {
   const text = await res.text();
   if (!res.ok) {
@@ -15,7 +32,7 @@ const handleJson = async (res: Response): Promise<unknown> => {
     throw new ApiError(res.status, message);
   }
   if (!text) return null;
-  return EJSON.parse(text, { relaxed: false });
+  return parseResponseEJSON(text);
 };
 
 /**
@@ -50,7 +67,7 @@ export class ApiError extends Error {
   }
 }
 
-export type AiProviderId = "openai" | "copilot" | "claude-code";
+export type AiProviderId = "openai" | "copilot" | "claude-code" | "codex";
 
 export interface AiConfig {
   provider: AiProviderId | null;
@@ -58,6 +75,7 @@ export interface AiConfig {
   model: string | null;
   copilotCliPath: string | null;
   claudeCliPath: string | null;
+  codexCliPath: string | null;
   apiKeySet: boolean;
   allowDataSampling: boolean;
   persisted: boolean;
@@ -272,6 +290,54 @@ export interface ConnectionPublic {
   oidcBrowserProfile: string | null;
 }
 
+export interface ServerInfo {
+  connection: {
+    name: string;
+    uriRedacted: string;
+    defaultDatabase: string | null;
+    source: ConnectionSource;
+    aspire: AspireRef | null;
+    oidcProvider: OidcProvider;
+    /** False in standalone mode, where `/secret` is disabled. */
+    revealable: boolean;
+  };
+  client: {
+    hosts: string[];
+    srvHost: string | null;
+    username: string | null;
+    authSource: string | null;
+    authMechanism: string | null;
+    tls: boolean;
+    replicaSet: string | null;
+    directConnection: boolean;
+    appName: string | null;
+    readPreference: string;
+    compressors: string[];
+  };
+  server: {
+    version: string | null;
+    gitVersion: string | null;
+    edition: string;
+    topology: string;
+    setName: string | null;
+    primary: string | null;
+    me: string | null;
+    hosts: string[];
+    isWritablePrimary: boolean;
+    maxWireVersion: number | null;
+    openssl: string | null;
+    host: string | null;
+    process: string | null;
+    uptimeSeconds: number | null;
+    storageEngine: string | null;
+    connectionsCurrent: number | null;
+    connectionsAvailable: number | null;
+    /** False when the user lacks `serverStatus` privileges. */
+    serverStatusAvailable: boolean;
+  };
+  pingMs: number;
+}
+
 export interface DiscoveredMongo {
   containerId: string;
   containerName: string;
@@ -433,6 +499,13 @@ export const api = {
       `/api/connections/${encodeURIComponent(id)}/secret`,
     );
     return handlePlainJson(res) as Promise<{ uri: string }>;
+  },
+
+  async getServerInfo(id: string): Promise<ServerInfo> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/server-info`,
+    );
+    return handlePlainJson(res) as Promise<ServerInfo>;
   },
 
   async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {
@@ -788,15 +861,7 @@ export const api = {
     database?: string;
     skip?: number;
     limit?: number;
-  }): Promise<{
-    result: unknown;
-    skip: number;
-    limit: number;
-    hasMore: boolean;
-    paged: boolean;
-    elapsedMs: number;
-    error: string | null;
-  }> {
+  }): Promise<ConsoleRunResult> {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
@@ -809,15 +874,21 @@ export const api = {
         limit: params.limit,
       }),
     });
-    return handleJson(res) as Promise<{
-      result: unknown;
-      skip: number;
-      limit: number;
-      hasMore: boolean;
-      paged: boolean;
-      elapsedMs: number;
-      error: string | null;
-    }>;
+    // A failing script answers 400 with the full result envelope (error plus
+    // whatever it printed before failing) — surface that instead of a bare
+    // ApiError so the output isn't lost.
+    if (res.status === 400) {
+      const text = await res.clone().text();
+      try {
+        const body = parseResponseEJSON(text) as ConsoleRunResult;
+        if (body && typeof body.error === "string" && Array.isArray(body.logs)) {
+          return body;
+        }
+      } catch {
+        /* fall through to handleJson's error handling */
+      }
+    }
+    return handleJson(res) as Promise<ConsoleRunResult>;
   },
 
   async runShell(cid: string, commandJson: string, database?: string): Promise<unknown> {
@@ -860,6 +931,7 @@ export const api = {
     model?: string | null;
     copilotCliPath?: string | null;
     claudeCliPath?: string | null;
+    codexCliPath?: string | null;
     allowDataSampling?: boolean;
   }): Promise<AiConfig> {
     const res = await fetch("/api/ai/config", {
@@ -920,6 +992,27 @@ export const api = {
     }>;
   },
 
+  async detectCodexCli(input?: { path?: string | null }): Promise<{
+    ok: boolean;
+    path: string | null;
+    source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+    version: string | null;
+    error?: string;
+  }> {
+    const res = await fetch("/api/ai/codex-cli/detect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: input?.path ?? null }),
+    });
+    return handlePlainJson(res) as Promise<{
+      ok: boolean;
+      path: string | null;
+      source: "override" | "env" | "candidate" | "where" | "path" | "fallback";
+      version: string | null;
+      error?: string;
+    }>;
+  },
+
   async testAiConfig(input: {
     provider: AiProviderId;
     apiKey?: string | null;
@@ -927,6 +1020,7 @@ export const api = {
     model?: string | null;
     copilotCliPath?: string | null;
     claudeCliPath?: string | null;
+    codexCliPath?: string | null;
   }): Promise<{
     ok: boolean;
     provider?: AiProviderId;
@@ -1378,6 +1472,48 @@ export const stringifyEJSON = (value: unknown, pretty = true): string =>
 export const parseEJSON = (text: string): unknown =>
   EJSON.parse(text, { relaxed: false });
 
+// Type wrappers ({$oid}, {$regex,$options}, {$ref,$id,$db}, …) carry at most
+// three `$` keys. Larger all-`$` objects are ordinary data.
+const MAX_WRAPPER_KEYS = 3;
+
+const reviveLenient = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(reviveLenient);
+  if (value === null || typeof value !== "object") return value;
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  const looksLikeWrapper =
+    keys.length > 0 &&
+    ((keys.length <= MAX_WRAPPER_KEYS && keys.every((k) => k.startsWith("$"))) ||
+      ("$ref" in obj && "$id" in obj));
+  if (looksLikeWrapper) {
+    try {
+      return EJSON.deserialize(obj, { relaxed: false });
+    } catch {
+      /* not a real wrapper — keep it as a plain object */
+    }
+  }
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    // defineProperty so a JSON "__proto__" key stays data, not a prototype.
+    Object.defineProperty(out, k, {
+      value: reviveLenient(obj[k]),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return out;
+};
+
+/**
+ * Canonical EJSON parse for server responses that tolerates plain objects
+ * whose keys collide with EJSON type markers. `EJSON.parse` rejects e.g.
+ * serverStatus' `metrics.operatorCounters.match` (`{"$all":0,…,"$regex":0}`)
+ * as a malformed BSONRegExp; here such objects stay plain data.
+ */
+export const parseResponseEJSON = (text: string): unknown =>
+  reviveLenient(JSON.parse(text));
+
 export type UuidRepresentation =
   | "standard"
   | "csharpLegacy"
@@ -1505,162 +1641,3 @@ export const formatUuid = (
   value: unknown,
   representation: UuidRepresentation = "standard",
 ): string | null => binaryToCanonicalUuid(value, representation);
-
-const uuidMarker = (
-  subType: 3 | 4,
-  representation: UuidRepresentation,
-): string => {
-  if (subType === 4) return "UUID";
-  switch (representation) {
-    case "csharpLegacy":
-      return "CSUUID";
-    case "javaLegacy":
-      return "JUUID";
-    case "pythonLegacy":
-      return "PYUUID";
-    case "unspecified":
-    case "standard":
-    default:
-      return "UUID";
-  }
-};
-
-/**
- * Walk a value tree and replace UUID binaries with Compass-style marker
- * strings (`UUID('...')`, `CSUUID('...')`, `JUUID('...')`, `PYUUID('...')`)
- * using the given representation for subtype-3 byte ordering. Single quotes
- * inside so JSON.stringify doesn't escape them — the resulting JSON shows
- * `"UUID('hex')"` instead of `"UUID(\"hex\")"`. Read-only views use this so
- * users see readable UUIDs instead of raw `$binary` blobs or destructured
- * Binary instances; edit paths must NOT use this — the marker strings don't
- * round-trip through EJSON.parse for legacy subtypes.
- *
- * Other bson runtime instances (Long, Decimal128, ObjectId, etc.) are
- * returned as-is so EJSON.stringify can serialize them through their normal
- * `toExtendedJSON()` paths instead of having their internal fields walked.
- */
-/**
- * Walk a value tree and unwrap BSON types / canonical-EJSON wrappers into the
- * plainest JSON representation that still reads naturally — the same flavour
- * the result-table cells use. Numbers become numbers, ObjectIds and UUIDs
- * become plain hex/dash strings, dates become ISO strings, Decimal128 becomes
- * its decimal string. Intended for READ-ONLY views; edit paths must keep
- * canonical EJSON so saves round-trip with full type fidelity.
- */
-export const humanizeForDisplay = (
-  value: unknown,
-  representation: UuidRepresentation,
-): unknown => {
-  if (value === null || value === undefined) return value;
-  if (typeof value !== "object") return value;
-  if (value instanceof Date) return value.toISOString();
-
-  const uuid = binaryToCanonicalUuid(value, representation);
-  if (uuid !== null) return uuid;
-
-  const bsonType = (value as { _bsontype?: string })._bsontype;
-  if (bsonType) {
-    switch (bsonType) {
-      case "ObjectId":
-      case "ObjectID": {
-        const f = (value as { toHexString?: () => string }).toHexString;
-        if (typeof f === "function") return f.call(value);
-        return String(value);
-      }
-      case "Long":
-      case "Int32":
-      case "Double": {
-        const f = (value as { toNumber?: () => number }).toNumber;
-        if (typeof f === "function") {
-          const n = f.call(value);
-          if (Number.isFinite(n)) return n;
-        }
-        return String(value);
-      }
-      case "Decimal128":
-        return String(value);
-      case "BSONSymbol":
-      case "Symbol":
-        return String(value);
-      case "BSONRegExp": {
-        const obj = value as { pattern?: string; options?: string };
-        return `/${obj.pattern ?? ""}/${obj.options ?? ""}`;
-      }
-      case "MinKey":
-        return "MinKey()";
-      case "MaxKey":
-        return "MaxKey()";
-      case "Binary": {
-        // Non-UUID binary (UUID was already handled above).
-        const bin = value as { toString: (encoding?: string) => string };
-        return `Binary('${bin.toString("base64")}')`;
-      }
-      default:
-        return value;
-    }
-  }
-
-  // Canonical-EJSON wrapper shapes (in case the input was already serialized
-  // and reparsed as plain objects rather than BSON instances).
-  const obj = value as Record<string, unknown>;
-  if ("$oid" in obj && typeof obj.$oid === "string") return obj.$oid;
-  if ("$date" in obj) {
-    const d = obj.$date;
-    if (typeof d === "string") return d;
-    if (d && typeof d === "object" && "$numberLong" in d) {
-      const n = Number((d as Record<string, unknown>).$numberLong);
-      if (Number.isFinite(n)) return new Date(n).toISOString();
-    }
-  }
-  if ("$numberInt" in obj && typeof obj.$numberInt === "string") {
-    return Number(obj.$numberInt);
-  }
-  if ("$numberLong" in obj && typeof obj.$numberLong === "string") {
-    const n = Number(obj.$numberLong);
-    return Number.isFinite(n) ? n : String(obj.$numberLong);
-  }
-  if ("$numberDouble" in obj && typeof obj.$numberDouble === "string") {
-    const n = Number(obj.$numberDouble);
-    return Number.isFinite(n) ? n : String(obj.$numberDouble);
-  }
-  if ("$numberDecimal" in obj && typeof obj.$numberDecimal === "string") {
-    return String(obj.$numberDecimal);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((v) => humanizeForDisplay(v, representation));
-  }
-
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k] = humanizeForDisplay(v, representation);
-  }
-  return out;
-};
-
-export const prettifyUuids = (
-  value: unknown,
-  representation: UuidRepresentation,
-): unknown => {
-  if (value === null || value === undefined) return value;
-  if (typeof value !== "object") return value;
-
-  const read = tryReadUuidBytes(value);
-  if (read) {
-    const hex = binaryToCanonicalUuid(value, representation)!;
-    return `${uuidMarker(read.subType, representation)}('${hex}')`;
-  }
-
-  // Don't walk into other bson types — their own properties are
-  // implementation details that EJSON.stringify shouldn't see.
-  if ((value as { _bsontype?: string })._bsontype) return value;
-
-  if (Array.isArray(value)) {
-    return value.map((v) => prettifyUuids(v, representation));
-  }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = prettifyUuids(v, representation);
-  }
-  return out;
-};

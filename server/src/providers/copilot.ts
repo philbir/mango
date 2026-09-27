@@ -4,8 +4,6 @@ import {
   constants,
   existsSync,
   mkdirSync,
-  readFileSync,
-  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -156,74 +154,138 @@ interface CopilotEvent {
   data?: { content?: string };
 }
 
-const COPILOT_MODELS: ModelOption[] = [
-  { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-  { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
-  { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
-  { id: "claude-opus-4.6", name: "Claude Opus 4.6" },
-  { id: "claude-opus-4.6-fast", name: "Claude Opus 4.6 Fast" },
-  { id: "claude-opus-4.6-1m", name: "Claude Opus 4.6 1M" },
-  { id: "claude-opus-4.5", name: "Claude Opus 4.5" },
-  { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
-  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
-  { id: "gpt-5.4", name: "GPT-5.4" },
-  { id: "gpt-5.3-codex", name: "GPT-5.3 Codex" },
-  { id: "gpt-5.2-codex", name: "GPT-5.2 Codex" },
-  { id: "gpt-5.2", name: "GPT-5.2" },
-  { id: "gpt-5.1-codex-max", name: "GPT-5.1 Codex Max" },
-  { id: "gpt-5.1-codex", name: "GPT-5.1 Codex" },
-  { id: "gpt-5.1", name: "GPT-5.1" },
-  { id: "gpt-5.1-codex-mini", name: "GPT-5.1 Codex Mini" },
-  { id: "gpt-5-mini", name: "GPT-5 Mini" },
-  { id: "gpt-4.1", name: "GPT-4.1" },
+// Used only when the live query below fails (old CLI without ACP, not logged
+// in, …). `auto` is always accepted; users can still type any explicit ID.
+const FALLBACK_MODELS: ModelOption[] = [
+  { id: "auto", name: "Auto", description: "Let Copilot pick the best model" },
 ];
 
-const modelNameFromId = (id: string): string =>
-  id
-    .split("-")
-    .map((part) =>
-      /^(gpt|1m)$/i.test(part)
-        ? part.toUpperCase()
-        : part.charAt(0).toUpperCase() + part.slice(1),
-    )
-    .join(" ");
+interface AcpModel {
+  modelId?: unknown;
+  name?: unknown;
+  description?: unknown;
+}
 
-const findSelectedModelEnum = (value: unknown): string[] | null => {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const selectedModel = record.selectedModel as
-    | { enum?: unknown }
-    | undefined;
-  if (Array.isArray(selectedModel?.enum)) {
-    const ids = selectedModel.enum.filter((id): id is string => typeof id === "string");
-    if (ids.length > 0) return ids;
-  }
-  for (const child of Object.values(record)) {
-    const found = findSelectedModelEnum(child);
-    if (found) return found;
-  }
-  return null;
-};
+interface AcpMessage {
+  id?: number;
+  result?: { sessionId?: string; models?: { availableModels?: AcpModel[] } };
+  error?: { message?: string };
+}
 
-const readModelsFromCliSchema = (cliPath: string): ModelOption[] | null => {
-  try {
-    let current = path.dirname(realpathSync(cliPath));
-    for (let depth = 0; depth < 6; depth += 1) {
-      const schemaPath = path.join(current, "schemas", "session-events.schema.json");
-      if (existsSync(schemaPath)) {
-        const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as unknown;
-        const ids = findSelectedModelEnum(schema);
-        if (ids) return ids.map((id) => ({ id, name: modelNameFromId(id) }));
-        return null;
+// The Copilot model catalog is per-account and changes server-side, so there's
+// no static list worth shipping. The CLI's ACP server (`copilot --acp`) reports
+// the account's available models in its `session/new` response — spin one up,
+// read the list, close the session and exit.
+const queryModelsViaAcp = async (cliPath: string): Promise<ModelOption[]> =>
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      cliPath,
+      ["--acp", "--no-color", "--config-dir", getIsolatedConfigDir()],
+      {
+        cwd: tmpdir(),
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, NO_COLOR: "1" },
+      },
+    );
+    let buffered = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (err: Error | null, models?: ModelOption[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stdin.end();
+      child.kill();
+      if (err) reject(err);
+      else resolve(models ?? []);
+    };
+    const send = (msg: Record<string, unknown>) =>
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...msg })}\n`);
+    const timer = setTimeout(
+      () => finish(new Error("Copilot CLI model list timed out.")),
+      30_000,
+    );
+
+    child.stdout.on("data", (b: Buffer) => {
+      buffered += b.toString();
+      let nl: number;
+      while ((nl = buffered.indexOf("\n")) !== -1) {
+        const line = buffered.slice(0, nl).trim();
+        buffered = buffered.slice(nl + 1);
+        if (!line) continue;
+        let msg: AcpMessage;
+        try {
+          msg = JSON.parse(line) as AcpMessage;
+        } catch {
+          continue;
+        }
+        if (msg.id !== 1 && msg.id !== 2) continue;
+        if (msg.error) {
+          return finish(
+            new Error(`Copilot CLI: ${msg.error.message ?? "ACP request failed"}`),
+          );
+        }
+        if (msg.id === 1) {
+          send({
+            id: 2,
+            method: "session/new",
+            params: { cwd: tmpdir(), mcpServers: [] },
+          });
+          continue;
+        }
+        const sessionId = msg.result?.sessionId;
+        if (sessionId) send({ id: 3, method: "session/close", params: { sessionId } });
+        const models = (msg.result?.models?.availableModels ?? []).flatMap(
+          (m): ModelOption[] =>
+            typeof m.modelId === "string"
+              ? [
+                  {
+                    id: m.modelId,
+                    name: typeof m.name === "string" ? m.name : m.modelId,
+                    ...(typeof m.description === "string" &&
+                    m.description !== m.name
+                      ? { description: m.description }
+                      : {}),
+                  },
+                ]
+              : [],
+        );
+        if (models.length === 0) {
+          return finish(new Error("Copilot CLI returned no models."));
+        }
+        return finish(null, models);
       }
-      const parent = path.dirname(current);
-      if (parent === current) return null;
-      current = parent;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+    });
+    child.stderr.on("data", (b: Buffer) => (stderr += b.toString()));
+    child.on("error", (e) =>
+      finish(new Error(`Could not run Copilot CLI at "${cliPath}": ${e.message}`)),
+    );
+    child.on("close", (code) =>
+      finish(
+        new Error(
+          `Copilot CLI exited with ${code} before listing models: ${stderr.trim() || "(no stderr)"}`,
+        ),
+      ),
+    );
+
+    send({
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: 1, clientCapabilities: {} },
+    });
+  });
+
+// Spawning the ACP server takes a few seconds, so cache per CLI path. Failures
+// aren't cached — the next call retries.
+const MODEL_CACHE_TTL_MS = 10 * 60_000;
+const modelCache = new Map<string, { at: number; models: ModelOption[] }>();
+
+const listCliModels = async (cliPath: string): Promise<ModelOption[]> => {
+  const hit = modelCache.get(cliPath);
+  if (hit && Date.now() - hit.at < MODEL_CACHE_TTL_MS) return hit.models;
+  const models = await queryModelsViaAcp(cliPath);
+  modelCache.set(cliPath, { at: Date.now(), models });
+  return models;
 };
 
 const runCliVersion = async (cliPath: string): Promise<string> =>
@@ -389,7 +451,7 @@ export interface CopilotBuildOptions {
 export const buildCopilotProvider = (
   opts: CopilotBuildOptions = {},
 ): AiProvider => {
-  const model = opts.model ?? process.env.AI_MODEL ?? "claude-sonnet-4.5";
+  const model = opts.model ?? process.env.AI_MODEL ?? "auto";
   const cli = locateCli(opts.cliPath);
   const authFound = detectCopilotAuth();
 
@@ -409,19 +471,21 @@ export const buildCopilotProvider = (
     async validate(): Promise<Record<string, string | number | boolean | null>> {
       const detection = await detectCopilotCli(cli.command);
       if (!detection.ok) throw new Error(detection.error ?? "Copilot CLI not found.");
+      // Surface a live-query failure here instead of silently showing the
+      // fallback list — a stale catalog is what made Test look "connected".
+      await listCliModels(cli.command);
       return {
         cliPath: detection.path,
         cliVersion: detection.version,
-        modelSource: readModelsFromCliSchema(cli.command)
-          ? "installed Copilot CLI schema"
-          : "built-in Copilot model catalog",
+        modelSource: "Copilot CLI (live account catalog)",
       };
     },
     async listModels(): Promise<ModelOption[]> {
-      // Copilot CLI currently has no non-interactive model-list command.
-      // Prefer the installed CLI's schema when available; users can still type
-      // any explicit model ID in settings if their account exposes newer ones.
-      return readModelsFromCliSchema(cli.command) ?? COPILOT_MODELS;
+      try {
+        return await listCliModels(cli.command);
+      } catch {
+        return FALLBACK_MODELS;
+      }
     },
     async chat(input: AiChatInput): Promise<AiChatResult> {
       const useModel = input.model ?? model;

@@ -7,6 +7,7 @@ import {
   invalidateProvider,
 } from "../providers/index.js";
 import { detectClaudeCli } from "../providers/claudeCode.js";
+import { detectCodexCli } from "../providers/codex.js";
 import { detectCopilotCli } from "../providers/copilot.js";
 import { buildChatSystemPrompt } from "../providers/types.js";
 import { redactErrorMessage, validateAiBaseUrl } from "../security.js";
@@ -25,12 +26,13 @@ import {
 export const aiRoute = new Hono();
 
 const configBody = z.object({
-  provider: z.enum(["openai", "copilot", "claude-code"]),
+  provider: z.enum(["openai", "copilot", "claude-code", "codex"]),
   apiKey: z.string().nullable().optional(),
   baseUrl: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   copilotCliPath: z.string().nullable().optional(),
   claudeCliPath: z.string().nullable().optional(),
+  codexCliPath: z.string().nullable().optional(),
   allowDataSampling: z.boolean().optional(),
 });
 
@@ -39,6 +41,10 @@ const copilotCliDetectBody = z.object({
 });
 
 const claudeCliDetectBody = z.object({
+  path: z.string().nullable().optional(),
+});
+
+const codexCliDetectBody = z.object({
   path: z.string().nullable().optional(),
 });
 
@@ -61,6 +67,7 @@ aiRoute.get("/config", (c) => {
     model: stored?.model ?? null,
     copilotCliPath: stored?.copilotCliPath ?? null,
     claudeCliPath: stored?.claudeCliPath ?? null,
+    codexCliPath: stored?.codexCliPath ?? null,
     apiKeySet: !!stored?.apiKey,
     allowDataSampling: stored?.allowDataSampling ?? false,
     persisted: !!stored,
@@ -87,6 +94,10 @@ aiRoute.put("/config", async (c) => {
     parsed.data.claudeCliPath === undefined
       ? (existing?.claudeCliPath ?? null)
       : parsed.data.claudeCliPath;
+  const codexCliPath =
+    parsed.data.codexCliPath === undefined
+      ? (existing?.codexCliPath ?? null)
+      : parsed.data.codexCliPath;
   writeAiSettings({
     provider: parsed.data.provider,
     apiKey: apiKey === "" ? null : apiKey,
@@ -94,6 +105,7 @@ aiRoute.put("/config", async (c) => {
     model: parsed.data.model?.trim() || null,
     copilotCliPath: copilotCliPath?.trim() || null,
     claudeCliPath: claudeCliPath?.trim() || null,
+    codexCliPath: codexCliPath?.trim() || null,
     allowDataSampling:
       parsed.data.allowDataSampling ?? existing?.allowDataSampling ?? false,
   });
@@ -105,6 +117,7 @@ aiRoute.put("/config", async (c) => {
     model: next?.model ?? null,
     copilotCliPath: next?.copilotCliPath ?? null,
     claudeCliPath: next?.claudeCliPath ?? null,
+    codexCliPath: next?.codexCliPath ?? null,
     apiKeySet: !!next?.apiKey,
     allowDataSampling: next?.allowDataSampling ?? false,
     persisted: !!next,
@@ -147,6 +160,21 @@ aiRoute.post("/claude-cli/detect", async (c) => {
   return c.json(result);
 });
 
+aiRoute.post("/codex-cli/detect", async (c) => {
+  const parsed = codexCliDetectBody.safeParse(
+    await c.req.json().catch(() => ({})),
+  );
+  if (!parsed.success) {
+    return c.json(
+      { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" },
+      400,
+    );
+  }
+
+  const result = await detectCodexCli(parsed.data.path ?? null);
+  return c.json(result);
+});
+
 /**
  * Validate draft AI settings without persisting. Builds a one-off provider
  * from the request body and tries to list models — fastest cheap call that
@@ -176,6 +204,7 @@ aiRoute.post("/test", async (c) => {
     model: parsed.data.model ?? null,
     copilotCliPath: parsed.data.copilotCliPath ?? null,
     claudeCliPath: parsed.data.claudeCliPath ?? null,
+    codexCliPath: parsed.data.codexCliPath ?? null,
   });
 
   if (!provider.configured) {

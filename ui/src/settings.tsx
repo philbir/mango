@@ -7,9 +7,13 @@ import {
   useState,
 } from "react";
 import type { UuidRepresentation } from "./api/client";
-import type { DocFormat } from "./features/documents/docFormats";
+import type {
+  DateDisplay,
+  FormatOptions,
+  JsonViewFormat,
+} from "./features/documents/docFormats";
 
-export type { UuidRepresentation };
+export type { DateDisplay, JsonViewFormat, UuidRepresentation };
 export type Theme = "dark" | "light";
 export type PageSize = 50 | 100 | 200 | 500;
 export type CollectionMode = "query" | "console";
@@ -20,7 +24,9 @@ export interface Settings {
   pageSize: PageSize;
   tabMode: boolean;
   defaultCollectionMode: CollectionMode;
-  documentFormat: DocFormat;
+  /** Global document text format — result list, viewer and update editor. */
+  jsonFormat: JsonViewFormat;
+  dateDisplay: DateDisplay;
 }
 
 const DEFAULT: Settings = {
@@ -29,7 +35,8 @@ const DEFAULT: Settings = {
   pageSize: 50,
   tabMode: false,
   defaultCollectionMode: "query",
-  documentFormat: "pure",
+  jsonFormat: "shell",
+  dateDisplay: "local",
 };
 
 const STORAGE_KEY = "mongo-manager:settings:v1";
@@ -39,7 +46,12 @@ const loadSettings = (): Settings => {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
+    // `documentFormat` was the old per-viewer dropdown, superseded by the
+    // global `jsonFormat` — dropped rather than migrated since every install
+    // persisted its default, so it doesn't reflect a real choice.
+    const { documentFormat: _legacy, ...parsed } = JSON.parse(
+      raw,
+    ) as Partial<Settings> & { documentFormat?: unknown };
     return { ...DEFAULT, ...parsed };
   } catch {
     return DEFAULT;
@@ -59,7 +71,10 @@ interface SettingsContextValue extends Settings {
   setPageSize: (n: PageSize) => void;
   setTabMode: (v: boolean) => void;
   setDefaultCollectionMode: (m: CollectionMode) => void;
-  setDocumentFormat: (f: DocFormat) => void;
+  setJsonFormat: (f: JsonViewFormat) => void;
+  setDateDisplay: (d: DateDisplay) => void;
+  /** Uuid + date options, memoized — pass straight to the doc formatters. */
+  formatOptions: FormatOptions;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -101,10 +116,20 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setSettings((s) => ({ ...s, defaultCollectionMode })),
     [],
   );
-  const setDocumentFormat = useCallback(
-    (documentFormat: DocFormat) =>
-      setSettings((s) => ({ ...s, documentFormat })),
+  const setJsonFormat = useCallback(
+    (jsonFormat: JsonViewFormat) => setSettings((s) => ({ ...s, jsonFormat })),
     [],
+  );
+  const setDateDisplay = useCallback(
+    (dateDisplay: DateDisplay) => setSettings((s) => ({ ...s, dateDisplay })),
+    [],
+  );
+  const formatOptions = useMemo<FormatOptions>(
+    () => ({
+      uuidRepresentation: settings.uuidRepresentation,
+      dateDisplay: settings.dateDisplay,
+    }),
+    [settings.uuidRepresentation, settings.dateDisplay],
   );
 
   const value = useMemo(
@@ -115,7 +140,9 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,
-      setDocumentFormat,
+      setJsonFormat,
+      setDateDisplay,
+      formatOptions,
     }),
     [
       settings,
@@ -124,7 +151,9 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setPageSize,
       setTabMode,
       setDefaultCollectionMode,
-      setDocumentFormat,
+      setJsonFormat,
+      setDateDisplay,
+      formatOptions,
     ],
   );
 

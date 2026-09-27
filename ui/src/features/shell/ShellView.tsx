@@ -4,18 +4,21 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
-import { InteractiveJsonView } from "../../components/JsonView";
+import { ApiError, api, stringifyEJSON } from "../../api/client";
 import {
   MonacoJsonInput,
   type MonacoJsonInputHandle,
 } from "../../components/MonacoJsonInput";
+import { MONGO_SHELL_LANGUAGE } from "../../monaco-mongo";
+import { useSettings } from "../../settings";
 import {
   type ApplyKind,
   useAssistantBinding,
 } from "../assistant/AssistantContext";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import { formatDocument, isShellFormat } from "../documents/docFormats";
+import { parseShellDocument } from "../documents/shellParse";
 
 const PRESETS: Array<{ label: string; command: string }> = [
   { label: "ping", command: '{"ping":1}' },
@@ -23,17 +26,10 @@ const PRESETS: Array<{ label: string; command: string }> = [
   { label: "dbStats", command: '{"dbStats":1}' },
   { label: "serverStatus", command: '{"serverStatus":1}' },
   {
-    label: "collStats: dossier",
-    command: '{"collStats":"dossier"}',
+    label: "listCollections",
+    command: '{"listCollections":1,"nameOnly":true}',
   },
-  {
-    label: "aggregate sample",
-    command: `{
-  "aggregate": "dossier",
-  "pipeline": [{ "$sample": { "size": 3 } }],
-  "cursor": {}
-}`,
-  },
+  { label: "connectionStatus", command: '{"connectionStatus":1}' },
 ];
 
 interface ShellViewProps {
@@ -47,6 +43,14 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { jsonFormat, formatOptions } = useSettings();
+  // Response rendered in the global format (Settings → Configure formats),
+  // same as the result list and document viewer.
+  const resultText = useMemo(
+    () =>
+      result === null ? "" : formatDocument(result, jsonFormat, formatOptions),
+    [result, jsonFormat, formatOptions],
+  );
 
   const onTextChange = (next: string) => {
     setText(next);
@@ -73,10 +77,29 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
       setError("No active connection.");
       return;
     }
+    // The input accepts shell syntax (`ObjectId("…")`, `ISODate("…")`, bare
+    // keys) as well as plain JSON; the server only speaks canonical EJSON.
+    let command: unknown;
+    try {
+      command = parseShellDocument(text, formatOptions.uuidRepresentation);
+    } catch (e) {
+      setError(`Invalid command: ${e instanceof Error ? e.message : String(e)}`);
+      setResult(null);
+      return;
+    }
+    if (!command || typeof command !== "object" || Array.isArray(command)) {
+      setError("Command must be an object, e.g. { ping: 1 }.");
+      setResult(null);
+      return;
+    }
     setRunning(true);
     setError(null);
     try {
-      const r = await api.runShell(activeId, text, database ?? undefined);
+      const r = await api.runShell(
+        activeId,
+        stringifyEJSON(command, false),
+        database ?? undefined,
+      );
       setResult(r);
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
@@ -97,6 +120,8 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-500">
             Send a raw <span className="font-mono">db.runCommand</span> document
+            — JSON or shell syntax (<span className="font-mono">ObjectId("…")</span>,{" "}
+            <span className="font-mono">ISODate("…")</span>)
           </div>
         </div>
       </header>
@@ -121,7 +146,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
             type="button"
             onClick={() => editorRef.current?.format()}
             className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            title="Format JSON (⇧⌥F)"
+            title="Format (⇧⌥F)"
           >
             <IconBraces size={11} />
             Format
@@ -132,6 +157,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
             <MonacoJsonInput
               ref={editorRef}
               value={text}
+              language={MONGO_SHELL_LANGUAGE}
               onChange={onTextChange}
               minHeight="140px"
               showLineNumbers
@@ -154,7 +180,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
         </div>
       </section>
 
-      <section className="flex-1 overflow-auto p-5">
+      <section className="flex min-h-0 flex-1 flex-col p-5">
         {error && (
           <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-300">
             {error}
@@ -166,7 +192,19 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
           </div>
         )}
         {!error && result !== null && (
-          <InteractiveJsonView value={result} collapsed={3} />
+          <div className="min-h-0 flex-1 overflow-hidden rounded border border-slate-300 dark:border-slate-700">
+            <MonacoJsonInput
+              key={`shell-result-${jsonFormat}`}
+              value={resultText}
+              language={isShellFormat(jsonFormat) ? MONGO_SHELL_LANGUAGE : "json"}
+              onChange={() => {
+                /* read-only */
+              }}
+              minHeight="100%"
+              showLineNumbers
+              readOnly
+            />
+          </div>
         )}
       </section>
     </div>

@@ -11,18 +11,19 @@ import {
   ApiError,
   api,
   extractIdString,
-  parseEJSON,
-  prettifyUuids,
   stringifyEJSON,
 } from "../../api/client";
 import { MonacoJsonInput } from "../../components/MonacoJsonInput";
+import { MONGO_SHELL_LANGUAGE } from "../../monaco-mongo";
 import { useSettings } from "../../settings";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import {
-  DOC_FORMATS,
+  type FormatOptions,
+  editFormatFor,
   formatDocument,
   isShellFormat,
+  parseDocument,
 } from "../documents/docFormats";
 
 interface Props {
@@ -51,21 +52,24 @@ export const DocumentEditor = ({
 }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
-  const { uuidRepresentation, documentFormat, setDocumentFormat } =
-    useSettings();
+  const { jsonFormat, formatOptions } = useSettings();
   const queryClient = useQueryClient();
 
   const id = extractIdString(doc._id);
-  // View mode renders the whole document in the user's chosen JSON flavour
-  // (shell / mongoexport / pure / …); edit mode keeps canonical EJSON below so
-  // saves round-trip with full type fidelity.
-  const fullJson = useMemo(
-    () => formatDocument(doc, documentFormat, uuidRepresentation),
-    [doc, documentFormat, uuidRepresentation],
+  // View and edit both render in the global format (Settings → Configure
+  // formats), so what you read is what you edit. Plain JSON can't round-trip
+  // BSON types, so editing falls back to the shell format for it.
+  const editFormat = editFormatFor(jsonFormat);
+  const fullJson = useMemo(() => {
+    const text = formatDocument(doc, jsonFormat, formatOptions);
+    if (!isShellFormat(jsonFormat)) return text;
+    const ns = database ? `${database}.${collectionName}` : collectionName;
+    return `// collection: ${ns}\n${text}`;
+  }, [doc, jsonFormat, formatOptions, database, collectionName]);
+  const editJson = useMemo(
+    () => formatDocument(stripId(doc), editFormat, formatOptions),
+    [doc, editFormat, formatOptions],
   );
-  // Edit mode keeps raw $binary so saves round-trip — prettified $uuid
-  // strings would only round-trip cleanly for subtype-04 / Standard.
-  const editJson = useMemo(() => stringifyEJSON(stripId(doc)), [doc]);
 
   const [mode, setMode] = useState<Mode>("view");
   const [editText, setEditText] = useState(editJson);
@@ -86,13 +90,15 @@ export const DocumentEditor = ({
     setPreview(null);
   }, [editJson]);
 
-  const idEjson = useMemo(
-    () => stringifyEJSON(prettifyUuids(doc._id, uuidRepresentation)),
-    [doc._id, uuidRepresentation],
+  // Confirm dialogs show the command in shell syntax — `ObjectId("…")`, not
+  // `{ "$oid": … }` — regardless of the editor format.
+  const idShell = useMemo(
+    () => formatDocument(doc._id, "shell", formatOptions),
+    [doc._id, formatOptions],
   );
 
   const onSaveSuccess = (result: { document: Record<string, unknown> }) => {
-    setEditText(stringifyEJSON(stripId(result.document)));
+    setEditText(formatDocument(stripId(result.document), editFormat, formatOptions));
     setSavedAt(Date.now());
     setError(null);
     setMode("view");
@@ -166,10 +172,10 @@ export const DocumentEditor = ({
     setError(null);
     let parsed: unknown;
     try {
-      parsed = parseEJSON(editText);
+      parsed = parseDocument(editText, editFormat, formatOptions);
     } catch (e) {
       setError(
-        `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`,
+        `Invalid document: ${e instanceof Error ? e.message : String(e)}`,
       );
       return;
     }
@@ -202,10 +208,33 @@ export const DocumentEditor = ({
   };
 
   const isViewing = mode === "view";
+  const busy = save.isPending || patch.isPending || remove.isPending;
+
+  // Esc closes the confirm dialog if one is open, otherwise the drawer. Edit
+  // mode ignores it so a stray Esc (e.g. dismissing Monaco's suggest widget)
+  // can't throw away unsaved changes. Monaco marks keys it handled itself
+  // (find widget, etc.) as defaultPrevented.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (preview) {
+        if (!busy) setPreview(null);
+        return;
+      }
+      if (mode === "view") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [preview, busy, mode, onClose]);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-stretch justify-end bg-black/50">
-      <div className="flex h-full w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <>
+      {/* Non-modal drawer: no backdrop, so the result table stays clickable
+          and keyboard-navigable while a document is open. */}
+      <div
+        className="fixed inset-y-0 right-0 z-30 flex w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        data-doc-editor-locked={!isViewing || preview ? "" : undefined}
+      >
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-500">
@@ -220,23 +249,6 @@ export const DocumentEditor = ({
               {id}
             </div>
           </div>
-
-          {isViewing && (
-            <select
-              value={documentFormat}
-              onChange={(e) =>
-                setDocumentFormat(e.target.value as typeof documentFormat)
-              }
-              title="Document display format"
-              className="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              {DOC_FORMATS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          )}
 
           {isViewing && !readOnly && (
             <>
@@ -284,7 +296,7 @@ export const DocumentEditor = ({
             type="button"
             onClick={onClose}
             className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            title="Close"
+            title="Close (Esc)"
           >
             <IconX size={18} />
           </button>
@@ -303,9 +315,9 @@ export const DocumentEditor = ({
         <div className="flex-1 overflow-hidden">
           {isViewing ? (
             <MonacoJsonInput
-              key={`view-${id}-${documentFormat}`}
+              key={`view-${id}-${jsonFormat}`}
               value={fullJson}
-              language={isShellFormat(documentFormat) ? "javascript" : "json"}
+              language={isShellFormat(jsonFormat) ? MONGO_SHELL_LANGUAGE : "json"}
               onChange={() => {
                 /* read-only */
               }}
@@ -315,8 +327,9 @@ export const DocumentEditor = ({
             />
           ) : (
             <MonacoJsonInput
-              key={`edit-${id}`}
+              key={`edit-${id}-${editFormat}`}
               value={editText}
+              language={isShellFormat(editFormat) ? MONGO_SHELL_LANGUAGE : "json"}
               onChange={setEditText}
               minHeight="100%"
               showLineNumbers
@@ -342,7 +355,7 @@ export const DocumentEditor = ({
 
       {preview?.kind === "delete" && (
         <DeleteConfirm
-          command={`db.${collectionName}.deleteOne({ _id: ${idEjson} })`}
+          command={`db.${collectionName}.deleteOne({ "_id" : ${idShell} })`}
           busy={remove.isPending}
           onCancel={() => setPreview(null)}
           onConfirm={onConfirmDelete}
@@ -352,16 +365,16 @@ export const DocumentEditor = ({
       {preview?.kind === "update" && (
         <UpdateConfirm
           collectionName={collectionName}
-          idEjson={idEjson}
+          idShell={idShell}
           original={doc}
           edited={preview.edited}
-          uuidRepresentation={uuidRepresentation}
+          formatOptions={formatOptions}
           busy={save.isPending || patch.isPending}
           onCancel={() => setPreview(null)}
           onConfirm={onConfirmUpdate}
         />
       )}
-    </div>
+    </>
   );
 };
 
@@ -395,7 +408,7 @@ const DeleteConfirm = ({
     <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
       Will execute
     </div>
-    <pre className="overflow-auto rounded border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+    <pre className="overflow-auto rounded [tab-size:2] border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
       {command}
     </pre>
   </PreviewShell>
@@ -433,19 +446,19 @@ const computeUpdateOperators = (
 
 const UpdateConfirm = ({
   collectionName,
-  idEjson,
+  idShell,
   original,
   edited,
-  uuidRepresentation,
+  formatOptions,
   busy,
   onCancel,
   onConfirm,
 }: {
   collectionName: string;
-  idEjson: string;
+  idShell: string;
   original: Record<string, unknown>;
   edited: Record<string, unknown>;
-  uuidRepresentation: ReturnType<typeof useSettings>["uuidRepresentation"];
+  formatOptions: FormatOptions;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (variant: "update" | "replace", body: string) => void;
@@ -466,17 +479,17 @@ const UpdateConfirm = ({
 
   const command = useMemo(() => {
     if (variant === "replace") {
-      const previewBody = stringifyEJSON(
-        prettifyUuids(replaceMerged, uuidRepresentation),
+      const previewBody = indentTail(
+        formatDocument(replaceMerged, "shell", formatOptions),
       );
-      return `db.${collectionName}.replaceOne(\n  { _id: ${idEjson} },\n  ${previewBody}\n)`;
+      return `db.${collectionName}.replaceOne(\n\t{ "_id" : ${idShell} },\n\t${previewBody}\n)`;
     }
     if (!hasChanges) {
       return `// No changes — nothing to $set or $unset.`;
     }
-    const previewOps = stringifyEJSON(prettifyUuids(ops, uuidRepresentation));
-    return `db.${collectionName}.updateOne(\n  { _id: ${idEjson} },\n  ${previewOps}\n)`;
-  }, [variant, collectionName, idEjson, replaceMerged, ops, hasChanges, uuidRepresentation]);
+    const previewOps = indentTail(formatDocument(ops, "shell", formatOptions));
+    return `db.${collectionName}.updateOne(\n\t{ "_id" : ${idShell} },\n\t${previewOps}\n)`;
+  }, [variant, collectionName, idShell, replaceMerged, ops, hasChanges, formatOptions]);
 
   const canConfirm = variant === "replace" || hasChanges;
 
@@ -520,12 +533,15 @@ const UpdateConfirm = ({
       <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Will execute
       </div>
-      <pre className="overflow-auto rounded border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+      <pre className="overflow-auto rounded [tab-size:2] border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
         {command}
       </pre>
     </PreviewShell>
   );
 };
+
+/** Indent every line but the first by one tab, for nesting inside a call. */
+const indentTail = (text: string): string => text.replace(/\n/g, "\n\t");
 
 const VariantTab = ({
   value,

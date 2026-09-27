@@ -295,3 +295,113 @@ connectionsRoute.get("/:id/databases", async (c) => {
     })),
   });
 });
+
+const SERVER_INFO_TIMEOUT_MS = 5000;
+
+const str = (v: unknown): string | null =>
+  typeof v === "string" && v.length > 0 ? v : null;
+
+const num = (v: unknown): number | null => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "bigint") return Number(v);
+  if (v && typeof v === "object" && "toNumber" in v) {
+    const n = (v as { toNumber: () => number }).toNumber();
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+/**
+ * Server / connection details for the database view's "Connection" tab:
+ * `buildInfo` + `hello` (both allowed without auth privileges), a
+ * best-effort `serverStatus` (needs clusterMonitor — silently omitted when
+ * denied), and the driver's parsed client options. Never returns the
+ * password; the UI reveals the full URI via `/:id/secret`.
+ */
+connectionsRoute.get("/:id/server-info", async (c) => {
+  const id = c.req.param("id");
+  const conn = getConnectionPublic(id);
+  if (!conn) return c.json({ error: "Connection not found" }, 404);
+  try {
+    const { client } = await getMongoClientFor(id);
+    const admin = client.db("admin");
+    const opts = { timeoutMS: SERVER_INFO_TIMEOUT_MS };
+
+    const pingStart = performance.now();
+    await admin.command({ ping: 1 }, opts);
+    const pingMs = performance.now() - pingStart;
+
+    const [build, hello, status] = await Promise.allSettled([
+      admin.command({ buildInfo: 1 }, opts),
+      admin.command({ hello: 1 }, opts),
+      admin.command(
+        { serverStatus: 1, repl: 0, metrics: 0, locks: 0, wiredTiger: 0 },
+        opts,
+      ),
+    ]);
+    const b = build.status === "fulfilled" ? build.value : {};
+    const h = hello.status === "fulfilled" ? hello.value : {};
+    const s = status.status === "fulfilled" ? status.value : null;
+
+    const o = client.options;
+    const topology = o.loadBalanced
+      ? "Load balanced"
+      : h.msg === "isdbgrid"
+        ? "Sharded (mongos)"
+        : str(h.setName)
+          ? "Replica set"
+          : "Standalone";
+
+    const modules = Array.isArray(b.modules) ? (b.modules as string[]) : [];
+    const sConnections = s?.connections as Record<string, unknown> | undefined;
+    const sStorage = s?.storageEngine as Record<string, unknown> | undefined;
+
+    return c.json({
+      connection: {
+        name: conn.name,
+        uriRedacted: conn.uriRedacted,
+        defaultDatabase: conn.effectiveDefaultDatabase,
+        source: conn.source,
+        aspire: conn.aspire,
+        oidcProvider: conn.oidcProvider,
+        revealable: !isStandalone(),
+      },
+      client: {
+        hosts: o.hosts.map((x) => x.toString()),
+        srvHost: o.srvHost ?? null,
+        username: o.credentials?.username || null,
+        authSource: o.credentials?.source ?? null,
+        authMechanism: o.credentials?.mechanism ?? null,
+        tls: !!o.tls,
+        replicaSet: o.replicaSet ?? null,
+        directConnection: o.directConnection,
+        appName: o.appName ?? null,
+        readPreference: o.readPreference.mode,
+        compressors: o.compressors.filter((x) => x !== "none"),
+      },
+      server: {
+        version: str(b.version),
+        gitVersion: str(b.gitVersion),
+        edition: modules.includes("enterprise") ? "Enterprise" : "Community",
+        topology,
+        setName: str(h.setName),
+        primary: str(h.primary),
+        me: str(h.me),
+        hosts: Array.isArray(h.hosts) ? (h.hosts as string[]) : [],
+        isWritablePrimary: h.isWritablePrimary === true,
+        maxWireVersion: num(h.maxWireVersion),
+        openssl: str((b.openssl as Record<string, unknown> | undefined)?.running),
+        host: str(s?.host),
+        process: str(s?.process),
+        uptimeSeconds: num(s?.uptime),
+        storageEngine: str(sStorage?.name),
+        connectionsCurrent: num(sConnections?.current),
+        connectionsAvailable: num(sConnections?.available),
+        serverStatusAvailable: s !== null,
+      },
+      pingMs,
+    });
+  } catch (e) {
+    return c.json({ error: redactErrorMessage(e) }, 400);
+  }
+});

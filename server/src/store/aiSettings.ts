@@ -1,7 +1,7 @@
 import { decryptString, encryptString } from "./crypto.js";
 import { JsonFileStore } from "./jsonFile.js";
 
-export type AiProviderName = "openai" | "copilot" | "claude-code";
+export type AiProviderName = "openai" | "copilot" | "claude-code" | "codex";
 
 export interface AiSettings {
   provider: AiProviderName;
@@ -10,6 +10,7 @@ export interface AiSettings {
   model: string | null;
   copilotCliPath: string | null;
   claudeCliPath: string | null;
+  codexCliPath: string | null;
   allowDataSampling: boolean;
 }
 
@@ -38,7 +39,9 @@ export const readAiSettings = (): AiSettings | null => {
         ? "copilot"
         : parsed.provider === "claude-code"
           ? "claude-code"
-          : "openai";
+          : parsed.provider === "codex"
+            ? "codex"
+            : "openai";
     return {
       provider,
       apiKey: parsed.apiKey ?? null,
@@ -46,6 +49,7 @@ export const readAiSettings = (): AiSettings | null => {
       model: parsed.model ?? null,
       copilotCliPath: parsed.copilotCliPath ?? null,
       claudeCliPath: parsed.claudeCliPath ?? null,
+      codexCliPath: parsed.codexCliPath ?? null,
       allowDataSampling: parsed.allowDataSampling === true,
     };
   } catch (e) {

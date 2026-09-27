@@ -6,10 +6,16 @@ import {
   IconPlugConnected,
   IconSearch,
   IconTrash,
+  IconWebhook,
   IconX,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { type AiProviderId, ApiError, api } from "../../api/client";
+import {
+  ClaudeLogo,
+  GithubCopilotLogo,
+  OpenAiLogo,
+} from "../../components/ProviderLogos";
 
 interface Props {
   onClose: () => void;
@@ -32,6 +38,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
   const [model, setModel] = useState("");
   const [copilotCliPath, setCopilotCliPath] = useState("");
   const [claudeCliPath, setClaudeCliPath] = useState("");
+  const [codexCliPath, setCodexCliPath] = useState("");
   const [allowDataSampling, setAllowDataSampling] = useState(false);
 
   useEffect(() => {
@@ -41,6 +48,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
     setModel(config.data.model ?? "");
     setCopilotCliPath(config.data.copilotCliPath ?? "");
     setClaudeCliPath(config.data.claudeCliPath ?? "");
+    setCodexCliPath(config.data.codexCliPath ?? "");
     setKeepExistingKey(config.data.apiKeySet);
     setAllowDataSampling(config.data.allowDataSampling);
   }, [config.data]);
@@ -56,6 +64,8 @@ export const AiSettingsModal = ({ onClose }: Props) => {
           provider === "copilot" ? copilotCliPath.trim() || null : undefined,
         claudeCliPath:
           provider === "claude-code" ? claudeCliPath.trim() || null : undefined,
+        codexCliPath:
+          provider === "codex" ? codexCliPath.trim() || null : undefined,
         allowDataSampling,
       }),
     onSuccess: () => {
@@ -90,6 +100,8 @@ export const AiSettingsModal = ({ onClose }: Props) => {
           provider === "copilot" ? copilotCliPath.trim() || null : undefined,
         claudeCliPath:
           provider === "claude-code" ? claudeCliPath.trim() || null : undefined,
+        codexCliPath:
+          provider === "codex" ? codexCliPath.trim() || null : undefined,
       }),
   });
 
@@ -107,6 +119,13 @@ export const AiSettingsModal = ({ onClose }: Props) => {
     },
   });
 
+  const detectCodex = useMutation({
+    mutationFn: () => api.detectCodexCli(),
+    onSuccess: (result) => {
+      if (result.ok && result.path) setCodexCliPath(result.path);
+    },
+  });
+
   const error =
     save.error instanceof ApiError
       ? save.error.message
@@ -116,7 +135,7 @@ export const AiSettingsModal = ({ onClose }: Props) => {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex h-[640px] max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex h-[640px] max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <header className="mb-3 flex items-start gap-3">
           <div className="flex-1">
             <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -142,19 +161,30 @@ export const AiSettingsModal = ({ onClose }: Props) => {
                 value="openai"
                 current={provider}
                 onClick={setProvider}
-                label="OpenAI-compatible"
+                label="API"
+                icon={<IconWebhook size={14} />}
+                title="Any OpenAI-compatible endpoint (OpenAI, Azure, GitHub Models, Ollama, …)"
               />
               <ProviderTab
                 value="copilot"
                 current={provider}
                 onClick={setProvider}
                 label="GitHub Copilot"
+                icon={<GithubCopilotLogo size={14} />}
               />
               <ProviderTab
                 value="claude-code"
                 current={provider}
                 onClick={setProvider}
                 label="Claude Code"
+                icon={<ClaudeLogo size={14} />}
+              />
+              <ProviderTab
+                value="codex"
+                current={provider}
+                onClick={setProvider}
+                label="Codex"
+                icon={<OpenAiLogo size={14} />}
               />
             </div>
           </Field>
@@ -326,16 +356,79 @@ export const AiSettingsModal = ({ onClose }: Props) => {
             </>
           )}
 
+          {provider === "codex" && (
+            <>
+              <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+                Mango spawns your installed{" "}
+                <span className="font-mono">codex</span> CLI per request,
+                using the existing login at{" "}
+                <span className="font-mono">~/.codex</span> (or{" "}
+                <span className="font-mono">OPENAI_API_KEY</span>). Needs a
+                current build — the one bundled with the ChatGPT app works.
+              </div>
+
+              <Field label="Codex CLI path (optional)">
+                <div className="flex gap-2">
+                  <input
+                    value={codexCliPath}
+                    onChange={(e) => setCodexCliPath(e.target.value)}
+                    placeholder="/Users/you/.npm-global/bin/codex"
+                    spellCheck={false}
+                    className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => detectCodex.mutate()}
+                    disabled={detectCodex.isPending}
+                    className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Detect Codex CLI"
+                  >
+                    {detectCodex.isPending ? (
+                      <IconLoader2 size={12} className="animate-spin" />
+                    ) : (
+                      <IconSearch size={12} />
+                    )}
+                    Detect
+                  </button>
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  Uses server-side detection similar to where/command -v,
+                  plus common install paths.
+                </div>
+                {detectCodex.data?.ok && (
+                  <div className="mt-1 break-words text-[10px] text-emerald-700 dark:text-emerald-300">
+                    Found {detectCodex.data.version ?? "Codex CLI"} at{" "}
+                    <span className="font-mono">{detectCodex.data.path}</span>
+                  </div>
+                )}
+                {detectCodex.data && !detectCodex.data.ok && (
+                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                    {detectCodex.data.error ?? "Codex CLI not found."}
+                  </div>
+                )}
+                {detectCodex.error && !detectCodex.data && (
+                  <div className="mt-1 break-words text-[10px] text-red-600 dark:text-red-300">
+                    {detectCodex.error instanceof Error
+                      ? detectCodex.error.message
+                      : String(detectCodex.error)}
+                  </div>
+                )}
+              </Field>
+            </>
+          )}
+
           <Field label="Default model (optional)">
             <input
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder={
                 provider === "copilot"
-                  ? "claude-sonnet-4.5"
+                  ? "auto"
                   : provider === "claude-code"
                     ? "sonnet"
-                    : "gpt-4o-mini"
+                    : provider === "codex"
+                      ? "account default"
+                      : "gpt-4o-mini"
               }
               spellCheck={false}
               className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
@@ -376,7 +469,9 @@ export const AiSettingsModal = ({ onClose }: Props) => {
               <div className="min-w-0 flex-1">
                 <div className="font-medium">
                   Connected
-                  {test.data.provider === "copilot" || test.data.provider === "claude-code"
+                  {test.data.provider === "copilot" ||
+                  test.data.provider === "claude-code" ||
+                  test.data.provider === "codex"
                     ? ` — ${test.data.modelCount ?? 0} model suggestions loaded.`
                     : ` — ${test.data.modelCount ?? 0} model${test.data.modelCount === 1 ? "" : "s"} available.`}
                 </div>
@@ -503,22 +598,28 @@ const ProviderTab = ({
   current,
   onClick,
   label,
+  icon,
+  title,
 }: {
   value: ProviderName;
   current: ProviderName;
   onClick: (v: ProviderName) => void;
   label: string;
+  icon: React.ReactNode;
+  title?: string;
 }) => (
   <button
     type="button"
     onClick={() => onClick(value)}
+    title={title}
     className={[
-      "flex-1 rounded px-2 py-1 text-center",
+      "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded px-2 py-1.5",
       current === value
         ? "bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"
         : "text-slate-600 dark:text-slate-300",
     ].join(" ")}
   >
+    {icon}
     {label}
   </button>
 );

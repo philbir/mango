@@ -1,5 +1,6 @@
 import { readAiSettings } from "../store/aiSettings.js";
 import { buildClaudeCodeProvider } from "./claudeCode.js";
+import { buildCodexProvider } from "./codex.js";
 import { buildCopilotProvider } from "./copilot.js";
 import { buildOpenAiProvider } from "./openai.js";
 import type { AiProvider, AiProviderName } from "./types.js";
@@ -13,6 +14,7 @@ const resolveProviderName = (): AiProviderName => {
   const env = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
   if (env === "copilot") return "copilot";
   if (env === "claude-code" || env === "claude") return "claude-code";
+  if (env === "codex") return "codex";
   return "openai";
 };
 
@@ -23,6 +25,7 @@ export interface ProviderOverrides {
   model?: string | null;
   copilotCliPath?: string | null;
   claudeCliPath?: string | null;
+  codexCliPath?: string | null;
 }
 
 /**
@@ -42,6 +45,12 @@ export const buildProviderFromConfig = (
     return buildClaudeCodeProvider({
       model: overrides.model ?? undefined,
       cliPath: overrides.claudeCliPath ?? undefined,
+    });
+  }
+  if (overrides.provider === "codex") {
+    return buildCodexProvider({
+      model: overrides.model ?? undefined,
+      cliPath: overrides.codexCliPath ?? undefined,
     });
   }
   return buildOpenAiProvider({
@@ -64,6 +73,7 @@ export const getProvider = (): AiProvider => {
     model: stored?.model ?? null,
     copilotCliPath: stored?.copilotCliPath ?? null,
     claudeCliPath: stored?.claudeCliPath ?? null,
+    codexCliPath: stored?.codexCliPath ?? null,
   });
   return cachedProvider;
 };

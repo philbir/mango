@@ -52,7 +52,7 @@ const docs: DocSection[] = [
     id: "providers",
     title: "AI providers",
     eyebrow: "Bring your model",
-    body: "Use GitHub Copilot, Claude Code, OpenAI, Azure OpenAI, GitHub Models, Ollama, or any endpoint that speaks the OpenAI chat API.",
+    body: "Use GitHub Copilot, Claude Code, OpenAI Codex, OpenAI, Azure OpenAI, GitHub Models, Ollama, or any endpoint that speaks the OpenAI chat API.",
   },
   {
     id: "aspire",
@@ -86,6 +86,12 @@ const providerCards = [
     icon: IconCloudCode,
     copy: "Use ANTHROPIC_API_KEY or your local Claude Code login. Mango calls the Claude Agent SDK with a strict one-turn command contract.",
     env: "AI_PROVIDER=claude-code",
+  },
+  {
+    name: "OpenAI Codex",
+    icon: IconTerminal2,
+    copy: "Use your local Codex login (ChatGPT plan) or OPENAI_API_KEY. Mango runs codex exec read-only and lists your account's models live.",
+    env: "AI_PROVIDER=codex",
   },
   {
     name: "OpenAI compatible",
@@ -154,11 +160,14 @@ AI_MODEL=gpt-4o-mini
 AI_API_KEY=sk-...
 AI_BASE_URL=https://api.openai.com/v1`,
   aiCopilot: `AI_PROVIDER=copilot
-AI_MODEL=claude-sonnet-4.5
+AI_MODEL=auto
 GITHUB_TOKEN=github_pat_...`,
   aiClaude: `AI_PROVIDER=claude-code
 AI_MODEL=sonnet
 ANTHROPIC_API_KEY=sk-ant-...`,
+  aiCodex: `AI_PROVIDER=codex
+# AI_MODEL unset = your Codex account default
+MANGO_CODEX_CLI=/Applications/ChatGPT.app/Contents/Resources/codex`,
 };
 
 const App = () => (
@@ -399,10 +408,11 @@ const DocBlock = ({ doc }: { doc: DocSection }) => {
             </article>
           ))}
         </div>
-        <div className="code-grid three">
+        <div className="code-grid">
           <CodeBlock title="OpenAI compatible" code={commands.aiOpenAi} />
           <CodeBlock title="GitHub Copilot" code={commands.aiCopilot} />
           <CodeBlock title="Claude Code" code={commands.aiClaude} />
+          <CodeBlock title="OpenAI Codex" code={commands.aiCodex} />
         </div>
       </section>
     );
@@ -498,7 +508,7 @@ const DocBlock = ({ doc }: { doc: DocSection }) => {
           ["MANGO_MODE", "Set standalone to hide the multi-connection manager."],
           ["MANGO_DATA_DIR", "Directory for the JSON files holding connections and settings."],
           ["MANGO_MASTER_KEY", "32-byte AES-GCM key for persistent encrypted secrets."],
-          ["AI_PROVIDER", "openai, copilot, or claude-code."],
+          ["AI_PROVIDER", "openai, copilot, claude-code, or codex."],
           ["AI_BASE_URL", "OpenAI-compatible endpoint override."],
         ].map(([key, value]) => (
           <div className="config-row" role="row" key={key}>
