@@ -3,7 +3,9 @@
 // desktop/src-tauri tauri logs).
 process.stderr.write("[mango] boot start\n");
 
-// MUST be the first import: the OTel SDK has to install loader hooks before
+// Must precede every bson/mongodb import — see bun-compat.ts.
+import "./bun-compat.js";
+// MUST be the first instrumented import: the OTel SDK has to install loader hooks before
 // any instrumented module (http, hono, mongodb…) is required.
 import "./instrumentation.js";
 import { serve } from "@hono/node-server";
@@ -14,6 +16,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { closeAllClients, config } from "./config.js";
+import { healthReport } from "./health.js";
+import { MANGO_VERSION } from "./version.js";
 import { resolveServerConfig } from "./mode.js";
 import { redactErrorMessage } from "./security.js";
 import { getConnection } from "./store/connections.js";
@@ -86,8 +90,12 @@ app.onError((err, c) => {
   return c.json({ error: message }, 500);
 });
 
+// Boot gate for the UI and the Tauri shell's readiness probe (which only
+// looks for "200 OK", so a failed check must return 503).
 app.get("/api/health", (c) => {
-  return c.json({ ok: true });
+  const report = healthReport();
+  c.header("Cache-Control", "no-store");
+  return c.json(report, report.ok ? 200 : 503);
 });
 
 app.get("/api/config", (c) => {
@@ -151,7 +159,7 @@ const server = serve(
       typeof info === "object" && "address" in info && info.address
         ? String(info.address)
         : config.host;
-    console.log(`[mango] listening on http://${address}:${config.port}`);
+    console.log(`[mango] ${MANGO_VERSION} listening on http://${address}:${config.port}`);
   },
 );
 
