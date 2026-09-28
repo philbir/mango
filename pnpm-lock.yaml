@@ -53,9 +53,6 @@ importers:
 
   docs-site:
     dependencies:
-      '@tabler/icons-react':
-        specifier: ^3.48.0
-        version: 3.48.0(react@19.3.0)
       '@vitejs/plugin-react':
         specifier: ^6.1.1
         version: 6.1.1(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.0))
