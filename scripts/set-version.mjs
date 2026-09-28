@@ -19,6 +19,12 @@ if (!version || !/^[0-9]+\.[0-9]+\.[0-9]+([-+].+)?$/.test(version)) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Windows runners check out with CRLF (core.autocrlf) — split on either and
+// write back with whatever the file used.
+const readLines = (file) => {
+  const text = readFileSync(file, "utf8");
+  return { lines: text.split(/\r?\n/), eol: text.includes("\r\n") ? "\r\n" : "\n" };
+};
 const tauriDir = resolve(root, "desktop/src-tauri");
 const updates = [];
 
@@ -45,21 +51,22 @@ for (const rel of [
   const file = resolve(tauriDir, "Cargo.toml");
   let inPackage = false;
   let before = null;
-  const out = readFileSync(file, "utf8").split("\n").map((line) => {
+  const { lines, eol } = readLines(file);
+  const out = lines.map((line) => {
     if (/^\[/.test(line)) inPackage = /^\[package\]/.test(line);
     const m = inPackage && before === null && line.match(/^version\s*=\s*"([^"]+)"\s*$/);
     if (!m) return line;
     before = m[1];
     return `version = "${version}"`;
   });
-  if (before !== version) writeFileSync(file, out.join("\n"));
+  if (before !== version) writeFileSync(file, out.join(eol));
   updates.push({ file, before, changed: before !== version });
 }
 
 // Cargo.lock — only the mango-desktop [[package]] entry's version line.
 {
   const file = resolve(tauriDir, "Cargo.lock");
-  const lines = readFileSync(file, "utf8").split("\n");
+  const { lines, eol } = readLines(file);
   let before = null;
   const i = lines.indexOf('name = "mango-desktop"');
   for (let j = i + 1; i >= 0 && j < lines.length && !lines[j].startsWith("[["); j++) {
@@ -74,7 +81,7 @@ for (const rel of [
     console.error("[set-version] mango-desktop entry not found in Cargo.lock");
     process.exit(1);
   }
-  if (before !== version) writeFileSync(file, lines.join("\n"));
+  if (before !== version) writeFileSync(file, lines.join(eol));
   updates.push({ file, before, changed: before !== version });
 }
 

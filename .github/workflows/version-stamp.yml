@@ -1,0 +1,54 @@
+name: Version stamp
+
+# Tag builds stamp the version with scripts/set-version.mjs before anything
+# else runs — a bug there only surfaces on a real release (0.6.0's Windows
+# job died on CRLF line endings). Exercise it on every OS's own checkout.
+on:
+  pull_request:
+    paths:
+      - scripts/set-version.mjs
+      - "**/package.json"
+      - desktop/src-tauri/tauri.conf.json
+      - desktop/src-tauri/Cargo.toml
+      - desktop/src-tauri/Cargo.lock
+      - .github/workflows/desktop-build.yml
+      - .github/workflows/docker-publish.yml
+      - .github/workflows/version-stamp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stamp:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          # v5 auto-enables a pnpm cache from package.json's packageManager;
+          # this job only needs node.
+          package-manager-cache: false
+
+      - name: Stamp a test version
+        shell: bash
+        run: node scripts/set-version.mjs 9.8.7-ci.1
+
+      - name: Every versioned file carries it
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in package.json ui/package.json server/package.json desktop/package.json desktop/src-tauri/tauri.conf.json; do
+            node -e 'const v=require("./"+process.argv[1]).version; if (v!=="9.8.7-ci.1") { console.error(process.argv[1]+": "+v); process.exit(1) }' "$f"
+          done
+          grep -Eq '^version = "9\.8\.7-ci\.1"\r?$' desktop/src-tauri/Cargo.toml
+          grep -A1 -E '^name = "mango-desktop"\r?$' desktop/src-tauri/Cargo.lock | grep -Eq '^version = "9\.8\.7-ci\.1"\r?$'
+          # Only the mango-desktop entry may change in Cargo.lock.
+          test "$(git diff --numstat -- desktop/src-tauri/Cargo.lock | cut -f1)" = "1"
+          echo "all seven files stamped"
