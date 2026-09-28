@@ -13,6 +13,9 @@
     "updater:allow-download-and-install",
     "dialog:allow-open",
     "allow-check-for-update",
-    "allow-install-update"
+    "allow-install-update",
+    "allow-sidecar-status",
+    "allow-open-log-dir",
+    "allow-restart-app"
   ]
 }

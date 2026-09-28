@@ -19,7 +19,29 @@ export interface ConsoleRunResult {
   error: string | null;
 }
 
+/**
+ * An HTML body on an /api/* path means we're not talking to the Mango API —
+ * the desktop WebView still on tauri:// (index.html fallback), a proxy error
+ * page, or a dev server with no backend. Surfaced as ApiUnavailableError so
+ * the health gate takes over instead of every query toasting a JSON parse
+ * error.
+ */
+const assertApiResponse = (res: Response): void => {
+  const type = res.headers.get("content-type") ?? "";
+  const path = new URL(res.url || "/", location.href).pathname;
+  if (type.includes("text/html")) {
+    throw new ApiUnavailableError(
+      `Expected JSON from ${path} but got an HTML page (HTTP ${res.status}) — the Mango server isn't answering at this address.`,
+    );
+  }
+  // A proxy in front (Vite dev, a reverse proxy) with no backend behind it.
+  if (!type.includes("json") && (res.status === 502 || res.status === 503 || res.status === 504)) {
+    throw new ApiUnavailableError(`${path}: HTTP ${res.status} from a proxy — the Mango server isn't running.`);
+  }
+};
+
 const handleJson = async (res: Response): Promise<unknown> => {
+  assertApiResponse(res);
   const text = await res.text();
   if (!res.ok) {
     let message = res.statusText;
@@ -42,6 +64,7 @@ const handleJson = async (res: Response): Promise<unknown> => {
  * response that doesn't carry BSON types.
  */
 const handlePlainJson = async (res: Response): Promise<unknown> => {
+  assertApiResponse(res);
   const text = await res.text();
   if (!res.ok) {
     let message = res.statusText;
@@ -66,6 +89,25 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+/** The API itself is unreachable — see assertApiResponse / isApiUnavailable. */
+export class ApiUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiUnavailableError";
+  }
+}
+
+/**
+ * True for failures that mean "no Mango API here" rather than "this request
+ * failed": HTML instead of JSON, or fetch() rejecting outright (server down —
+ * WebKit says "Load failed", Chromium "Failed to fetch", Firefox
+ * "NetworkError…").
+ */
+export const isApiUnavailable = (error: unknown): boolean =>
+  error instanceof ApiUnavailableError ||
+  (error instanceof TypeError &&
+    /load failed|failed to fetch|networkerror|network connection was lost/i.test(error.message));
 
 export type AiProviderId = "openai" | "copilot" | "claude-code" | "codex";
 

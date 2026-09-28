@@ -7,11 +7,13 @@ import {
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { api, ApiError } from "./api/client";
+import { api, ApiError, isApiUnavailable } from "./api/client";
 import { App } from "./app";
 import { Toaster } from "./components/Toaster";
 import { showToast } from "./components/toasts";
 import { AssistantProvider } from "./features/assistant/AssistantContext";
+import { ApiHealthGate } from "./features/health/ApiHealthGate";
+import { reportApiUnavailable } from "./features/health/apiHealth";
 import { TabsProvider } from "./features/tabs/TabsContext";
 import { ActiveDatabaseProvider } from "./features/connections/useActiveDatabase";
 import "./index.css";
@@ -27,6 +29,12 @@ const describeQueryKey = (key: readonly unknown[]): string => {
 const reportError = (error: unknown, source: string) => {
   // Don't spam the toaster with auth-related expected redirects.
   if (error instanceof ApiError && error.status === 401) return;
+  // No API at all (server down, HTML instead of JSON): one error screen from
+  // ApiHealthGate beats a toast per query.
+  if (isApiUnavailable(error)) {
+    reportApiUnavailable();
+    return;
+  }
   const status = error instanceof ApiError ? ` (${error.status})` : "";
   const message = error instanceof Error ? error.message : String(error);
   let serverConfigLogsAvailable = false;
@@ -84,6 +92,10 @@ const queryClient = new QueryClient({
       // we also invalidate the health query so the picker flips to red and
       // the "Not connected" panel replaces the inline message on the next
       // tick.
+      if (isApiUnavailable(error)) {
+        reportApiUnavailable();
+        return;
+      }
       if (head === "databases" || head === "collections") {
         const message = error instanceof Error ? error.message : String(error);
         if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|timed out|server selection/i.test(message)) {
@@ -116,7 +128,9 @@ createRoot(root).render(
           <TabsProvider>
             <ActiveDatabaseProvider>
               <AssistantProvider>
-                <App />
+                <ApiHealthGate>
+                  <App />
+                </ApiHealthGate>
                 <Toaster />
               </AssistantProvider>
             </ActiveDatabaseProvider>
