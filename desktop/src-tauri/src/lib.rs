@@ -1,4 +1,5 @@
 use base64::Engine;
+use std::collections::VecDeque;
 use std::net::TcpListener;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -104,6 +105,68 @@ fn ensure_master_key(data_dir: &Path) -> Option<String> {
 
 struct ServerState {
     child: Mutex<Option<CommandChild>>,
+    status: Mutex<SidecarStatus>,
+}
+
+/// How many trailing sidecar output lines `sidecar_status` hands the UI.
+const RECENT_LOG_LINES: usize = 60;
+/// Readiness probe budget: 120 × 250ms. First launch after install can be
+/// slow while macOS verifies the bundle.
+const PROBE_ATTEMPTS: u32 = 120;
+
+/// What the UI's boot gate shows while it's still on the tauri:// origin —
+/// the only place it can learn why the server never came up.
+#[derive(serde::Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct SidecarStatus {
+    /// "starting" | "ready" | "failed"
+    state: String,
+    port: u16,
+    error: Option<String>,
+    recent_logs: VecDeque<String>,
+    log_dir: Option<String>,
+}
+
+impl ServerState {
+    fn update(&self, f: impl FnOnce(&mut SidecarStatus)) {
+        if let Ok(mut status) = self.status.lock() {
+            f(&mut status);
+        }
+    }
+
+    fn state(&self) -> String {
+        self.status.lock().map(|s| s.state.clone()).unwrap_or_default()
+    }
+
+    fn kill_child(&self) {
+        if let Ok(mut guard) = self.child.lock() {
+            if let Some(child) = guard.take() {
+                let _ = child.kill();
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn sidecar_status(state: tauri::State<'_, Arc<ServerState>>) -> SidecarStatus {
+    state.status.lock().map(|s| s.clone()).unwrap_or_default()
+}
+
+#[tauri::command]
+fn open_log_dir(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).ok();
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// Relaunch the whole app (and with it a fresh sidecar on a new port).
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle, state: tauri::State<'_, Arc<ServerState>>) {
+    state.kill_child();
+    app.restart();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -125,7 +188,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_for_update, install_update])
+        .invoke_handler(tauri::generate_handler![
+            check_for_update,
+            install_update,
+            sidecar_status,
+            open_log_dir,
+            restart_app
+        ])
         .setup(|app| {
             let port = pick_free_port();
             let app_data_dir = app
@@ -148,6 +217,17 @@ pub fn run() {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
+            let state = Arc::new(ServerState {
+                child: Mutex::new(None),
+                status: Mutex::new(SidecarStatus {
+                    state: "starting".into(),
+                    port,
+                    log_dir: (!log_dir.is_empty()).then(|| log_dir.clone()),
+                    ..Default::default()
+                }),
+            });
+            app.manage(state.clone());
+
             let master_key = ensure_master_key(&app_data_dir);
 
             log::info!("starting mango-server sidecar on 127.0.0.1:{port}");
@@ -155,42 +235,77 @@ pub fn run() {
             log::info!("MANGO_LOG_DIR  = {log_dir}");
             log::info!("STATIC_DIR     = {static_dir}");
 
-            let mut sidecar = app
-                .shell()
-                .sidecar("mango-server")
-                .expect("mango-server sidecar not found — bundle binaries at desktop/bin/")
+            let fail = |state: &ServerState, message: String| {
+                log::error!("{message}");
+                state.update(|s| {
+                    s.state = "failed".into();
+                    s.error = Some(message);
+                });
+            };
+
+            let sidecar = match app.shell().sidecar("mango-server") {
+                Ok(cmd) => cmd,
+                Err(e) => {
+                    fail(&state, format!("mango-server sidecar not found in the app bundle: {e}"));
+                    return Ok(());
+                }
+            };
+            let mut sidecar = sidecar
                 .env("PORT", port.to_string())
                 .env("HOST", "127.0.0.1")
                 .env("MANGO_DATA_DIR", data_dir.clone())
                 .env("MANGO_LOG_DIR", log_dir)
                 .env("STATIC_DIR", static_dir)
-                .env("AUTH_MODE", "none");
+                .env("AUTH_MODE", "none")
+                .env("MANGO_VERSION", app.package_info().version.to_string());
             if let Some(key) = master_key {
                 sidecar = sidecar.env("MANGO_MASTER_KEY", key);
             }
 
-            let (mut rx, child) = sidecar
-                .spawn()
-                .expect("failed to spawn mango-server sidecar");
+            let (mut rx, child) = match sidecar.spawn() {
+                Ok(spawned) => spawned,
+                Err(e) => {
+                    fail(&state, format!("could not start mango-server: {e}"));
+                    return Ok(());
+                }
+            };
+            if let Ok(mut guard) = state.child.lock() {
+                *guard = Some(child);
+            }
 
-            let state = Arc::new(ServerState {
-                child: Mutex::new(Some(child)),
-            });
-            app.manage(state.clone());
-
+            let events_state = state.clone();
             tauri::async_runtime::spawn(async move {
+                let remember = |line: String| {
+                    events_state.update(|s| {
+                        if s.recent_logs.len() == RECENT_LOG_LINES {
+                            s.recent_logs.pop_front();
+                        }
+                        s.recent_logs.push_back(line);
+                    });
+                };
                 while let Some(event) = rx.recv().await {
                     match event {
-                        CommandEvent::Stdout(line) => log::info!(
-                            "[mango-server] {}",
-                            String::from_utf8_lossy(&line).trim_end()
-                        ),
-                        CommandEvent::Stderr(line) => log::warn!(
-                            "[mango-server] {}",
-                            String::from_utf8_lossy(&line).trim_end()
-                        ),
+                        CommandEvent::Stdout(line) => {
+                            let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                            log::info!("[mango-server] {line}");
+                            remember(line);
+                        }
+                        CommandEvent::Stderr(line) => {
+                            let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                            log::warn!("[mango-server] {line}");
+                            remember(line);
+                        }
                         CommandEvent::Terminated(payload) => {
+                            let message = match (payload.code, payload.signal) {
+                                (Some(code), _) => format!("mango-server exited with code {code}"),
+                                (None, Some(signal)) => format!("mango-server was killed by signal {signal}"),
+                                _ => "mango-server exited".to_string(),
+                            };
                             log::error!("[mango-server] terminated: {payload:?}");
+                            events_state.update(|s| {
+                                s.state = "failed".into();
+                                s.error = Some(message);
+                            });
                             break;
                         }
                         _ => {}
@@ -199,11 +314,19 @@ pub fn run() {
             });
 
             // Wait for the server to be ready, then point the webview at it.
+            // Any HTTP answer counts as "up" — a 503 from a failed health
+            // check is better explained by the UI's gate on the real origin.
+            // Until then (or if it never comes up) the webview stays on
+            // tauri://, where the gate polls `sidecar_status` instead.
             let app_handle = app.handle().clone();
+            let probe_state = state.clone();
             tauri::async_runtime::spawn(async move {
                 let mut ready = false;
-                for attempt in 0..60 {
-                    if probe_ok(port).await {
+                for attempt in 0..PROBE_ATTEMPTS {
+                    if probe_state.state() == "failed" {
+                        return;
+                    }
+                    if probe_responds(port).await {
                         log::info!("sidecar ready after {attempt} probe(s)");
                         ready = true;
                         break;
@@ -211,8 +334,11 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
                 }
                 if !ready {
-                    log::error!("sidecar did not become ready within 15s — webview will stay on tauri:// origin");
+                    let secs = PROBE_ATTEMPTS / 4;
+                    fail(&probe_state, format!("mango-server did not respond within {secs}s"));
+                    return;
                 }
+                probe_state.update(|s| s.state = "ready".into());
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let target = format!("http://127.0.0.1:{port}");
                     log::info!("navigating webview to {target}");
@@ -227,26 +353,25 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
+            // Exit too: the app-menu Quit (⌘Q) goes straight there without
+            // ExitRequested, which used to orphan the sidecar on every quit.
             if let RunEvent::ExitRequested { .. }
+            | RunEvent::Exit
             | RunEvent::WindowEvent {
                 event: WindowEvent::Destroyed,
                 ..
             } = event
             {
                 if let Some(state) = app_handle.try_state::<Arc<ServerState>>() {
-                    if let Ok(mut guard) = state.child.lock() {
-                        if let Some(child) = guard.take() {
-                            let _ = child.kill();
-                        }
-                    }
+                    state.kill_child();
                 }
             }
         });
 }
 
-/// Tiny inline HTTP/1.0 GET /api/health — checks for a 200 status line.
-/// Avoids pulling in reqwest just for a healthcheck loop.
-async fn probe_ok(port: u16) -> bool {
+/// Tiny inline HTTP/1.0 GET /api/health — true once the server answers with
+/// any HTTP status line. Avoids pulling in reqwest just for a readiness loop.
+async fn probe_responds(port: u16) -> bool {
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpStream};
 
@@ -269,5 +394,5 @@ async fn probe_ok(port: u16) -> bool {
         Ok(n) => n,
         Err(_) => return false,
     };
-    String::from_utf8_lossy(&buf[..n]).contains("200 OK")
+    buf[..n].starts_with(b"HTTP/1.")
 }
