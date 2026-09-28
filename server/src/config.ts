@@ -277,6 +277,7 @@ const startAuthCodeListener = (expectedState: string): {
     }, 5 * 60 * 1000);
     timeout.unref();
   });
+  void promise.catch(() => {});
 
   const cancel = (reason = "Azure AD interactive login was cancelled before completion.") => {
     if (settled) return;
@@ -348,6 +349,7 @@ export const prepareOidcBrowserAuth = (
   oidcBrowserOverrides.set(connectionId, {
     browser: preference.browser ?? null,
     profile: preference.profile ?? null,
+    openBrowser: preference.openBrowser,
   });
   authApprovals.set(connectionId, Date.now() + AUTH_APPROVAL_TTL_MS);
   if (options?.forceRestart && inFlightBrowserAuth) {
@@ -356,6 +358,19 @@ export const prepareOidcBrowserAuth = (
     current.cancel("Azure AD interactive login was restarted from Mango.");
   }
 };
+
+export const cancelOidcBrowserAuth = (connectionId: string): void => {
+  authApprovals.delete(connectionId);
+  oidcBrowserOverrides.delete(connectionId);
+  if (inFlightBrowserAuth?.connectionId === connectionId) {
+    const current = inFlightBrowserAuth;
+    inFlightBrowserAuth = null;
+    current.cancel();
+  }
+};
+
+export const getOidcBrowserAuthUrl = (connectionId: string): string | null =>
+  inFlightBrowserAuth?.connectionId === connectionId ? inFlightBrowserAuth.authUrl : null;
 
 export const reopenOidcBrowserAuth = async (
   connectionId: string,
@@ -517,13 +532,10 @@ const makeAzureBrowserOidcCallback = (
     authUrl.searchParams.set("state", state);
 
     const interactiveLogin = (async (): Promise<BrowserTokenEntry> => {
-      console.log(`[mango/oidc] Opening browser for Azure AD login: ${authUrl}`);
-
       try {
-        await openUrlInBrowser(authUrl.toString(), {
-          browser: browserPreference.browser,
-          profile: browserPreference.profile,
-        });
+        if (browserPreference.openBrowser !== false) {
+          await openUrlInBrowser(authUrl.toString(), browserPreference);
+        }
 
         const code = await authListener.promise;
         const data = await azureTokenRequest(tenantId, {
@@ -552,6 +564,11 @@ const makeAzureBrowserOidcCallback = (
       }
     })();
 
+    const loginPromise = interactiveLogin.finally(() => {
+      if (inFlightBrowserAuth?.promise === loginPromise) {
+        inFlightBrowserAuth = null;
+      }
+    });
     inFlightBrowserAuth = {
       connectionId,
       connectionName,
@@ -559,11 +576,7 @@ const makeAzureBrowserOidcCallback = (
       browserPreference,
       cancel: authListener.cancel,
       startedAt: Date.now(),
-      promise: interactiveLogin.finally(() => {
-        if (inFlightBrowserAuth?.connectionId === connectionId) {
-          inFlightBrowserAuth = null;
-        }
-      }),
+      promise: loginPromise,
     };
 
     const entry = await inFlightBrowserAuth.promise;

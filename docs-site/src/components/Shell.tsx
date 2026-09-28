@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { href, useActiveSection } from "../router";
 import { pages, repoUrl, switcherOrder, version, type PageId } from "../site";
-import { DownloadArrow, GitHubMark, pageGlyphs } from "./icons";
+import { DownloadArrow, GitHubMark } from "./icons";
 
 export const Shell = ({ page, children }: { page: PageId; children: React.ReactNode }) => {
   const meta = pages[page];
@@ -29,36 +29,9 @@ export const Shell = ({ page, children }: { page: PageId; children: React.ReactN
           <img src="./mango-mark.svg" alt="" />
           <span className="brand-copy">
             <strong>Mango</strong>
-            <span>MongoDB workbench</span>
+            <span className="brand-version">{version}</span>
           </span>
-          <span className="brand-version">{version}</span>
         </a>
-
-        <nav className="product-switch" aria-label="Documentation">
-          {switcherOrder.map((id) => {
-            const target = pages[id];
-            const Glyph = pageGlyphs[id];
-            return (
-              <a
-                key={id}
-                className={id === page ? "product-pill current" : "product-pill"}
-                href={href(id)}
-                aria-current={id === page ? "page" : undefined}
-              >
-                {Glyph ? (
-                  <span className="product-pill-glyph" aria-hidden="true">
-                    <Glyph />
-                  </span>
-                ) : null}
-                <span className="product-pill-text">
-                  <strong className="product-pill-long">{target.name}</strong>
-                  <strong className="product-pill-short">{target.shortName}</strong>
-                  <span>{target.tagline}</span>
-                </span>
-              </a>
-            );
-          })}
-        </nav>
 
         <div className="header-actions">
           {/* The two things a reader arrives looking for. Download is a page;
@@ -104,12 +77,14 @@ export const Shell = ({ page, children }: { page: PageId; children: React.ReactN
           <nav className="rail-quick" aria-label="Quick links">
             <a href={href("download")}>Download</a>
             <a href={href("home", "pricing")}>Pricing</a>
-            {switcherOrder.map((id) => (
-              <a key={id} href={href(id)}>
-                {pages[id].shortName}
+            <a href={repoUrl}>GitHub</a>
+          </nav>
+          <nav className="rail-pages" aria-label="Documentation">
+            {(["home", ...switcherOrder, "download"] as PageId[]).map((id) => (
+              <a key={id} href={href(id)} aria-current={id === page ? "page" : undefined}>
+                {pages[id].name}
               </a>
             ))}
-            <a href={repoUrl}>GitHub</a>
           </nav>
           <nav className="rail-nav" aria-label={meta.navLabel}>
             <span className="rail-label">{meta.navLabel}</span>

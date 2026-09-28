@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { IconDeviceDesktop, IconExternalLink, IconLoader2, IconX } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconDeviceDesktop, IconExternalLink, IconLoader2, IconX } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { api, type OidcBrowser } from "../../api/client";
 import { BrowserPicker, labelForOidcBrowser } from "./BrowserPicker";
@@ -15,12 +15,15 @@ interface Props {
     oidcBrowser: OidcBrowser;
     oidcBrowserProfile: string | null;
     forceRestart: boolean;
+    openBrowser: boolean;
   }) => Promise<void> | void;
   onReopen?: (selection: {
     oidcBrowser: OidcBrowser;
     oidcBrowserProfile: string | null;
   }) => Promise<void> | void;
-  onCancel: () => void;
+  getAuthUrl: () => Promise<string | null>;
+  onSuccess: () => void;
+  onCancel: () => Promise<void> | void;
 }
 
 export const OidcAuthDialog = ({
@@ -32,18 +35,31 @@ export const OidcAuthDialog = ({
   message,
   onConfirm,
   onReopen,
+  getAuthUrl,
+  onSuccess,
   onCancel,
 }: Props) => {
   const browserOptions = useQuery({
     queryKey: ["browser-options"],
     queryFn: () => api.listBrowsers(),
-    staleTime: 5 * 60_000,
+    refetchOnMount: "always",
   });
   const [browser, setBrowser] = useState<OidcBrowser>(initialBrowser);
   const [browserProfile, setBrowserProfile] = useState(initialBrowserProfile ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reopening, setReopening] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [manualUrl, setManualUrl] = useState(false);
+  const [authSessionKey, setAuthSessionKey] = useState(() => crypto.randomUUID());
+  const authUrl = useQuery({
+    queryKey: ["oidc-auth-url", authSessionKey],
+    queryFn: getAuthUrl,
+    enabled: busy && !succeeded,
+    refetchInterval: (query) => query.state.data ? false : 700,
+    gcTime: 0,
+  });
 
   useEffect(() => {
     setBrowser(initialBrowser);
@@ -51,13 +67,50 @@ export const OidcAuthDialog = ({
     setError(null);
     setBusy(false);
     setReopening(false);
+    setSucceeded(false);
+    setCopied(false);
+    setManualUrl(false);
   }, [initialBrowser, initialBrowserProfile, connectionName, forceRestart]);
+
+  useEffect(() => {
+    if (!succeeded) return;
+    const timer = setTimeout(onSuccess, 1200);
+    return () => clearTimeout(timer);
+  }, [succeeded, onSuccess]);
+
+  const cancel = async () => {
+    try {
+      await onCancel();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const startAuth = async (openBrowser: boolean) => {
+    setAuthSessionKey(crypto.randomUUID());
+    setCopied(false);
+    setManualUrl(!openBrowser);
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm({
+        oidcBrowser: browser,
+        oidcBrowserProfile: browserProfile.trim() || null,
+        forceRestart,
+        openBrowser,
+      });
+      setSucceeded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel();
+        if (event.target === event.currentTarget && !succeeded) void cancel();
       }}
     >
       <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
@@ -75,18 +128,18 @@ export const OidcAuthDialog = ({
               )}
             </div>
           </div>
-          <button
+          {!succeeded && <button
             type="button"
-            onClick={onCancel}
-            disabled={busy}
+            onClick={() => void cancel()}
             className="btn-icon btn-ghost"
+            title="Cancel authentication"
           >
             <IconX size={16} />
-          </button>
+          </button>}
         </header>
 
         <div className="space-y-4 px-5 py-4">
-          {!busy && <div>
+          {!busy && !succeeded && <div>
             <div className="mb-2 eyebrow">
               Browser
             </div>
@@ -100,7 +153,12 @@ export const OidcAuthDialog = ({
             />
           </div>}
 
-          {busy ? (
+          {succeeded ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center" role="status">
+              <IconCheck size={36} className="text-emerald-600 dark:text-emerald-400" />
+              <div className="font-medium text-slate-900 dark:text-slate-100">Authentication successful</div>
+            </div>
+          ) : busy ? (
             <div className="flex flex-col items-center gap-4 py-5 text-center">
               <div className="relative">
                 {browser ? (
@@ -124,35 +182,65 @@ export const OidcAuthDialog = ({
                   Browser authentication is running
                 </div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Finish signing in with {labelForOidcBrowser(browser)}
-                  {browserProfile.trim() ? ` (${browserProfile.trim()})` : ""}.
+                  {manualUrl ? "Open the auth URL in a browser to finish signing in." : <>
+                    Finish signing in with {labelForOidcBrowser(browser)}
+                    {browserProfile.trim() ? ` (${browserProfile.trim()})` : ""}.
+                  </>}
                   Mango will reload the connection when authentication completes.
                 </div>
               </div>
-              {onReopen && (
+              {manualUrl && authUrl.data && (
+                <input
+                  readOnly
+                  value={authUrl.data}
+                  aria-label="Authorization URL"
+                  onFocus={(event) => event.target.select()}
+                  className="w-full rounded border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                />
+              )}
+              <div className="flex flex-wrap justify-center gap-2">
+                {onReopen && (
+                  <button
+                    type="button"
+                    disabled={reopening}
+                    onClick={async () => {
+                      setReopening(true);
+                      setError(null);
+                      try {
+                        await onReopen({
+                          oidcBrowser: browser,
+                          oidcBrowserProfile: browserProfile.trim() || null,
+                        });
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setReopening(false);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    {reopening ? <IconLoader2 size={14} className="animate-spin" /> : <IconExternalLink size={14} />}
+                    {reopening ? "Opening…" : "Open browser again"}
+                  </button>
+                )}
                 <button
                   type="button"
-                  disabled={reopening}
+                  disabled={!authUrl.data}
                   onClick={async () => {
-                    setReopening(true);
-                    setError(null);
+                    if (!authUrl.data) return;
                     try {
-                      await onReopen({
-                        oidcBrowser: browser,
-                        oidcBrowserProfile: browserProfile.trim() || null,
-                      });
+                      await navigator.clipboard.writeText(authUrl.data);
+                      setCopied(true);
                     } catch (e) {
                       setError(e instanceof Error ? e.message : String(e));
-                    } finally {
-                      setReopening(false);
                     }
                   }}
-                  className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="btn btn-outline disabled:opacity-50"
                 >
-                  {reopening ? <IconLoader2 size={14} className="animate-spin" /> : <IconExternalLink size={14} />}
-                  {reopening ? "Opening…" : "Open browser again"}
+                  {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                  {copied ? "Copied" : "Copy auth URL"}
                 </button>
-              )}
+              </div>
             </div>
           ) : (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
@@ -172,34 +260,26 @@ export const OidcAuthDialog = ({
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-700">
-          {!busy && <button
+          {!succeeded && <button
             type="button"
-            onClick={onCancel}
-            disabled={busy}
+            onClick={() => void cancel()}
             className="btn btn-outline"
           >
             Cancel
           </button>}
           {!busy && <button
             type="button"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                await onConfirm({
-                  oidcBrowser: browser,
-                  oidcBrowserProfile: browserProfile.trim() || null,
-                  forceRestart,
-                });
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-                setBusy(false);
-              }
-            }}
+            onClick={() => void startAuth(false)}
+            className="btn btn-outline"
+          >
+            Get URL
+          </button>}
+          {!busy && <button
+            type="button"
+            onClick={() => void startAuth(true)}
             className="btn btn-primary"
           >
-            {busy ? "Starting…" : confirmLabel}
+            {confirmLabel}
           </button>}
         </footer>
       </div>

@@ -6,6 +6,7 @@ import { SidebarShell } from "./features/sidebar/SidebarShell";
 import { KeyHealthBanner } from "./features/connections/KeyHealthBanner";
 import {
   cancelOidcAuthPrompt,
+  completeOidcAuthPrompt,
   confirmOidcAuthPrompt,
   requiresOidcAuthPrompt,
   usePendingOidcAuthPrompt,
@@ -181,13 +182,18 @@ export const App = () => {
             )
           }
           onConfirm={confirmOidcAuthPrompt}
+          getAuthUrl={() => api.getOidcBrowserAuthUrl(pendingOidcPrompt.connection.id)}
+          onSuccess={completeOidcAuthPrompt}
           onReopen={async ({ oidcBrowser, oidcBrowserProfile }) => {
             await api.reopenOidcBrowserAuth(pendingOidcPrompt.connection.id, {
               oidcBrowser,
               oidcBrowserProfile,
             });
           }}
-          onCancel={cancelOidcAuthPrompt}
+          onCancel={async () => {
+            await api.cancelOidcBrowserAuth(pendingOidcPrompt.connection.id);
+            cancelOidcAuthPrompt();
+          }}
         />
       )}
     </div>

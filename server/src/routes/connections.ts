@@ -4,8 +4,10 @@ import { v4 as uuid } from "uuid";
 import { z } from "zod";
 import {
   buildMongoClientOptions,
+  cancelOidcBrowserAuth,
   closeMongoClient,
   getMongoClientFor,
+  getOidcBrowserAuthUrl,
   prepareOidcBrowserAuth,
   reopenOidcBrowserAuth,
 } from "../config.js";
@@ -66,6 +68,7 @@ const updateBody = createBody.partial();
 const prepareOidcAuthBody = z.object({
   oidcBrowser: oidcBrowserSchema,
   oidcBrowserProfile: z.string().optional().nullable(),
+  openBrowser: z.boolean().optional(),
   forceRestart: z.boolean().optional(),
 });
 
@@ -125,6 +128,7 @@ connectionsRoute.post("/:id/oidc/browser-auth", async (c) => {
     {
       browser: parsed.data.oidcBrowser ?? null,
       profile: parsed.data.oidcBrowserProfile ?? null,
+      openBrowser: parsed.data.openBrowser,
     },
     { forceRestart: parsed.data.forceRestart },
   );
@@ -146,6 +150,16 @@ connectionsRoute.post("/:id/oidc/browser-auth/reopen", async (c) => {
   } catch (e) {
     return c.json({ error: redactErrorMessage(e) }, 400);
   }
+});
+
+connectionsRoute.post("/:id/oidc/browser-auth/cancel", (c) => {
+  cancelOidcBrowserAuth(c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+connectionsRoute.get("/:id/oidc/browser-auth/url", (c) => {
+  c.header("Cache-Control", "no-store");
+  return c.json({ url: getOidcBrowserAuthUrl(c.req.param("id")) });
 });
 
 connectionsRoute.patch("/:id", async (c) => {
@@ -238,6 +252,7 @@ connectionsRoute.post("/test-uri", async (c) => {
       azureTenantId: z.string().optional().nullable(),
       oidcBrowser: oidcBrowserSchema,
       oidcBrowserProfile: z.string().optional().nullable(),
+      openBrowser: z.boolean().optional(),
       authAttemptId: z.string().uuid().optional(),
     })
     .safeParse(await c.req.json().catch(() => ({})));
@@ -255,6 +270,7 @@ connectionsRoute.post("/test-uri", async (c) => {
     prepareOidcBrowserAuth(connectionId, {
       browser: body.data.oidcBrowser ?? null,
       profile: body.data.oidcBrowserProfile ?? null,
+      openBrowser: body.data.openBrowser,
     });
   }
   const client = new MongoClient(

@@ -8,6 +8,7 @@ interface PendingOidcPrompt {
     oidcBrowser: OidcBrowser;
     oidcBrowserProfile: string | null;
     forceRestart: boolean;
+    openBrowser: boolean;
   }) => Promise<void> | void;
 }
 
@@ -37,17 +38,28 @@ export const confirmOidcAuthPrompt = async (selection: {
   oidcBrowser: OidcBrowser;
   oidcBrowserProfile: string | null;
   forceRestart: boolean;
+  openBrowser: boolean;
 }): Promise<void> => {
   if (!pendingPrompt) return;
-  const { connection, onConfirm } = pendingPrompt;
+  const prompt = pendingPrompt;
+  const { connection, onConfirm } = prompt;
   acknowledgedConnectionIds.add(connection.id);
-  await onConfirm(selection);
+  try {
+    await onConfirm(selection);
+  } catch (error) {
+    if (pendingPrompt === prompt) acknowledgedConnectionIds.delete(connection.id);
+    throw error;
+  }
+};
+
+export const completeOidcAuthPrompt = (): void => {
   pendingPrompt = null;
   emit();
 };
 
 export const cancelOidcAuthPrompt = (): void => {
   if (!pendingPrompt) return;
+  acknowledgedConnectionIds.delete(pendingPrompt.connection.id);
   pendingPrompt = null;
   emit();
 };

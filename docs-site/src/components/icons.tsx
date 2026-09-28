@@ -84,30 +84,6 @@ export const PromptMark = () => (
  */
 export const AspireMark = () => <img className="raster-mark" src="./aspire-icon.png" alt="" />;
 
-/** A table grid — the workbench page. */
-export const TableGlyph = () => (
-  <Glyph>
-    <rect x="3.5" y="4.5" width="17" height="15" rx="2.4" />
-    <path d="M3.5 9.5h17M9.5 9.5v10" />
-  </Glyph>
-);
-
-/** A four-point spark — the AI page. */
-export const SparkGlyph = () => (
-  <Glyph>
-    <path d="M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5Z" />
-    <path d="M18.5 15.5v4M16.5 17.5h4" />
-  </Glyph>
-);
-
-/** An open book — the guide. */
-export const BookGlyph = () => (
-  <Glyph>
-    <path d="M12 6.5c-1.8-1.3-4.3-2-7.5-2v13c3.2 0 5.7.7 7.5 2 1.8-1.3 4.3-2 7.5-2v-13c-3.2 0-5.7.7-7.5 2Z" />
-    <path d="M12 6.5v13" />
-  </Glyph>
-);
-
 /** A database cylinder — the workbench, where no brand fits. */
 export const DatabaseGlyph = () => (
   <Glyph>
@@ -116,12 +92,6 @@ export const DatabaseGlyph = () => (
     <path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6" />
   </Glyph>
 );
-
-export const pageGlyphs: Partial<Record<string, () => React.ReactElement>> = {
-  features: TableGlyph,
-  ai: SparkGlyph,
-  guide: BookGlyph,
-};
 
 /** The header's download affordance. Drawn here — no brand owns an arrow. */
 export const DownloadArrow = () => (
