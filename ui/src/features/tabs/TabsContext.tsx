@@ -70,6 +70,9 @@ interface TabsContextValue {
     filePath: string,
   ) => void;
   closeTab: (id: string) => void;
+  /** Close every tab except `id`, which becomes active. */
+  closeOthers: (id: string) => void;
+  closeAll: () => void;
   activate: (id: string) => void;
 }
 
@@ -326,6 +329,17 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
     });
   }, []);
 
+  const closeOthers = useCallback((id: string) => {
+    setState((prev) => {
+      const keep = prev.tabs.find((t) => t.id === id);
+      return keep ? { tabs: [keep], activeId: keep.id } : prev;
+    });
+  }, []);
+
+  const closeAll = useCallback(() => {
+    setState({ tabs: [], activeId: null });
+  }, []);
+
   const activate = useCallback((id: string) => {
     setState((prev) => (prev.activeId === id ? prev : { ...prev, activeId: id }));
   }, []);
@@ -347,6 +361,8 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openGridFs,
       openNotebook,
       closeTab,
+      closeOthers,
+      closeAll,
       activate,
     }),
     [
@@ -360,6 +376,8 @@ export const TabsProvider = ({ children }: { children: React.ReactNode }) => {
       openGridFs,
       openNotebook,
       closeTab,
+      closeOthers,
+      closeAll,
       activate,
     ],
   );
