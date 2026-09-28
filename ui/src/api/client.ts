@@ -268,6 +268,7 @@ export interface BrowserOption {
   available: boolean;
   supportsProfiles: boolean;
   profiles: BrowserProfile[];
+  profileAccessDenied?: boolean;
 }
 
 export interface ConnectionPublic {
@@ -535,6 +536,7 @@ export const api = {
     input: {
       oidcBrowser: OidcBrowser;
       oidcBrowserProfile?: string | null;
+      openBrowser?: boolean;
       forceRestart?: boolean;
     },
   ): Promise<{ ok: boolean }> {
@@ -567,6 +569,22 @@ export const api = {
     return handlePlainJson(res) as Promise<{ ok: boolean }>;
   },
 
+  async getOidcBrowserAuthUrl(id: string): Promise<string | null> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/url`,
+    );
+    const data = (await handlePlainJson(res)) as { url: string | null };
+    return data.url;
+  },
+
+  async cancelOidcBrowserAuth(id: string): Promise<void> {
+    const res = await fetch(
+      `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/cancel`,
+      { method: "POST" },
+    );
+    await handlePlainJson(res);
+  },
+
   async discoverDocker(): Promise<DiscoveryResult> {
     const res = await fetch("/api/discovery/docker");
     return handlePlainJson(res) as Promise<DiscoveryResult>;
@@ -587,6 +605,7 @@ export const api = {
     oidcBrowser?: OidcBrowser;
     oidcBrowserProfile?: string | null;
     authAttemptId?: string;
+    openBrowser?: boolean;
   }): Promise<{ ok: boolean; error?: string }> {
     const res = await fetch("/api/connections/test-uri", {
       method: "POST",

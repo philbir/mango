@@ -17,11 +17,13 @@ export interface BrowserOption {
   available: boolean;
   supportsProfiles: boolean;
   profiles: BrowserProfile[];
+  profileAccessDenied?: boolean;
 }
 
 export interface BrowserPreference {
   browser: OidcBrowser;
   profile: string | null;
+  openBrowser?: boolean;
 }
 
 const home = os.homedir();
@@ -167,14 +169,22 @@ const firefoxProfilesPaths = (): string[] => {
   return [];
 };
 
-const getChromiumProfiles = (browser: "chrome" | "edge"): BrowserProfile[] => {
+const getChromiumProfiles = (browser: "chrome" | "edge"): {
+  profiles: BrowserProfile[];
+  profileAccessDenied: boolean;
+} => {
   for (const filePath of chromiumLocalStatePaths(browser)) {
-    const raw = readUtf8IfExists(filePath);
-    if (!raw) continue;
-    const profiles = parseChromiumProfiles(raw);
-    if (profiles.length > 0) return profiles;
+    try {
+      const profiles = parseChromiumProfiles(readFileSync(filePath, "utf8"));
+      if (profiles.length > 0) return { profiles, profileAccessDenied: false };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EACCES" || code === "EPERM") {
+        return { profiles: [], profileAccessDenied: true };
+      }
+    }
   }
-  return [];
+  return { profiles: [], profileAccessDenied: false };
 };
 
 const getFirefoxProfiles = (): BrowserProfile[] => {
@@ -317,14 +327,14 @@ export const listAvailableBrowsers = (): BrowserOption[] => {
       label: "Google Chrome",
       available: resolveBrowserExecutable("chrome") !== null,
       supportsProfiles: true,
-      profiles: chromeProfiles,
+      ...chromeProfiles,
     },
     {
       id: "edge",
       label: "Microsoft Edge",
       available: resolveBrowserExecutable("edge") !== null,
       supportsProfiles: true,
-      profiles: edgeProfiles,
+      ...edgeProfiles,
     },
     {
       id: "firefox",
@@ -374,18 +384,25 @@ export const openUrlInBrowser = async (
   if (preference.profile) {
     if (preference.browser === "firefox") {
       const profile = option.profiles.find((entry) => entry.key === preference.profile);
-      if (!profile) {
+      if (!profile && option.profiles.length > 0) {
         throw new Error(`Firefox profile "${preference.profile}" is not available.`);
       }
-      args.push("-P", profile.key);
+      args.push("-P", preference.profile);
     } else {
       const profile = option.profiles.find((entry) => entry.key === preference.profile);
-      if (!profile) {
+      if (!profile && option.profiles.length > 0) {
         throw new Error(`${option.label} profile "${preference.profile}" is not available.`);
       }
-      args.push(`--profile-directory=${profile.key}`);
+      args.push(`--profile-directory=${preference.profile}`);
     }
   }
   args.push(url);
-  await launch(executable, args);
+  if (process.platform === "darwin") {
+    const app = executable.slice(0, executable.indexOf(".app/") + 4);
+    await launch("open", preference.profile
+      ? ["-n", "-a", app, "--args", ...args]
+      : ["-a", app, url]);
+  } else {
+    await launch(executable, args);
+  }
 };

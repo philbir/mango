@@ -351,6 +351,7 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
     oidcBrowser: OidcBrowser;
     oidcBrowserProfile: string | null;
     authAttemptId?: string;
+    openBrowser?: boolean;
   }) => {
     if (!effectiveUri) return;
     setTesting(true);
@@ -374,15 +375,16 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
             : null,
         oidcBrowser:
           builder.authMethod === "oidc" && builder.oidcProvider === "azure-browser"
-            ? (override?.oidcBrowser ?? builder.oidcBrowser)
+            ? (override ? override.oidcBrowser : builder.oidcBrowser)
             : null,
         oidcBrowserProfile:
           builder.authMethod === "oidc" &&
           builder.oidcProvider === "azure-browser" &&
-          (override?.oidcBrowserProfile ?? builder.oidcBrowserProfile).trim()
-            ? (override?.oidcBrowserProfile ?? builder.oidcBrowserProfile).trim()
+          (override ? override.oidcBrowserProfile : builder.oidcBrowserProfile)?.trim()
+            ? (override ? override.oidcBrowserProfile : builder.oidcBrowserProfile)?.trim()
             : null,
         authAttemptId: override?.authAttemptId,
+        openBrowser: override?.openBrowser,
       });
       if (!res.ok) throw new Error(res.error || "Connection failed");
       setTestResult({ ok: true });
@@ -721,10 +723,16 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
         initialBrowser={builder.oidcBrowser}
         initialBrowserProfile={builder.oidcBrowserProfile}
         message="This OIDC connection needs to authenticate using a browser before Mango can test it."
-        onConfirm={async ({ oidcBrowser, oidcBrowserProfile }) => {
+        onConfirm={async ({ oidcBrowser, oidcBrowserProfile, openBrowser }) => {
           const authAttemptId = crypto.randomUUID();
           browserTestAttemptId.current = authAttemptId;
-          await runTest({ oidcBrowser, oidcBrowserProfile, authAttemptId });
+          await runTest({ oidcBrowser, oidcBrowserProfile, authAttemptId, openBrowser });
+        }}
+        getAuthUrl={() => browserTestAttemptId.current
+          ? api.getOidcBrowserAuthUrl(`test-uri:${browserTestAttemptId.current}`)
+          : Promise.resolve(null)}
+        onSuccess={() => {
+          browserTestAttemptId.current = null;
           setConfirmingBrowserTest(false);
         }}
         onReopen={async ({ oidcBrowser, oidcBrowserProfile }) => {
@@ -735,7 +743,14 @@ export const ConnectionFormModal = ({ mode, existing, onClose, onCreated }: Prop
             oidcBrowserProfile,
           });
         }}
-        onCancel={() => setConfirmingBrowserTest(false)}
+        onCancel={async () => {
+          const authAttemptId = browserTestAttemptId.current;
+          if (authAttemptId) {
+            browserTestAttemptId.current = null;
+            await api.cancelOidcBrowserAuth(`test-uri:${authAttemptId}`);
+          }
+          setConfirmingBrowserTest(false);
+        }}
       />
     )}
     </>
@@ -849,7 +864,7 @@ const AuthTab = ({ builder, setB }: TabProps) => {
   const browserOptions = useQuery({
     queryKey: ["browser-options"],
     queryFn: () => api.listBrowsers(),
-    staleTime: 5 * 60_000,
+    refetchOnMount: "always",
   });
 
   return (
@@ -1136,6 +1151,12 @@ const AspireDiscoveryPanel = ({
     refetchOnWindowFocus: false,
   });
   const data = q.data;
+  const appHosts = data?.appHosts
+    .map((appHost) => ({
+      ...appHost,
+      resources: appHost.resources.filter((resource) => resource.kind !== "other" && !!resource.uri),
+    }))
+    .filter((appHost) => appHost.resources.length > 0) ?? [];
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40">
@@ -1178,15 +1199,15 @@ const AspireDiscoveryPanel = ({
         </div>
       )}
 
-      {data?.ok && data.appHosts.length === 0 && (
+      {data?.ok && appHosts.length === 0 && (
         <div className="text-xs text-slate-500 dark:text-slate-400">
-          No running apphosts.
+          No usable MongoDB resources in running apphosts.
         </div>
       )}
 
-      {data?.ok && data.appHosts.length > 0 && (
+      {data?.ok && appHosts.length > 0 && (
         <div className="space-y-3">
-          {data.appHosts.map((ah) => (
+          {appHosts.map((ah) => (
             <AspireAppHostBlock key={ah.appHostPath} appHost={ah} onPick={onPick} />
           ))}
         </div>
@@ -1202,7 +1223,6 @@ const AspireAppHostBlock = ({
   appHost: AspireAppHostInfo;
   onPick: (appHost: AspireAppHostInfo, resource: AspireResourceSummary) => void;
 }) => {
-  const mongoCount = appHost.resources.filter((r) => r.kind !== "other").length;
   return (
     <div className="rounded border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
       <div className="border-b border-slate-200 px-2 py-1.5 dark:border-slate-700">
@@ -1214,7 +1234,7 @@ const AspireAppHostBlock = ({
             pid {appHost.appHostPid}
           </span>
           <span className="ml-auto text-[11px] text-slate-400">
-            {mongoCount} mongo · {appHost.resources.length} total
+            {appHost.resources.length} mongo
           </span>
         </div>
         <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">

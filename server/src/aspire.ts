@@ -148,7 +148,7 @@ const buildUriFromContainer = (
 const isMongoContainer = (r: AspireResource): boolean => {
   if (r.resourceType !== "Container") return false;
   const image = (r.properties?.["container.image"] as string | undefined) ?? "";
-  return /mongo/i.test(image);
+  return /(?:^|\/)(?:mongo|mongodb|mongodb-community-server)(?:[:@]|$)/i.test(image);
 };
 
 /**

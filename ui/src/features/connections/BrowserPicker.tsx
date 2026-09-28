@@ -31,6 +31,7 @@ export const BrowserPicker = ({
   const missingSelectedProfile =
     browserProfile.trim() &&
     selectedBrowser?.supportsProfiles &&
+    selectedProfiles.length > 0 &&
     !selectedProfiles.some((profile) => profile.key === browserProfile.trim());
 
   const availableBrowsers = browsers.filter((entry) => entry.available);
@@ -81,6 +82,11 @@ export const BrowserPicker = ({
           <div className="eyebrow">
             Profiles
           </div>
+          {selectedBrowser.profileAccessDenied && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Mango cannot read {selectedBrowser.label} profiles. Allow the app access to browser data in macOS Privacy &amp; Security, then reopen this dialog. You can enter a profile directory below.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <ProfileButton
               active={browserProfile === ""}
@@ -103,6 +109,16 @@ export const BrowserPicker = ({
               </ProfileButton>
             )}
           </div>
+          {selectedProfiles.length === 0 && (
+            <input
+              type="text"
+              value={browserProfile}
+              onChange={(event) => onBrowserProfileChange(event.target.value)}
+              placeholder={browser === "firefox" ? "Profile name" : "Profile directory (e.g. Profile 1)"}
+              aria-label="Browser profile"
+              className="w-full rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            />
+          )}
         </div>
       )}
     </div>
