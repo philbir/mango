@@ -175,6 +175,9 @@ button:disabled {
   outline-offset: 1px;
   border-radius: 3px;
 }
+/* Menus (components/Menu.tsx) take focus to drive arrow keys; the focused
+   item's background is the indicator, not a ring around the whole menu. */
+[role="menu"]:focus-visible,
 .monaco-editor :focus-visible,
 .cm-editor :focus-visible {
   outline: none;
@@ -390,6 +393,15 @@ html.dark kbd {
 }
 
 /* Thin, low-contrast scrollbar for tab overflow and similar strips. */
+/* Scrollable, but no visible bar — the tab strip scrolls via wheel and
+   its own arrow buttons. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(102, 116, 138, 0.4) transparent;
