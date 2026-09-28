@@ -35,6 +35,12 @@ jobs:
           platform="${{ matrix.platform }}"
           echo "pair=${platform//\//-}" >> "$GITHUB_OUTPUT"
 
+      # The tag is the version — stamp it so the image's server/package.json
+      # (and /api/health) report it. See scripts/set-version.mjs.
+      - name: Stamp version from tag
+        if: github.ref_type == 'tag'
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME}"
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
