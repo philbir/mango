@@ -32,6 +32,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # v5 auto-enables a pnpm cache from package.json's packageManager;
+          # this job only needs node.
+          package-manager-cache: false
 
       - name: Stamp a test version
         shell: bash
