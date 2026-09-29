@@ -11,7 +11,7 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MonacoJsonInput } from "../../components/MonacoJsonInput";
 import { MONGO_SHELL_LANGUAGE } from "../../monaco-mongo";
 import { type PageSize, useSettings } from "../../settings";
@@ -93,6 +93,16 @@ export const ResultPanel = ({
   selection,
 }: Props) => {
   const { jsonFormat, formatOptions } = useSettings();
+  const [runningMs, setRunningMs] = useState(0);
+  useEffect(() => {
+    if (!isLoading) return;
+    const start = performance.now();
+    const interval = window.setInterval(() => setRunningMs(performance.now() - start), 200);
+    return () => {
+      window.clearInterval(interval);
+      setRunningMs(0);
+    };
+  }, [isLoading]);
   const documents = useMemo(() => asDocumentArray(rawValue), [rawValue]);
   const canTable = !!documents;
   // Same global format as the document drawer, so a document reads the same
@@ -125,6 +135,7 @@ export const ResultPanel = ({
         {isLoading && (
           <span className="flex items-center gap-1 text-sky-600 dark:text-sky-300">
             <IconLoader2 size={13} className="animate-spin" /> running…
+            {runningMs >= 1000 && <span className="tabular-nums">{formatElapsed(runningMs)}</span>}
           </span>
         )}
         {!isLoading && errorMessage && (

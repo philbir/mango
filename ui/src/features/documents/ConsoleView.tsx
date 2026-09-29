@@ -1,11 +1,10 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconBraces,
-  IconLoader2,
-  IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString } from "../../api/client";
+import { ExecuteButton } from "../../components/ExecuteButton";
 import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
 import { UnboundSaveHeader } from "../workspaces/UnboundSaveHeader";
 import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
@@ -55,7 +54,7 @@ export const ConsoleView = ({
 }: Props) => {
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
-  const { pageSize, setPageSize } = useSettings();
+  const { pageSize, setPageSize, queryTimeoutSeconds } = useSettings();
   const config = useServerConfig();
   const { tabs, closeTab } = useTabs();
   const tab = tabId ? tabs.find((t) => t.id === tabId) ?? null : null;
@@ -176,10 +175,12 @@ export const ConsoleView = ({
   });
 
   const skip = page * pageSize;
+  const queryClient = useQueryClient();
+  const consoleQueryKey = ["console", activeId, database, pinned, skip, pageSize];
 
   const run = useQuery({
-    queryKey: ["console", activeId, database, pinned, skip, pageSize],
-    queryFn: async () => {
+    queryKey: consoleQueryKey,
+    queryFn: async ({ signal }) => {
       if (!activeId) throw new Error("No active connection.");
       if (!pinned) return null;
       return api.runConsole({
@@ -188,12 +189,15 @@ export const ConsoleView = ({
         database: database ?? undefined,
         skip,
         limit: pageSize,
+        signal,
+        timeoutMS: queryTimeoutSeconds * 1000,
       });
     },
     enabled: !!activeId && !!pinned,
   });
 
   const onRun = () => {
+    if (run.isFetching) return;
     const cmd = code.trim();
     if (!cmd) return;
     // When the command and page are unchanged the query key doesn't move,
@@ -310,7 +314,7 @@ export const ConsoleView = ({
         className="relative flex flex-shrink-0 flex-col border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: editorHeight }}
       >
-        <div className="flex h-9 flex-shrink-0 items-center gap-2 border-b border-slate-200 px-4 text-[11.5px] dark:border-slate-800">
+        <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-slate-200 px-4 text-[11.5px] dark:border-slate-800">
           <span className="eyebrow">Console</span>
           {collectionProp ? (
             <span className="truncate font-mono text-slate-500 dark:text-slate-400">
@@ -338,24 +342,14 @@ export const ConsoleView = ({
           <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
             <kbd>⌘</kbd> <kbd>↵</kbd> runs
           </span>
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={!code.trim() || run.isFetching}
-            className="btn btn-sm btn-primary mr-9"
-          >
-            {run.isFetching ? (
-              <>
-                <IconLoader2 size={12} className="animate-spin" />
-                Running…
-              </>
-            ) : (
-              <>
-                <IconPlayerPlayFilled size={12} />
-                Run
-              </>
-            )}
-          </button>
+          <ExecuteButton
+            key={JSON.stringify(consoleQueryKey)}
+            running={run.isFetching}
+            onRun={onRun}
+            onCancel={() => void queryClient.cancelQueries({ queryKey: consoleQueryKey, exact: true })}
+            disabled={!code.trim() && !run.isFetching}
+            className="mr-9"
+          />
         </div>
 
         <div className="flex flex-1 items-stretch overflow-hidden">

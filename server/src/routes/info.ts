@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { parseEJSON, stringifyEJSON } from "../ejson.js";
+import { queryTimeoutSchema } from "../mongo-util.js";
 import { redactErrorMessage } from "../security.js";
 
 export const infoRoute = new Hono();
@@ -133,6 +134,7 @@ const explainBody = z.object({
   limit: z.number().int().nonnegative().optional(),
   skip: z.number().int().nonnegative().optional(),
   pipeline: z.string().optional(),
+  timeoutMS: queryTimeoutSchema,
   verbosity: z
     .enum(["queryPlanner", "executionStats", "allPlansExecution"])
     .default("executionStats"),
@@ -158,6 +160,7 @@ infoRoute.post("/:name/explain", async (c) => {
   const dbName = databaseNameFor(cid, c.req.query("database"));
   const db = client.db(dbName);
   const coll = db.collection(name);
+  const timeoutMS = parsed.data.timeoutMS ?? config.mongoMaxTimeMS;
 
   try {
     let result: unknown;
@@ -168,7 +171,8 @@ infoRoute.post("/:name/explain", async (c) => {
       }
       result = await coll
         .aggregate(pipeline as Record<string, unknown>[], {
-          maxTimeMS: config.mongoMaxTimeMS,
+          maxTimeMS: timeoutMS,
+          signal: c.req.raw.signal,
         })
         .explain(parsed.data.verbosity);
     } else {
@@ -185,7 +189,8 @@ infoRoute.post("/:name/explain", async (c) => {
       let cursor = coll.find(filter, {
         projection,
         sort,
-        maxTimeMS: config.mongoMaxTimeMS,
+        maxTimeMS: timeoutMS,
+        signal: c.req.raw.signal,
       });
       if (parsed.data.skip) cursor = cursor.skip(parsed.data.skip);
       if (parsed.data.limit) cursor = cursor.limit(parsed.data.limit);

@@ -112,7 +112,10 @@ All modes read the same env vars:
 | `PORT` | Server port. Default `5180`. |
 | `HOST` / `MANGO_HOST` | Server bind host. Default `127.0.0.1`; set explicitly only for trusted private-network access. |
 | `MANGO_CORS_ORIGINS` | Comma-separated extra browser origins allowed to call the API. Defaults include the Vite dev origin. |
-| `MANGO_MONGO_MAX_TIME_MS` | MongoDB query/command timeout in milliseconds for supported operations. Default `10000`. |
+| `MANGO_MONGO_MAX_TIME_MS` | MongoDB query/command timeout in milliseconds for supported operations, including console reads. Default `60000` (60 seconds); increase for longer queries. |
+| `MANGO_CONSOLE_TIMEOUT_MS` | Synchronous JavaScript execution limit in the console (prevents infinite loops), separate from MongoDB query time. Default `1000` (1 second). |
+
+Each user can also set **Query timeout** (in seconds) in the Settings menu for document, console, and shell queries. This overrides the server default for that user's requests (1 second to 24 hours); web preferences last for the browser session, while desktop preferences persist in app data.
 | `MANGO_DISABLE_JS_CONSOLE` | Set to `true` to disable the JavaScript console route. |
 
 ### AI assistant

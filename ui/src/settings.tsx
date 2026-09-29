@@ -24,6 +24,7 @@ export interface Settings {
   theme: Theme;
   uuidRepresentation: UuidRepresentation;
   pageSize: PageSize;
+  queryTimeoutSeconds: number;
   tabMode: boolean;
   defaultCollectionMode: CollectionMode;
   /** Global document text format — result list, viewer and update editor. */
@@ -35,6 +36,7 @@ const DEFAULT: Settings = {
   theme: "system",
   uuidRepresentation: "standard",
   pageSize: 50,
+  queryTimeoutSeconds: 60,
   tabMode: true,
   defaultCollectionMode: "query",
   jsonFormat: "shell",
@@ -64,6 +66,10 @@ const sanitize = (raw: unknown): Partial<Settings> => {
   const out: Partial<Settings> = { ...parsed };
   if (out.theme !== "dark" && out.theme !== "light" && out.theme !== "system") {
     delete out.theme;
+  }
+  if (!Number.isInteger(out.queryTimeoutSeconds) ||
+      out.queryTimeoutSeconds! < 1 || out.queryTimeoutSeconds! > 86_400) {
+    delete out.queryTimeoutSeconds;
   }
   return out;
 };
@@ -101,6 +107,7 @@ interface SettingsContextValue extends Settings {
   setTheme: (t: Theme) => void;
   setUuidRepresentation: (r: UuidRepresentation) => void;
   setPageSize: (n: PageSize) => void;
+  setQueryTimeoutSeconds: (seconds: number) => void;
   setTabMode: (v: boolean) => void;
   setDefaultCollectionMode: (m: CollectionMode) => void;
   setJsonFormat: (f: JsonViewFormat) => void;
@@ -183,6 +190,11 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
     (pageSize: PageSize) => setSettings((s) => ({ ...s, pageSize })),
     [],
   );
+  const setQueryTimeoutSeconds = useCallback(
+    (queryTimeoutSeconds: number) =>
+      setSettings((s) => ({ ...s, queryTimeoutSeconds })),
+    [],
+  );
   const setTabMode = useCallback(
     (tabMode: boolean) => setSettings((s) => ({ ...s, tabMode })),
     [],
@@ -222,6 +234,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setTheme,
       setUuidRepresentation,
       setPageSize,
+      setQueryTimeoutSeconds,
       setTabMode,
       setDefaultCollectionMode,
       setJsonFormat,
@@ -234,6 +247,7 @@ export const SettingsProvider = ({ children }: { children: React.ReactNode }) =>
       setTheme,
       setUuidRepresentation,
       setPageSize,
+      setQueryTimeoutSeconds,
       setTabMode,
       setDefaultCollectionMode,
       setJsonFormat,

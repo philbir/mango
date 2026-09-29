@@ -1,10 +1,10 @@
 import {
   IconBraces,
-  IconPlayerPlayFilled,
   IconTerminal2,
 } from "@tabler/icons-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, stringifyEJSON } from "../../api/client";
+import { ExecuteButton } from "../../components/ExecuteButton";
 import {
   MonacoJsonInput,
   type MonacoJsonInputHandle,
@@ -41,9 +41,11 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
   const { database } = useActiveDatabase();
   const [text, setText] = useState('{"ping":1}');
   const [running, setRunning] = useState(false);
+  const [runningMs, setRunningMs] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
   const [result, setResult] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { jsonFormat, formatOptions } = useSettings();
+  const { jsonFormat, formatOptions, queryTimeoutSeconds } = useSettings();
   // Response rendered in the global format (Settings → Configure formats),
   // same as the result list and document viewer.
   const resultText = useMemo(
@@ -58,6 +60,16 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
 
   const shellCompletion = useMemo(() => ({ commandKeywords: true }), []);
   const editorRef = useRef<MonacoJsonInputHandle | null>(null);
+  useEffect(() => {
+    if (!running) return;
+    const start = performance.now();
+    const interval = window.setInterval(() => setRunningMs(performance.now() - start), 200);
+    return () => {
+      window.clearInterval(interval);
+      setRunningMs(0);
+    };
+  }, [running]);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const handlerSupports: ApplyKind[] = useMemo(() => ["shell"], []);
   useAssistantBinding({
@@ -73,6 +85,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
   });
 
   const onRun = async () => {
+    if (running) return;
     if (!activeId) {
       setError("No active connection.");
       return;
@@ -92,6 +105,8 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
       setResult(null);
       return;
     }
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
     try {
@@ -99,13 +114,17 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
         activeId,
         stringifyEJSON(command, false),
         database ?? undefined,
+        controller.signal,
+        queryTimeoutSeconds * 1000,
       );
       setResult(r);
     } catch (e) {
+      if (controller.signal.aborted) return;
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
       setError(msg);
       setResult(null);
     } finally {
+      abortRef.current = null;
       setRunning(false);
     }
   };
@@ -127,7 +146,7 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
       </header>
 
       <section className="border-b border-slate-200 bg-slate-50/60 px-4 pb-2 dark:border-slate-800 dark:bg-slate-900/30">
-        <div className="flex h-9 flex-wrap items-center gap-1.5">
+        <div className="flex min-h-12 flex-wrap items-center gap-1.5 py-1">
           <span className="eyebrow mr-1">Presets</span>
           {PRESETS.map((p) => (
             <button
@@ -152,15 +171,14 @@ export const ShellView = ({ tabId }: ShellViewProps = {}) => {
           <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
             <kbd>⌘</kbd> <kbd>↵</kbd> runs · <kbd>⌃</kbd> <kbd>Space</kbd> completes
           </span>
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={running}
-            className="btn btn-sm btn-primary"
-          >
-            <IconPlayerPlayFilled size={12} />
-            {running ? "Running…" : "Run"}
-          </button>
+          <ExecuteButton
+            running={running}
+            onRun={() => void onRun()}
+            onCancel={() => abortRef.current?.abort()}
+          />
+          {running && runningMs >= 1000 && (
+            <span className="tabular-nums text-[11px] text-slate-500">{(runningMs / 1000).toFixed(1)} s</span>
+          )}
         </div>
         <div className="min-h-[140px] overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
           <MonacoJsonInput

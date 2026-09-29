@@ -2,11 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertTriangle,
   IconBraces,
-  IconLoader2,
-  IconPlayerPlayFilled,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString } from "../../api/client";
+import { ExecuteButton } from "../../components/ExecuteButton";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import {
   MonacoShellInput,
@@ -52,7 +51,7 @@ export const NotebookView = ({ tabId }: Props) => {
   const filePath = tab?.workspaceFilePath ?? "";
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
-  const { pageSize, setPageSize } = useSettings();
+  const { pageSize, setPageSize, queryTimeoutSeconds } = useSettings();
 
   const fileQuery = useWorkspaceFile(workspaceId, filePath);
   const save = useSaveWorkspaceFile(workspaceId);
@@ -119,10 +118,11 @@ export const NotebookView = ({ tabId }: Props) => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const skip = page * pageSize;
   const queryClient = useQueryClient();
+  const runQueryKey = ["nb-run", activeId, database, pinned, skip, pageSize];
 
   const run = useQuery({
-    queryKey: ["nb-run", activeId, database, pinned, skip, pageSize],
-    queryFn: async () => {
+    queryKey: runQueryKey,
+    queryFn: async ({ signal }) => {
       if (!activeId || !pinned) return null;
       return api.runConsole({
         cid: activeId,
@@ -130,17 +130,22 @@ export const NotebookView = ({ tabId }: Props) => {
         database: database ?? undefined,
         skip,
         limit: pageSize,
+        signal,
+        timeoutMS: queryTimeoutSeconds * 1000,
       });
     },
     enabled: !!activeId && !!pinned,
   });
 
   const runText = (cmd: string) => {
+    if (run.isFetching) return;
     const trimmed = cmd.trim();
     if (!trimmed) return;
+    const unchanged = trimmed === pinned && page === 0;
     setPage(0);
     setPinned(trimmed);
     setSelectedId(null);
+    if (unchanged) void run.refetch();
   };
 
   // Same detection ResultPanel uses for the table view — if the result is an
@@ -317,15 +322,15 @@ export const NotebookView = ({ tabId }: Props) => {
             <IconBraces size={13} />
             Format
           </button>
-          <button
-            type="button"
-            onClick={onRunAll}
-            disabled={!code.trim() || run.isFetching}
-            className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11.5px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          <ExecuteButton
+            key={`all:${JSON.stringify(runQueryKey)}`}
+            running={run.isFetching}
+            onRun={onRunAll}
+            onCancel={() => void queryClient.cancelQueries({ queryKey: runQueryKey, exact: true })}
+            disabled={!code.trim() && !run.isFetching}
+            label="Run all"
             title="Run all"
-          >
-            Run all
-          </button>
+          />
           <kbd className="rounded border border-slate-300 px-1 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
             ⌘/Ctrl + Enter
           </kbd>
@@ -342,25 +347,14 @@ export const NotebookView = ({ tabId }: Props) => {
             />
           </div>
           <div className="flex flex-col items-stretch border-l border-slate-200 px-2 py-2 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onRunSmart}
-              disabled={!code.trim() || run.isFetching}
-              className="btn btn-primary"
+            <ExecuteButton
+              key={JSON.stringify(runQueryKey)}
+              running={run.isFetching}
+              onRun={onRunSmart}
+              onCancel={() => void queryClient.cancelQueries({ queryKey: runQueryKey, exact: true })}
+              disabled={!code.trim() && !run.isFetching}
               title="Run selection if any, else run all (⌘/Ctrl + Enter)"
-            >
-              {run.isFetching ? (
-                <>
-                  <IconLoader2 size={14} className="animate-spin" />
-                  Running…
-                </>
-              ) : (
-                <>
-                  <IconPlayerPlayFilled size={14} />
-                  Run
-                </>
-              )}
-            </button>
+            />
           </div>
         </div>
 

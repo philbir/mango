@@ -1,13 +1,13 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconBraces,
   IconInfoCircle,
-  IconPlayerPlayFilled,
   IconTable,
   IconTerminal2,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, extractIdString, stringifyEJSON } from "../../api/client";
+import { ExecuteButton } from "../../components/ExecuteButton";
 import { BatchOpDialog, type BatchOp } from "./BatchOpDialog";
 import {
   MonacoJsonInput,
@@ -43,7 +43,7 @@ interface CollectionViewProps {
 }
 
 export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
-  const { pageSize, setPageSize, defaultCollectionMode } = useSettings();
+  const { pageSize, setPageSize, defaultCollectionMode, queryTimeoutSeconds } = useSettings();
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
   const { tabs, closeTab } = useTabs();
@@ -297,21 +297,17 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   // Track query timing for the footer status.
   const queryStartRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const docsQueryKey = useMemo(
+    () => ["docs", activeId, database, name, filter, projection, skip, pageSize],
+    [activeId, database, name, filter, projection, skip, pageSize],
+  );
 
   const filterEditorRef = useRef<MonacoJsonInputHandle | null>(null);
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
-    queryKey: [
-      "docs",
-      activeId,
-      database,
-      name,
-      filter,
-      projection,
-      skip,
-      pageSize,
-    ],
-    queryFn: () =>
+    queryKey: docsQueryKey,
+    queryFn: ({ signal }) =>
       api.findDocuments({
         cid: activeId!,
         database: database ?? undefined,
@@ -320,6 +316,8 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         projection: projection || undefined,
         skip,
         limit: pageSize,
+        signal,
+        timeoutMS: queryTimeoutSeconds * 1000,
       }),
     enabled: !!name && !!activeId,
     placeholderData: keepPreviousData,
@@ -327,15 +325,17 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
   useEffect(() => {
     if (isFetching) {
-      queryStartRef.current = performance.now();
+      const start = performance.now();
+      queryStartRef.current = start;
       setElapsedMs(null);
     } else if (queryStartRef.current !== null) {
       setElapsedMs(performance.now() - queryStartRef.current);
       queryStartRef.current = null;
     }
-  }, [isFetching]);
+  }, [isFetching, docsQueryKey]);
 
   const onApplyFilter = (next?: string) => {
+    if (isFetching) return;
     const value = next ?? filterDraft;
     // If neither the filter nor the page changes, the query key stays the
     // same and React Query won't refetch — but Run should always re-query
@@ -553,7 +553,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         className="relative flex flex-col border-b border-slate-200 bg-slate-50/60 @container dark:border-slate-800 dark:bg-slate-900/30"
         style={{ height: filterHeight }}
       >
-        <div className="flex h-9 flex-shrink-0 items-center gap-2 px-4">
+        <div className="flex h-12 flex-shrink-0 items-center gap-2 px-4">
           <span className="eyebrow">Filter</span>
           <div className="seg">
             <button
@@ -588,14 +588,12 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           <span className="hidden text-[11px] text-slate-400 dark:text-slate-500 lg:inline">
             <kbd>⌘</kbd> <kbd>↵</kbd> runs
           </span>
-          <button
-            type="button"
-            onClick={() => onApplyFilter()}
-            className="btn btn-sm btn-primary"
-          >
-            <IconPlayerPlayFilled size={12} />
-            Run
-          </button>
+          <ExecuteButton
+            key={JSON.stringify(docsQueryKey)}
+            running={isFetching}
+            onRun={() => onApplyFilter()}
+            onCancel={() => void queryClient.cancelQueries({ queryKey: docsQueryKey, exact: true })}
+          />
         </div>
 
         <div className="flex flex-1 gap-2 overflow-hidden px-4 pb-2">

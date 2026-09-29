@@ -9,7 +9,7 @@ import {
   parseFilter,
   stringifyEJSON,
 } from "../ejson.js";
-import { countForListing } from "../mongo-util.js";
+import { countForListing, queryTimeoutSchema } from "../mongo-util.js";
 
 export const documentsRoute = new Hono();
 
@@ -19,6 +19,7 @@ const findBody = z.object({
   skip: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().max(500).optional(),
   projection: z.string().optional(),
+  timeoutMS: queryTimeoutSchema,
 });
 
 const deleteManyBody = z.object({ filter: z.string().optional() });
@@ -81,6 +82,7 @@ documentsRoute.post("/:name/find", async (c) => {
 
   const skip = body.skip ?? 0;
   const limit = body.limit ?? 50;
+  const timeoutMS = body.timeoutMS ?? config.mongoMaxTimeMS;
 
   const { client } = await getMongoClientFor(cid);
   const dbName = databaseNameFor(cid, c.req.query("database"));
@@ -88,13 +90,13 @@ documentsRoute.post("/:name/find", async (c) => {
   const collection = db.collection(name);
 
   const cursor = collection
-    .find(filter, { projection, maxTimeMS: config.mongoMaxTimeMS })
+    .find(filter, { projection, maxTimeMS: timeoutMS, signal: c.req.raw.signal })
     .sort(sort as Sort)
     .skip(skip)
     .limit(limit);
   const [docs, total] = await Promise.all([
     cursor.toArray(),
-    countForListing(collection, filter, config.mongoMaxTimeMS),
+    countForListing(collection, filter, timeoutMS, c.req.raw.signal),
   ]);
 
   return c.body(
