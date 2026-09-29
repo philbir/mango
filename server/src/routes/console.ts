@@ -6,6 +6,7 @@ import { z } from "zod";
 import { config, databaseNameFor, getMongoClientFor } from "../config.js";
 import { prepareConsoleScript } from "../console-script.js";
 import { stringifyEJSON } from "../ejson.js";
+import { queryTimeoutSchema } from "../mongo-util.js";
 import { redactErrorMessage } from "../security.js";
 
 export const consoleRoute = new Hono();
@@ -14,6 +15,7 @@ const body = z.object({
   command: z.string().min(1).max(50_000),
   skip: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().max(2000).optional(),
+  timeoutMS: queryTimeoutSchema,
 });
 
 const DEFAULT_RESULT_LIMIT = 100;
@@ -48,7 +50,18 @@ const ALLOWED_COLLECTION_METHODS = new Set([
 // disallowed methods.
 const PROBED_PROPS = new Set(["then", "toJSON", "toBSON", "_bsontype", "constructor"]);
 
-const buildCollectionProxy = (col: Collection): unknown =>
+const READ_OPTIONS_INDEX: Record<string, number> = {
+  find: 1,
+  findOne: 1,
+  aggregate: 1,
+  countDocuments: 1,
+  estimatedDocumentCount: 0,
+  distinct: 2,
+  indexes: 0,
+  listIndexes: 0,
+};
+
+const buildCollectionProxy = (col: Collection, signal: AbortSignal, timeoutMS: number): unknown =>
   new Proxy(
     {},
     {
@@ -61,12 +74,19 @@ const buildCollectionProxy = (col: Collection): unknown =>
         }
         const fn = (col as unknown as Record<string, unknown>)[prop];
         if (typeof fn !== "function") return undefined;
-        return (fn as (...args: unknown[]) => unknown).bind(col);
+        const method = (fn as (...args: unknown[]) => unknown).bind(col);
+        const optionsIndex = READ_OPTIONS_INDEX[prop];
+        if (optionsIndex === undefined) return method;
+        return (...args: unknown[]) => {
+          const options = args[optionsIndex] as Record<string, unknown> | undefined;
+          args[optionsIndex] = { maxTimeMS: timeoutMS, ...options, signal };
+          return method(...args);
+        };
       },
     },
   );
 
-const buildDbProxy = (client: MongoClient, db: Db): unknown =>
+const buildDbProxy = (client: MongoClient, db: Db, signal: AbortSignal, timeoutMS: number): unknown =>
   new Proxy(
     {},
     {
@@ -75,28 +95,31 @@ const buildDbProxy = (client: MongoClient, db: Db): unknown =>
         if (PROBED_PROPS.has(prop)) return undefined;
         if (prop === "getName") return () => db.databaseName;
         if (prop === "getSiblingDB") {
-          return (name: string) => buildDbProxy(client, client.db(name));
+          return (name: string) => buildDbProxy(client, client.db(name), signal, timeoutMS);
         }
         if (prop === "getCollection") {
-          return (name: string) => buildCollectionProxy(db.collection(name));
+          return (name: string) => buildCollectionProxy(db.collection(name), signal, timeoutMS);
         }
         if (prop === "getCollectionNames") {
           return async () => {
             const cols = await db
-              .listCollections({}, { nameOnly: true })
+              .listCollections({}, { nameOnly: true, signal, maxTimeMS: timeoutMS })
               .toArray();
             return cols.map((c) => c.name);
           };
         }
         if (prop === "stats") return () => db.stats();
         if (prop === "command" || prop === "runCommand") {
-          return (cmd: Record<string, unknown>) => db.command(cmd);
+          return (cmd: Record<string, unknown>) => db.command(
+            { ...cmd, maxTimeMS: cmd.maxTimeMS ?? timeoutMS },
+            { signal },
+          );
         }
         if (prop === "createCollection") {
           return (name: string, opts?: Record<string, unknown>) =>
             db.createCollection(name, opts);
         }
-        return buildCollectionProxy(db.collection(prop));
+        return buildCollectionProxy(db.collection(prop), signal, timeoutMS);
       },
     },
   );
@@ -178,8 +201,10 @@ const evalCommand = async (
   // Owned by the caller so output printed before a failure still reaches
   // the client alongside the error.
   logs: ConsoleLog[],
+  signal: AbortSignal,
+  timeoutMS: number,
 ): Promise<EvalResult> => {
-  const dbProxy = buildDbProxy(client, db);
+  const dbProxy = buildDbProxy(client, db, signal, timeoutMS);
   const logger =
     (level: ConsoleLog["level"]) =>
     (...args: unknown[]) => {
@@ -308,6 +333,8 @@ consoleRoute.post("/", async (c) => {
       skip,
       limit,
       logs,
+      c.req.raw.signal,
+      parsed.data.timeoutMS ?? config.mongoMaxTimeMS,
     );
     return c.body(
       stringifyEJSON({

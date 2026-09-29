@@ -26,7 +26,21 @@ export const SettingsMenu = () => {
   const [open, setOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [formatsOpen, setFormatsOpen] = useState(false);
+  const [timeoutDraft, setTimeoutDraft] = useState(String(settings.queryTimeoutSeconds));
   const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setTimeoutDraft(String(settings.queryTimeoutSeconds));
+  }, [settings.queryTimeoutSeconds]);
+
+  const saveTimeout = () => {
+    const seconds = Number(timeoutDraft);
+    if (Number.isInteger(seconds) && seconds >= 1 && seconds <= 86_400) {
+      settings.setQueryTimeoutSeconds(seconds);
+    } else {
+      setTimeoutDraft(String(settings.queryTimeoutSeconds));
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +102,26 @@ export const SettingsMenu = () => {
               onChange={settings.setPageSize}
               options={PAGE_SIZES.map((n) => ({ value: n, label: String(n) }))}
             />
+          </Section>
+
+          <Section label="Query timeout">
+            <label className="flex items-center gap-2 text-[12px] text-slate-700 dark:text-slate-200">
+              <input
+                type="number"
+                min={1}
+                max={86_400}
+                step={1}
+                value={timeoutDraft}
+                onChange={(e) => setTimeoutDraft(e.currentTarget.value)}
+                onBlur={saveTimeout}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className="w-20 rounded border border-slate-300 bg-white px-2 py-1 tabular-nums dark:border-slate-700 dark:bg-slate-800"
+                aria-label="Query timeout in seconds"
+              />
+              seconds
+            </label>
           </Section>
 
           <Section label="Default collection mode">

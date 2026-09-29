@@ -3,14 +3,14 @@ import {
   IconAlertCircle,
   IconBolt,
   IconCheck,
-  IconLoader2,
-  IconPlayerPlayFilled,
   IconSparkles,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 import { ApiError, api, stringifyEJSON } from "../../api/client";
+import { ExecuteButton } from "../../components/ExecuteButton";
 import { InteractiveJsonView } from "../../components/JsonView";
+import { useSettings } from "../../settings";
 import {
   MonacoJsonInput,
   type MonacoJsonInputHandle,
@@ -35,6 +35,7 @@ export const PlaygroundPanel = ({
   onExplainResult,
 }: Props) => {
   const { setOpen: setAssistantOpen } = useAssistant();
+  const { queryTimeoutSeconds } = useSettings();
   const [mode, setMode] = useState<Mode>("find");
   const [filter, setFilter] = useState("{\n  \n}");
   const [sort, setSort] = useState("");
@@ -49,18 +50,26 @@ export const PlaygroundPanel = ({
   const filterRef = useRef<MonacoJsonInputHandle | null>(null);
   const sortRef = useRef<MonacoJsonInputHandle | null>(null);
   const pipelineRef = useRef<MonacoJsonInputHandle | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const explain = useMutation({
-    mutationFn: () =>
-      api.runExplain({
+    mutationFn: () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      return api.runExplain({
         cid,
         name: collection,
         database: database ?? undefined,
         verbosity,
+        signal: controller.signal,
+        timeoutMS: queryTimeoutSeconds * 1000,
         ...(mode === "aggregate"
           ? { pipeline }
           : { filter, sort: sort.trim() || undefined }),
-      }),
+      }).finally(() => {
+        if (abortRef.current === controller) abortRef.current = null;
+      });
+    },
     onSuccess: (r) => {
       // Hand a compact rendered version to the parent so it can pass it as
       // assistant context.
@@ -68,6 +77,9 @@ export const PlaygroundPanel = ({
     },
     onError: () => onExplainResult?.(null),
   });
+  const onExplain = () => {
+    if (!explain.isPending) explain.mutate();
+  };
 
   const summary = useMemo(
     () => (explain.data ? extractKeyMetrics(explain.data.explain) : null),
@@ -77,7 +89,7 @@ export const PlaygroundPanel = ({
   const errorMessage =
     explain.error instanceof ApiError
       ? explain.error.message
-      : explain.error instanceof Error
+      : explain.error instanceof Error && explain.error.name !== "AbortError"
         ? explain.error.message
         : null;
 
@@ -128,7 +140,7 @@ export const PlaygroundPanel = ({
                   onChange={setFilter}
                   minHeight="128px"
                   showLineNumbers
-                  onSubmit={() => explain.mutate()}
+                  onSubmit={onExplain}
                 />
               </div>
             </FieldGroup>
@@ -143,7 +155,7 @@ export const PlaygroundPanel = ({
                   onChange={setSort}
                   minHeight="128px"
                   showLineNumbers
-                  onSubmit={() => explain.mutate()}
+                  onSubmit={onExplain}
                 />
               </div>
             </FieldGroup>
@@ -161,7 +173,7 @@ export const PlaygroundPanel = ({
                 onChange={setPipeline}
                 minHeight="192px"
                 showLineNumbers
-                onSubmit={() => explain.mutate()}
+                  onSubmit={onExplain}
               />
             </div>
           </FieldGroup>
@@ -182,24 +194,13 @@ export const PlaygroundPanel = ({
           <option value="allPlansExecution">allPlansExecution</option>
         </select>
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => explain.mutate()}
-          disabled={explain.isPending}
-          className="btn btn-primary"
-        >
-          {explain.isPending ? (
-            <>
-              <IconLoader2 size={14} className="animate-spin" />
-              Explaining…
-            </>
-          ) : (
-            <>
-              <IconPlayerPlayFilled size={14} />
-              Explain
-            </>
-          )}
-        </button>
+        <ExecuteButton
+          running={explain.isPending}
+          onRun={onExplain}
+          onCancel={() => abortRef.current?.abort()}
+          label="Explain"
+          runningLabel="Explaining…"
+        />
         <button
           type="button"
           onClick={() => setAssistantOpen(true)}

@@ -762,6 +762,8 @@ export const api = {
     projection?: string;
     skip?: number;
     limit?: number;
+    signal?: AbortSignal;
+    timeoutMS?: number;
   }): Promise<{
     documents: Array<Record<string, unknown>>;
     total: number;
@@ -774,6 +776,7 @@ export const api = {
       `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/find${qs}`,
       {
         method: "POST",
+        signal: params.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           filter: params.filter,
@@ -781,6 +784,7 @@ export const api = {
           projection: params.projection,
           skip: params.skip,
           limit: params.limit,
+          timeoutMS: params.timeoutMS,
         }),
       },
     );
@@ -936,17 +940,21 @@ export const api = {
     database?: string;
     skip?: number;
     limit?: number;
+    signal?: AbortSignal;
+    timeoutMS?: number;
   }): Promise<ConsoleRunResult> {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
     const res = await fetch(`${cidPath(params.cid)}/console${qs}`, {
       method: "POST",
+      signal: params.signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         command: params.command,
         skip: params.skip,
         limit: params.limit,
+        timeoutMS: params.timeoutMS,
       }),
     });
     // A failing script answers 400 with the full result envelope (error plus
@@ -966,10 +974,13 @@ export const api = {
     return handleJson(res) as Promise<ConsoleRunResult>;
   },
 
-  async runShell(cid: string, commandJson: string, database?: string): Promise<unknown> {
-    const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(`${cidPath(cid)}/shell${qs}`, {
+  async runShell(cid: string, commandJson: string, database?: string, signal?: AbortSignal, timeoutMS?: number): Promise<unknown> {
+    const qs = new URLSearchParams();
+    if (database) qs.set("database", database);
+    if (timeoutMS !== undefined) qs.set("timeoutMS", String(timeoutMS));
+    const res = await fetch(`${cidPath(cid)}/shell?${qs}`, {
       method: "POST",
+      signal,
       headers: { "content-type": "application/json" },
       body: commandJson,
     });
@@ -1357,6 +1368,8 @@ export const api = {
     limit?: number;
     skip?: number;
     verbosity?: "queryPlanner" | "executionStats" | "allPlansExecution";
+    timeoutMS?: number;
+    signal?: AbortSignal;
   }): Promise<{ collection: string; explain: Record<string, unknown> }> {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
@@ -1365,6 +1378,7 @@ export const api = {
       `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/explain${qs}`,
       {
         method: "POST",
+        signal: params.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           filter: params.filter,
@@ -1374,6 +1388,7 @@ export const api = {
           limit: params.limit,
           skip: params.skip,
           verbosity: params.verbosity ?? "executionStats",
+          timeoutMS: params.timeoutMS,
         }),
       },
     );

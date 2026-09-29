@@ -1,4 +1,7 @@
 import type { Collection, Document } from "mongodb";
+import { z } from "zod";
+
+export const queryTimeoutSchema = z.number().int().min(1_000).max(86_400_000).optional();
 
 /**
  * Count documents for a paged listing without putting a full scan on the
@@ -19,9 +22,10 @@ export const countForListing = (
   collection: Collection<Document>,
   filter: Record<string, unknown>,
   maxTimeMS: number,
+  signal?: AbortSignal,
 ): Promise<number> => {
   const hasFilter = Object.keys(filter).length > 0;
   return hasFilter
-    ? collection.countDocuments(filter, { maxTimeMS })
+    ? collection.countDocuments(filter, { maxTimeMS, signal })
     : collection.estimatedDocumentCount({ maxTimeMS });
 };

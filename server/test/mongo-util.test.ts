@@ -1,6 +1,8 @@
 import type { Collection, Document } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
-import { countForListing } from "../src/mongo-util.js";
+import { countForListing, queryTimeoutSchema } from "../src/mongo-util.js";
+import { infoRoute } from "../src/routes/info.js";
+import { shellRoute } from "../src/routes/shell.js";
 
 /**
  * The whole point of countForListing is to keep an empty-filter list from
@@ -52,5 +54,55 @@ describe("countForListing", () => {
     expect(countDocuments).toHaveBeenCalledOnce();
     expect(countDocuments).toHaveBeenCalledWith(filter, { maxTimeMS: 10_000 });
     expect(estimatedDocumentCount).not.toHaveBeenCalled();
+  });
+
+  it("passes cancellation to filtered counts", async () => {
+    const { collection, countDocuments } = mockCollection(42, 99);
+    const signal = new AbortController().signal;
+
+    await countForListing(collection, { status: "paid" }, 60_000, signal);
+
+    expect(countDocuments).toHaveBeenCalledWith(
+      { status: "paid" },
+      { maxTimeMS: 60_000, signal },
+    );
+  });
+});
+
+describe("queryTimeoutSchema", () => {
+  it("accepts whole-millisecond timeouts up to one day and no override", () => {
+    expect(queryTimeoutSchema.parse(undefined)).toBeUndefined();
+    expect(queryTimeoutSchema.parse(60_000)).toBe(60_000);
+    expect(queryTimeoutSchema.parse(86_400_000)).toBe(86_400_000);
+  });
+
+  it("rejects invalid or unbounded timeouts", () => {
+    for (const value of [0, 999, 1_500.5, 86_400_001, "60000", Infinity]) {
+      expect(queryTimeoutSchema.safeParse(value).success).toBe(false);
+    }
+  });
+});
+
+describe("shell query timeout", () => {
+  it("rejects invalid overrides before connecting to MongoDB", async () => {
+    const response = await shellRoute.request("http://localhost/?timeoutMS=999", {
+      method: "POST",
+      body: '{"ping":1}',
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid query timeout." });
+  });
+});
+
+describe("explain query timeout", () => {
+  it("rejects invalid overrides before connecting to MongoDB", async () => {
+    const response = await infoRoute.request("http://localhost/docs/explain", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ timeoutMS: 999 }),
+    });
+
+    expect(response.status).toBe(400);
   });
 });
