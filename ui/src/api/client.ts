@@ -1,4 +1,9 @@
 import { EJSON } from "bson";
+import { withBase } from "./base";
+
+/** fetch() for an absolute "/api/..." path, honouring the server's base path. */
+const apiFetch = (path: string, init?: RequestInit): Promise<Response> =>
+  fetch(withBase(path), init);
 
 export type EJSONValue = unknown;
 
@@ -285,7 +290,7 @@ export const gridFsDownloadUrl = (params: {
   if (params.database) qs.set("database", params.database);
   if (params.inline) qs.set("inline", "1");
   const suffix = qs.toString() ? `?${qs}` : "";
-  return `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/download/${encodeURIComponent(params.fileId)}${suffix}`;
+  return withBase(`${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/download/${encodeURIComponent(params.fileId)}${suffix}`);
 };
 
 export interface AspireRef {
@@ -440,12 +445,12 @@ const cidPath = (cid: string) => `/api/connections/${encodeURIComponent(cid)}`;
 
 export const api = {
   async getConfig(): Promise<ServerConfig> {
-    const res = await fetch("/api/config");
+    const res = await apiFetch("/api/config");
     return handleJson(res) as Promise<ServerConfig>;
   },
 
   async revealLogs(): Promise<{ ok: boolean; path?: string; error?: string }> {
-    const res = await fetch("/api/system/reveal-logs", { method: "POST" });
+    const res = await apiFetch("/api/system/reveal-logs", { method: "POST" });
     return handlePlainJson(res) as Promise<{
       ok: boolean;
       path?: string;
@@ -454,7 +459,7 @@ export const api = {
   },
 
   async getKeyHealth(): Promise<{ healthy: boolean; undecryptableCount: number }> {
-    const res = await fetch("/api/system/key-health");
+    const res = await apiFetch("/api/system/key-health");
     return handlePlainJson(res) as Promise<{
       healthy: boolean;
       undecryptableCount: number;
@@ -462,7 +467,7 @@ export const api = {
   },
 
   async resetEncrypted(): Promise<{ ok: boolean; removedConnections: number }> {
-    const res = await fetch("/api/system/reset-encrypted", { method: "POST" });
+    const res = await apiFetch("/api/system/reset-encrypted", { method: "POST" });
     return handlePlainJson(res) as Promise<{
       ok: boolean;
       removedConnections: number;
@@ -470,12 +475,12 @@ export const api = {
   },
 
   async getUiSettings(): Promise<{ settings: Record<string, unknown> }> {
-    const res = await fetch("/api/system/ui-settings");
+    const res = await apiFetch("/api/system/ui-settings");
     return handlePlainJson(res) as Promise<{ settings: Record<string, unknown> }>;
   },
 
   async putUiSettings(settings: Record<string, unknown>): Promise<{ ok: boolean }> {
-    const res = await fetch("/api/system/ui-settings", {
+    const res = await apiFetch("/api/system/ui-settings", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(settings),
@@ -484,13 +489,13 @@ export const api = {
   },
 
   async listBrowsers(): Promise<{ browsers: BrowserOption[] }> {
-    const res = await fetch("/api/system/browsers");
+    const res = await apiFetch("/api/system/browsers");
     return handlePlainJson(res) as Promise<{ browsers: BrowserOption[] }>;
   },
 
   // ── Connection management ───────────────────────────────────────────────────
   async listConnections(): Promise<{ connections: ConnectionPublic[] }> {
-    const res = await fetch("/api/connections");
+    const res = await apiFetch("/api/connections");
     return handleJson(res) as Promise<{ connections: ConnectionPublic[] }>;
   },
 
@@ -508,7 +513,7 @@ export const api = {
     oidcBrowser?: OidcBrowser;
     oidcBrowserProfile?: string | null;
   }): Promise<ConnectionPublic> {
-    const res = await fetch("/api/connections", {
+    const res = await apiFetch("/api/connections", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -533,7 +538,7 @@ export const api = {
       oidcBrowserProfile: string | null;
     }>,
   ): Promise<ConnectionPublic> {
-    const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/connections/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -542,7 +547,7 @@ export const api = {
   },
 
   async deleteConnection(id: string): Promise<void> {
-    const res = await fetch(`/api/connections/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/connections/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
     if (!res.ok) {
@@ -552,21 +557,21 @@ export const api = {
   },
 
   async getConnectionSecret(id: string): Promise<{ uri: string }> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/secret`,
     );
     return handlePlainJson(res) as Promise<{ uri: string }>;
   },
 
   async getServerInfo(id: string): Promise<ServerInfo> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/server-info`,
     );
     return handlePlainJson(res) as Promise<ServerInfo>;
   },
 
   async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {
-    const res = await fetch(`/api/connections/${encodeURIComponent(id)}/test`, {
+    const res = await apiFetch(`/api/connections/${encodeURIComponent(id)}/test`, {
       method: "POST",
     });
     const data = (await handlePlainJson(res)) as { ok: boolean; error?: string };
@@ -582,7 +587,7 @@ export const api = {
       forceRestart?: boolean;
     },
   ): Promise<{ ok: boolean }> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth`,
       {
         method: "POST",
@@ -600,7 +605,7 @@ export const api = {
       oidcBrowserProfile?: string | null;
     },
   ): Promise<{ ok: boolean }> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/reopen`,
       {
         method: "POST",
@@ -612,7 +617,7 @@ export const api = {
   },
 
   async getOidcBrowserAuthUrl(id: string): Promise<string | null> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/url`,
     );
     const data = (await handlePlainJson(res)) as { url: string | null };
@@ -620,7 +625,7 @@ export const api = {
   },
 
   async cancelOidcBrowserAuth(id: string): Promise<void> {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/connections/${encodeURIComponent(id)}/oidc/browser-auth/cancel`,
       { method: "POST" },
     );
@@ -628,12 +633,12 @@ export const api = {
   },
 
   async discoverDocker(): Promise<DiscoveryResult> {
-    const res = await fetch("/api/discovery/docker");
+    const res = await apiFetch("/api/discovery/docker");
     return handlePlainJson(res) as Promise<DiscoveryResult>;
   },
 
   async discoverAspire(): Promise<AspireDiscoveryResult> {
-    const res = await fetch("/api/discovery/aspire");
+    const res = await apiFetch("/api/discovery/aspire");
     return handlePlainJson(res) as Promise<AspireDiscoveryResult>;
   },
 
@@ -649,7 +654,7 @@ export const api = {
     authAttemptId?: string;
     openBrowser?: boolean;
   }): Promise<{ ok: boolean; error?: string }> {
-    const res = await fetch("/api/connections/test-uri", {
+    const res = await apiFetch("/api/connections/test-uri", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -660,7 +665,7 @@ export const api = {
   async listDatabases(cid: string): Promise<{
     databases: Array<{ name: string; sizeOnDisk: number | null; empty: boolean }>;
   }> {
-    const res = await fetch(`${cidPath(cid)}/databases`);
+    const res = await apiFetch(`${cidPath(cid)}/databases`);
     return handleJson(res) as Promise<{
       databases: Array<{ name: string; sizeOnDisk: number | null; empty: boolean }>;
     }>;
@@ -675,7 +680,7 @@ export const api = {
     collections: CollectionListEntry[];
   }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(`${cidPath(cid)}/collections${qs}`);
+    const res = await apiFetch(`${cidPath(cid)}/collections${qs}`);
     return handleJson(res) as Promise<{
       database: string;
       collections: CollectionListEntry[];
@@ -691,7 +696,7 @@ export const api = {
     buckets: GridFsBucketInfo[];
   }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(`${cidPath(cid)}/gridfs${qs}`);
+    const res = await apiFetch(`${cidPath(cid)}/gridfs${qs}`);
     return handleJson(res) as Promise<{
       database: string;
       buckets: GridFsBucketInfo[];
@@ -720,7 +725,7 @@ export const api = {
     if (params.skip != null) qs.set("skip", String(params.skip));
     if (params.limit != null) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? `?${qs}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/files${suffix}`,
     );
     return handleJson(res) as Promise<{
@@ -743,7 +748,7 @@ export const api = {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/gridfs/${encodeURIComponent(params.bucket)}/files/${encodeURIComponent(params.fileId)}${qs}`,
       { method: "DELETE" },
     );
@@ -772,7 +777,7 @@ export const api = {
     hasMore: boolean;
   }> {
     const qs = params.database ? `?database=${encodeURIComponent(params.database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/find${qs}`,
       {
         method: "POST",
@@ -805,7 +810,7 @@ export const api = {
     database?: string,
   ): Promise<{ deletedCount: number }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/deleteMany${qs}`,
       {
         method: "POST",
@@ -828,7 +833,7 @@ export const api = {
     database?: string,
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/updateMany${qs}`,
       {
         method: "POST",
@@ -849,7 +854,7 @@ export const api = {
     database?: string,
   ): Promise<{ document: Record<string, unknown> }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
     );
     return handleJson(res) as Promise<{ document: Record<string, unknown> }>;
@@ -862,7 +867,7 @@ export const api = {
     database?: string,
   ): Promise<void> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
       { method: "DELETE" },
     );
@@ -880,7 +885,7 @@ export const api = {
     database?: string,
   ): Promise<{ document: Record<string, unknown> }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
       {
         method: "PUT",
@@ -900,7 +905,7 @@ export const api = {
     database?: string,
   ): Promise<{ document: Record<string, unknown> }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/document/${encodeURIComponent(id)}${qs}`,
       {
         method: "PATCH",
@@ -924,7 +929,7 @@ export const api = {
     const qs = database
       ? `?sample=${sample}&database=${encodeURIComponent(database)}`
       : `?sample=${sample}`;
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/schema${qs}`,
     );
     return handleJson(res) as Promise<{
@@ -946,7 +951,7 @@ export const api = {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
-    const res = await fetch(`${cidPath(params.cid)}/console${qs}`, {
+    const res = await apiFetch(`${cidPath(params.cid)}/console${qs}`, {
       method: "POST",
       signal: params.signal,
       headers: { "content-type": "application/json" },
@@ -978,7 +983,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (database) qs.set("database", database);
     if (timeoutMS !== undefined) qs.set("timeoutMS", String(timeoutMS));
-    const res = await fetch(`${cidPath(cid)}/shell?${qs}`, {
+    const res = await apiFetch(`${cidPath(cid)}/shell?${qs}`, {
       method: "POST",
       signal,
       headers: { "content-type": "application/json" },
@@ -995,7 +1000,7 @@ export const api = {
     model: string;
     setupHint: string;
   }> {
-    const res = await fetch("/api/ai/status");
+    const res = await apiFetch("/api/ai/status");
     return handleJson(res) as Promise<{
       provider: AiProviderId;
       configured: boolean;
@@ -1006,7 +1011,7 @@ export const api = {
   },
 
   async getAiConfig(): Promise<AiConfig> {
-    const res = await fetch("/api/ai/config");
+    const res = await apiFetch("/api/ai/config");
     return handleJson(res) as Promise<AiConfig>;
   },
 
@@ -1020,7 +1025,7 @@ export const api = {
     codexCliPath?: string | null;
     allowDataSampling?: boolean;
   }): Promise<AiConfig> {
-    const res = await fetch("/api/ai/config", {
+    const res = await apiFetch("/api/ai/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -1029,7 +1034,7 @@ export const api = {
   },
 
   async clearAiConfig(): Promise<void> {
-    const res = await fetch("/api/ai/config", { method: "DELETE" });
+    const res = await apiFetch("/api/ai/config", { method: "DELETE" });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new ApiError(res.status, text || res.statusText);
@@ -1043,7 +1048,7 @@ export const api = {
     version: string | null;
     error?: string;
   }> {
-    const res = await fetch("/api/ai/copilot-cli/detect", {
+    const res = await apiFetch("/api/ai/copilot-cli/detect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: input?.path ?? null }),
@@ -1064,7 +1069,7 @@ export const api = {
     version: string | null;
     error?: string;
   }> {
-    const res = await fetch("/api/ai/claude-cli/detect", {
+    const res = await apiFetch("/api/ai/claude-cli/detect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: input?.path ?? null }),
@@ -1085,7 +1090,7 @@ export const api = {
     version: string | null;
     error?: string;
   }> {
-    const res = await fetch("/api/ai/codex-cli/detect", {
+    const res = await apiFetch("/api/ai/codex-cli/detect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: input?.path ?? null }),
@@ -1115,7 +1120,7 @@ export const api = {
     diagnostics?: Record<string, string | number | boolean | null>;
     error?: string;
   }> {
-    const res = await fetch("/api/ai/test", {
+    const res = await apiFetch("/api/ai/test", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -1143,7 +1148,7 @@ export const api = {
     model: string;
     provider: AiProviderId;
   }> {
-    const res = await fetch("/api/ai/chat", {
+    const res = await apiFetch("/api/ai/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(params),
@@ -1161,7 +1166,7 @@ export const api = {
     database?: string,
   ): Promise<CollectionStats> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/stats${qs}`,
     );
     return handleJson(res) as Promise<CollectionStats>;
@@ -1173,7 +1178,7 @@ export const api = {
     database?: string,
   ): Promise<CollectionIndexes> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/indexes${qs}`,
     );
     return handleJson(res) as Promise<CollectionIndexes>;
@@ -1186,7 +1191,7 @@ export const api = {
     database?: string,
   ): Promise<void> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/indexes/drop${qs}`,
       {
         method: "POST",
@@ -1206,7 +1211,7 @@ export const api = {
     database?: string,
   ): Promise<void> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/drop${qs}`,
       { method: "POST" },
     );
@@ -1219,7 +1224,7 @@ export const api = {
     database?: string,
   ): Promise<{ deletedCount: number }> {
     const qs = database ? `?database=${encodeURIComponent(database)}` : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/collections/${encodeURIComponent(name)}/clear${qs}`,
       { method: "POST" },
     );
@@ -1228,7 +1233,7 @@ export const api = {
 
   // ── Database-level operations ───────────────────────────────────────────────
   async getDatabaseStats(cid: string, db: string): Promise<DatabaseStats> {
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/databases/${encodeURIComponent(db)}/stats`,
     );
     return handlePlainJson(res) as Promise<DatabaseStats>;
@@ -1238,7 +1243,7 @@ export const api = {
     cid: string,
     db: string,
   ): Promise<ClearCollectionsResult> {
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/databases/${encodeURIComponent(db)}/clear-collections`,
       { method: "POST" },
     );
@@ -1246,7 +1251,7 @@ export const api = {
   },
 
   async dropDatabase(cid: string, db: string): Promise<{ ok: true }> {
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/databases/${encodeURIComponent(db)}/drop`,
       { method: "POST" },
     );
@@ -1259,7 +1264,7 @@ export const api = {
     collection: string,
   ): Promise<Blob> {
     const qs = `?collection=${encodeURIComponent(collection)}`;
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/databases/${encodeURIComponent(db)}/export${qs}`,
       { method: "POST" },
     );
@@ -1290,7 +1295,7 @@ export const api = {
       mode: params.mode ?? "insert",
     });
     if (params.drop) qs.set("drop", "true");
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/databases/${encodeURIComponent(params.db)}/import?${qs.toString()}`,
       {
         method: "POST",
@@ -1302,7 +1307,7 @@ export const api = {
   },
 
   async dumpDatabase(cid: string, db: string): Promise<Blob> {
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(cid)}/databases/${encodeURIComponent(db)}/dump`,
       { method: "POST" },
     );
@@ -1322,7 +1327,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (params.drop) qs.set("drop", "true");
     const url = `${cidPath(params.cid)}/databases/${encodeURIComponent(params.db)}/restore${qs.toString() ? `?${qs}` : ""}`;
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method: "POST",
       headers: { "content-type": "application/octet-stream" },
       body: params.file,
@@ -1346,7 +1351,7 @@ export const api = {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/indexes/create${qs}`,
       {
         method: "POST",
@@ -1374,7 +1379,7 @@ export const api = {
     const qs = params.database
       ? `?database=${encodeURIComponent(params.database)}`
       : "";
-    const res = await fetch(
+    const res = await apiFetch(
       `${cidPath(params.cid)}/collections/${encodeURIComponent(params.name)}/explain${qs}`,
       {
         method: "POST",
@@ -1400,7 +1405,7 @@ export const api = {
 
   // ── Workspaces ──────────────────────────────────────────────────────────────
   async listWorkspaces(): Promise<{ enabled: boolean; workspaces: Workspace[] }> {
-    const res = await fetch("/api/workspaces");
+    const res = await apiFetch("/api/workspaces");
     return handlePlainJson(res) as Promise<{
       enabled: boolean;
       workspaces: Workspace[];
@@ -1417,7 +1422,7 @@ export const api = {
     const qs = targetPath
       ? `?path=${encodeURIComponent(targetPath)}`
       : "";
-    const res = await fetch(`/api/workspaces/fs${qs}`);
+    const res = await apiFetch(`/api/workspaces/fs${qs}`);
     return handlePlainJson(res) as Promise<{
       path: string;
       parent: string | null;
@@ -1433,7 +1438,7 @@ export const api = {
     color?: string | null;
     createIfMissing?: boolean;
   }): Promise<Workspace> {
-    const res = await fetch("/api/workspaces", {
+    const res = await apiFetch("/api/workspaces", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -1445,7 +1450,7 @@ export const api = {
     id: string,
     input: { name?: string; color?: string | null; folderPath?: string },
   ): Promise<Workspace> {
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
@@ -1454,7 +1459,7 @@ export const api = {
   },
 
   async deleteWorkspace(id: string): Promise<void> {
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
     if (!res.ok) {
@@ -1468,7 +1473,7 @@ export const api = {
     relPath: string,
   ): Promise<{ path: string; entries: WorkspaceTreeEntry[] }> {
     const qs = `?path=${encodeURIComponent(relPath)}`;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/tree${qs}`);
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/tree${qs}`);
     return handlePlainJson(res) as Promise<{
       path: string;
       entries: WorkspaceTreeEntry[];
@@ -1477,7 +1482,7 @@ export const api = {
 
   async readWorkspaceFile(id: string, relPath: string): Promise<WorkspaceFile> {
     const qs = `?path=${encodeURIComponent(relPath)}`;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`);
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`);
     return handlePlainJson(res) as Promise<WorkspaceFile>;
   },
 
@@ -1488,7 +1493,7 @@ export const api = {
     expectedMtime?: number | null,
   ): Promise<{ path: string; mtime: number; size: number }> {
     const qs = `?path=${encodeURIComponent(relPath)}`;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ raw, expectedMtime: expectedMtime ?? null }),
@@ -1502,7 +1507,7 @@ export const api = {
 
   async deleteWorkspacePath(id: string, relPath: string): Promise<void> {
     const qs = `?path=${encodeURIComponent(relPath)}`;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/file${qs}`, {
       method: "DELETE",
     });
     if (!res.ok) {
@@ -1516,7 +1521,7 @@ export const api = {
     relPath: string,
   ): Promise<{ path: string }> {
     const qs = `?path=${encodeURIComponent(relPath)}`;
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/folder${qs}`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/folder${qs}`, {
       method: "POST",
     });
     return handlePlainJson(res) as Promise<{ path: string }>;
@@ -1527,7 +1532,7 @@ export const api = {
     from: string,
     to: string,
   ): Promise<{ from: string; to: string }> {
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/move`, {
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/move`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ from, to }),
@@ -1536,7 +1541,7 @@ export const api = {
   },
 
   async getWorkspaceGit(id: string): Promise<WorkspaceGitInfo> {
-    const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/git`);
+    const res = await apiFetch(`/api/workspaces/${encodeURIComponent(id)}/git`);
     return handlePlainJson(res) as Promise<WorkspaceGitInfo>;
   },
 
@@ -1546,7 +1551,7 @@ export const api = {
     models: Array<{ id: string; name?: string; description?: string; vendor?: string }>;
     error?: string;
   }> {
-    const res = await fetch("/api/ai/models");
+    const res = await apiFetch("/api/ai/models");
     return handleJson(res) as Promise<{
       provider: AiProviderId;
       default: string;

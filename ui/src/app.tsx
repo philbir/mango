@@ -1,3 +1,4 @@
+import { withBase } from "./api/base";
 import { useEffect, useRef } from "react";
 import { useAssistant } from "./features/assistant/AssistantContext";
 import { AssistantPanel } from "./features/assistant/AssistantPanel";
@@ -204,26 +205,26 @@ const EmptyState = () => (
   <div className="flex h-full items-center justify-center overflow-hidden bg-white px-8 py-10 text-center text-slate-500 dark:bg-slate-950 dark:text-slate-400">
     <div className="flex w-full max-w-3xl flex-col items-center">
       <img
-        src="/assets/mango-empty-hero.png"
+        src={withBase("/assets/mango-empty-hero.png")}
         alt=""
         className="mb-4 w-full max-w-[520px] select-none object-contain dark:hidden"
         draggable={false}
       />
       <img
-        src="/assets/mango-empty-hero-dark.png"
+        src={withBase("/assets/mango-empty-hero-dark.png")}
         alt=""
         className="mb-4 hidden w-full max-w-[520px] select-none object-contain dark:block"
         draggable={false}
       />
       <div className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-100">
         <img
-          src="/assets/mango-mark.svg"
+          src={withBase("/assets/mango-mark.svg")}
           alt=""
           className="h-6 w-6 dark:hidden"
           draggable={false}
         />
         <img
-          src="/assets/mango-mark-dark.svg"
+          src={withBase("/assets/mango-mark-dark.svg")}
           alt=""
           className="hidden h-6 w-6 dark:block"
           draggable={false}

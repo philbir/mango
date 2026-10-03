@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import {
   IconChevronDown,
   IconCircleCheckFilled,
@@ -249,9 +250,9 @@ const sourceTitle = (conn: ConnectionPublic, kind: BadgeKind): string => {
 };
 
 const KIND_ICON: Record<Exclude<BadgeKind, null>, { src: string; alt: string }> = {
-  aspire: { src: "/assets/aspire-logo.svg", alt: "Aspire" },
-  atlas: { src: "/assets/mongodb-logo.svg", alt: "MongoDB Atlas" },
-  docker: { src: "/assets/docker-logo.svg", alt: "Docker" },
+  aspire: { src: withBase("/assets/aspire-logo.svg"), alt: "Aspire" },
+  atlas: { src: withBase("/assets/mongodb-logo.svg"), alt: "MongoDB Atlas" },
+  docker: { src: withBase("/assets/docker-logo.svg"), alt: "Docker" },
 };
 
 const StandaloneLabel = ({ active }: { active: ConnectionPublic | null }) => {
