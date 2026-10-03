@@ -111,6 +111,7 @@ All modes read the same env vars:
 | `MANGO_MASTER_KEY` | 32-byte AES-256-GCM key (base64 or hex) for encrypting saved connection URIs. Auto-generated per-process if unset. **Set this in production** so saved state survives restarts. |
 | `PORT` | Server port. Default `5180`. |
 | `HOST` / `MANGO_HOST` | Server bind host. Default `127.0.0.1`; set explicitly only for trusted private-network access. |
+| `MANGO_BASE_PATH` | URL prefix when served behind a reverse proxy at a sub-path, e.g. `/mongo` for `https://example.com/mongo/`. The proxy must forward the full path (no prefix stripping); the bare prefix redirects to `/mongo/`. Unset = served at `/`. |
 | `MANGO_CORS_ORIGINS` | Comma-separated extra browser origins allowed to call the API. Defaults include the Vite dev origin. |
 | `MANGO_MONGO_MAX_TIME_MS` | MongoDB query/command timeout in milliseconds for supported operations, including console reads. Default `60000` (60 seconds); increase for longer queries. |
 | `MANGO_CONSOLE_TIMEOUT_MS` | Synchronous JavaScript execution limit in the console (prevents infinite loops), separate from MongoDB query time. Default `1000` (1 second). |

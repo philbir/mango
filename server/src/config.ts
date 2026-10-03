@@ -4,6 +4,7 @@ import http from "http";
 import { MongoClient } from "mongodb";
 import type { OIDCCallbackParams, OIDCResponse } from "mongodb";
 import { resolveAspireConnectionUri } from "./aspire.js";
+import { normalizeBasePath } from "./basePath.js";
 import {
   openUrlInBrowser,
   type BrowserPreference,
@@ -46,6 +47,8 @@ export const config = {
   port: Number(process.env.PORT ?? 5180),
   host: process.env.HOST ?? process.env.MANGO_HOST ?? "127.0.0.1",
   staticDir: process.env.STATIC_DIR ?? "./public",
+  /** URL prefix behind a reverse proxy, e.g. "/mongo"; "" = served at root. */
+  basePath: normalizeBasePath(process.env.MANGO_BASE_PATH),
   mongoMaxTimeMS: Number(process.env.MANGO_MONGO_MAX_TIME_MS ?? 60_000),
   consoleTimeoutMS: Number(process.env.MANGO_CONSOLE_TIMEOUT_MS ?? 1_000),
   jsConsoleEnabled: process.env.MANGO_DISABLE_JS_CONSOLE !== "true",

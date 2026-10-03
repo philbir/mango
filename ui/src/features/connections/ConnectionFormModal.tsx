@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconBrandDocker,
@@ -1319,7 +1320,7 @@ const AspireResourceRow = ({
 
 const AspireLogo = ({ className }: { className?: string }) => (
   <img
-    src="/assets/aspire-logo.svg"
+    src={withBase("/assets/aspire-logo.svg")}
     alt="Aspire"
     draggable={false}
     className={className ?? "h-3.5 w-3.5"}

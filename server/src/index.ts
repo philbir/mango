@@ -10,11 +10,12 @@ import "./bun-compat.js";
 import "./instrumentation.js";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { logger } from "hono/logger";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { injectBasePath, mountAtBasePath } from "./basePath.js";
 import { closeAllClients, config } from "./config.js";
 import { healthReport } from "./health.js";
 import { MANGO_VERSION } from "./version.js";
@@ -131,18 +132,27 @@ app.route("/api/workspaces", workspacesRoute);
 const staticDirAbs = path.resolve(config.staticDir);
 if (existsSync(staticDirAbs)) {
   console.log(`[mango] serving UI from ${staticDirAbs}`);
-  app.use(
-    "/*",
-    serveStatic({
-      root: path.relative(process.cwd(), staticDirAbs) || ".",
-    }),
-  );
-  app.get("*", async (c) => {
+  // index.html always goes through this handler (never serveStatic) so it
+  // carries the injected <base href> for MANGO_BASE_PATH.
+  const serveIndex = async (c: Context) => {
     const indexPath = path.join(staticDirAbs, "index.html");
     if (!existsSync(indexPath)) return c.notFound();
     const html = await readFile(indexPath, "utf8");
-    return c.html(html);
+    c.header("Cache-Control", "no-cache");
+    return c.html(injectBasePath(html, config.basePath));
+  };
+  // Under a base path c.req.path still carries the prefix.
+  const stripBase = (p: string) =>
+    config.basePath && p.startsWith(`${config.basePath}/`) ? p.slice(config.basePath.length) : p;
+  const staticFiles = serveStatic({
+    root: path.relative(process.cwd(), staticDirAbs) || ".",
+    rewriteRequestPath: stripBase,
   });
+  app.use("/*", (c, next) => {
+    const p = stripBase(c.req.path);
+    return p === "/" || p === "/index.html" ? serveIndex(c) : staticFiles(c, next);
+  });
+  app.get("*", serveIndex);
 } else {
   console.log(`[mango] no UI assets at ${staticDirAbs}; running API-only`);
   app.get("/", (c) =>
@@ -153,13 +163,13 @@ if (existsSync(staticDirAbs)) {
 }
 
 const server = serve(
-  { fetch: app.fetch, port: config.port, hostname: config.host },
+  { fetch: mountAtBasePath(app, config.basePath).fetch, port: config.port, hostname: config.host },
   (info) => {
     const address =
       typeof info === "object" && "address" in info && info.address
         ? String(info.address)
         : config.host;
-    console.log(`[mango] ${MANGO_VERSION} listening on http://${address}:${config.port}`);
+    console.log(`[mango] ${MANGO_VERSION} listening on http://${address}:${config.port}${config.basePath}`);
   },
 );
 

@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import { isTauri } from "../updater/useUpdater";
 
 export interface HealthCheck {
@@ -33,20 +34,21 @@ const describe = (error: unknown): string =>
 
 /** One GET /api/health, classified. Never throws. */
 export const probeHealth = async (timeoutMs = 4000): Promise<ProbeResult> => {
+  const url = withBase("/api/health");
   let res: Response;
   try {
-    res = await fetch("/api/health", {
+    res = await fetch(url, {
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    return { kind: "unreachable", reason: `No response from ${location.origin}/api/health: ${describe(error)}` };
+    return { kind: "unreachable", reason: `No response from ${location.origin}${url}: ${describe(error)}` };
   }
   const type = res.headers.get("content-type") ?? "";
   if (!type.includes("application/json")) {
     return {
       kind: "unreachable",
-      reason: `/api/health answered HTTP ${res.status} with ${type || "no content type"} instead of JSON — the Mango server isn't behind ${location.origin}.`,
+      reason: `${url} answered HTTP ${res.status} with ${type || "no content type"} instead of JSON — the Mango server isn't behind ${location.origin}.`,
     };
   }
   try {
@@ -54,7 +56,7 @@ export const probeHealth = async (timeoutMs = 4000): Promise<ProbeResult> => {
     if (res.ok && report.ok) return { kind: "ok", report };
     return { kind: "unhealthy", report };
   } catch (error) {
-    return { kind: "unreachable", reason: `/api/health returned invalid JSON: ${describe(error)}` };
+    return { kind: "unreachable", reason: `${url} returned invalid JSON: ${describe(error)}` };
   }
 };
 
@@ -187,7 +189,7 @@ export const runDiagnostics = async (): Promise<DiagnosticsReport> => {
 
   // Only worth hitting the rest when something answered.
   const reachable = probe.kind !== "unreachable";
-  for (const path of ["/api/config", "/api/connections", "/api/system/key-health"]) {
+  for (const path of ["/api/config", "/api/connections", "/api/system/key-health"].map(withBase)) {
     results.push(
       reachable
         ? await timedGet(path)

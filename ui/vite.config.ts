@@ -32,6 +32,9 @@ const resolveVersion = () => {
 };
 
 export default defineConfig({
+  // Relative asset URLs so one build works under any MANGO_BASE_PATH: the
+  // server injects <base href="/prefix/"> into index.html at request time.
+  base: "./",
   plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_MANGO_VERSION": JSON.stringify(resolveVersion()),

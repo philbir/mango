@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import { useQuery } from "@tanstack/react-query";
 import { IconCheck, IconCopy, IconDeviceDesktop, IconExternalLink, IconLoader2, IconX } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
@@ -163,7 +164,7 @@ export const OidcAuthDialog = ({
               <div className="relative">
                 {browser ? (
                   <img
-                    src={`/assets/browser/${browser}.svg`}
+                    src={withBase(`/assets/browser/${browser}.svg`)}
                     alt=""
                     className="h-16 w-16 rounded-2xl bg-white object-contain p-2 dark:bg-slate-800"
                   />

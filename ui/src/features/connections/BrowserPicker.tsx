@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import { IconDeviceDesktop } from "@tabler/icons-react";
 import type { BrowserOption, OidcBrowser } from "../../api/client";
 
@@ -63,7 +64,7 @@ export const BrowserPicker = ({
             label={entry.label}
             icon={
               <img
-                src={`/assets/browser/${entry.id}.svg`}
+                src={withBase(`/assets/browser/${entry.id}.svg`)}
                 alt=""
                 className="h-9 w-9 rounded-lg bg-white object-contain p-1 dark:bg-slate-800"
                 draggable={false}

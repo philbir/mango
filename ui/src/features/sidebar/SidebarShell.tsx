@@ -1,3 +1,4 @@
+import { withBase } from "../../api/base";
 import { IconLeaf, IconTable } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { CollectionsPane } from "../collections/CollectionsPane";
@@ -86,13 +87,13 @@ export const SidebarShell = () => {
         title="Open Mango docs"
       >
         <img
-          src="/assets/mango-mark.svg"
+          src={withBase("/assets/mango-mark.svg")}
           alt=""
           className="h-4 w-4 shrink-0 dark:hidden"
           draggable={false}
         />
         <img
-          src="/assets/mango-mark-dark.svg"
+          src={withBase("/assets/mango-mark-dark.svg")}
           alt=""
           className="hidden h-4 w-4 shrink-0 dark:block"
           draggable={false}
