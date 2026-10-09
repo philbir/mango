@@ -242,7 +242,9 @@ export const AiSettingsModal = ({ onClose }: Props) => {
               <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
                 Mango spawns your installed{" "}
                 <span className="font-mono">copilot</span> CLI per request,
-                using the existing login (or{" "}
+                using the existing Copilot or GitHub CLI login (or inherited{" "}
+                <span className="font-mono">COPILOT_GITHUB_TOKEN</span>,{" "}
+                <span className="font-mono">GH_TOKEN</span>, or{" "}
                 <span className="font-mono">GITHUB_TOKEN</span>).
               </div>
 

@@ -1,11 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import {
-  accessSync,
-  constants,
-  existsSync,
-  mkdirSync,
-  writeFileSync,
-} from "node:fs";
+import { accessSync, constants } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -120,39 +114,21 @@ const locateCli = (override?: string | null): LocatedCli => {
   return { command: "copilot", found: false, source: "fallback" };
 };
 
-const detectCopilotAuth = (): boolean => {
-  if (process.env.GITHUB_TOKEN) return true;
-  const home = homedir();
-  const candidates = [
-    path.join(home, ".copilot"),
-    path.join(home, ".config", "github-copilot"),
-    path.join(home, "Library", "Application Support", "GitHub Copilot"),
-  ];
-  return candidates.some((p) => existsSync(p));
-};
-
-// We point the CLI at an empty config dir so it doesn't try to load the user's
-// MCP servers / agents on every request — that's where most of the startup
-// cost lives. Created lazily, persists for the process lifetime.
-let isolatedConfigDir: string | null = null;
-const getIsolatedConfigDir = (): string => {
-  if (isolatedConfigDir) return isolatedConfigDir;
-  const dir = path.join(tmpdir(), "mango-copilot-cfg");
-  try {
-    mkdirSync(dir, { recursive: true });
-    const mcpPath = path.join(dir, "mcp-config.json");
-    if (!existsSync(mcpPath)) writeFileSync(mcpPath, "{}\n", "utf8");
-  } catch {
-    // Fall through — CLI will use the user's default config dir.
-  }
-  isolatedConfigDir = dir;
-  return dir;
-};
+// Keep the user's default home (or inherited COPILOT_HOME): overriding it with
+// an empty directory also hides the CLI's saved authentication.
+const sessionArgs = [
+  "--no-color",
+  "--no-custom-instructions",
+  "--disable-builtin-mcps",
+];
 
 interface CopilotEvent {
   type: string;
-  data?: { content?: string };
+  exitCode?: number;
+  data?: { content?: string; model?: string; message?: string };
 }
+
+const QUERY_TIMEOUT_MS = 120_000;
 
 // Used only when the live query below fails (old CLI without ACP, not logged
 // in, …). `auto` is always accepted; users can still type any explicit ID.
@@ -180,7 +156,7 @@ const queryModelsViaAcp = async (cliPath: string): Promise<ModelOption[]> =>
   await new Promise((resolve, reject) => {
     const child = spawn(
       cliPath,
-      ["--acp", "--no-color", "--config-dir", getIsolatedConfigDir()],
+      ["--acp", ...sessionArgs],
       {
         cwd: tmpdir(),
         stdio: ["pipe", "pipe", "pipe"],
@@ -366,22 +342,31 @@ const runQuery = async (
 ): Promise<{ text: string; model: string }> => {
   // Copilot CLI has no `--system-prompt` flag, so we inline the system context
   // as a leading section of the user prompt. Headers visually separate it.
-  const combined = `## Instructions\n\n${systemPrompt}\n\n## Request\n\n${userPrompt}`;
+  const combined = `## Instructions\n\n${systemPrompt}
+
+This is Mango's text-only chat. No tools are available. Use only the supplied schema and conversation. Suggest queries for the user to apply in Mango; do not execute commands, call tools, or claim to have accessed the database.
+
+## Request
+
+${userPrompt}`;
 
   const args = [
     "-p",
     combined,
     "--output-format",
     "json",
-    "--no-color",
-    "--allow-all-tools",
-    "--config-dir",
-    getIsolatedConfigDir(),
+    ...sessionArgs,
+    // The CLI discards empty allowlists. It matches names literally, so "*"
+    // exposes no tools rather than enabling a wildcard.
+    "--available-tools",
+    "*",
+    "--no-ask-user",
   ];
   if (modelId) args.push("--model", modelId);
 
   return await new Promise((resolve, reject) => {
     const child = spawn(cliPath, args, {
+      cwd: tmpdir(),
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, NO_COLOR: "1" },
     });
@@ -390,55 +375,102 @@ const runQuery = async (
     let assistantContent = "";
     let modelOut = modelId ?? "copilot";
     let errored: string | null = null;
+    let settled = false;
+    let closed = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!closed && child.exitCode === null && child.signalCode === null) {
+        child.kill();
+        const killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+        killTimer.unref();
+        child.once("exit", () => clearTimeout(killTimer));
+        child.once("close", () => clearTimeout(killTimer));
+      }
+      if (error) reject(error);
+      else resolve({ text: assistantContent, model: modelOut });
+    };
+    const finishResponse = () => {
+      if (errored) return finish(new Error(`Copilot CLI: ${errored}`));
+      if (!assistantContent.trim()) {
+        return finish(
+          new Error("Copilot CLI completed without an assistant response."),
+        );
+      }
+      finish();
+    };
+    const timer = setTimeout(
+      () => finish(
+        new Error("Copilot CLI request timed out after 120 seconds. Try a shorter prompt or a different model."),
+      ),
+      QUERY_TIMEOUT_MS,
+    );
 
+    const consumeLine = (line: string) => {
+      if (settled || !line.trim()) return;
+      let evt: CopilotEvent;
+      try {
+        evt = JSON.parse(line) as CopilotEvent;
+      } catch {
+        return;
+      }
+      if (!evt || typeof evt !== "object") return;
+      // Consolidated messages replace streaming deltas; only `result` marks
+      // completion, so an intermediate message cannot finish the request.
+      if (evt.type === "assistant.message") {
+        const content = evt.data?.content;
+        if (typeof content === "string") assistantContent = content;
+      }
+      if (evt.type === "session.tools_updated") {
+        const model = evt.data?.model;
+        if (typeof model === "string") modelOut = model;
+      }
+      if (evt.type === "error" || evt.type === "session.error") {
+        errored = evt.data?.message ?? "Request failed";
+        return finishResponse();
+      }
+      // Extensions can keep stdio open after the CLI has finished its reply.
+      if (evt.type === "result") {
+        if (evt.exitCode !== undefined && evt.exitCode !== 0) {
+          return finish(
+            new Error(
+              `Copilot CLI request failed with ${evt.exitCode}: ${stderr.trim() || "No error details provided."}`,
+            ),
+          );
+        }
+        finishResponse();
+      }
+    };
     child.stdout.on("data", (b: Buffer) => {
       buffered += b.toString();
       let nl: number;
       while ((nl = buffered.indexOf("\n")) !== -1) {
-        const line = buffered.slice(0, nl).trim();
+        const line = buffered.slice(0, nl);
         buffered = buffered.slice(nl + 1);
-        if (!line) continue;
-        let evt: CopilotEvent;
-        try {
-          evt = JSON.parse(line) as CopilotEvent;
-        } catch {
-          continue;
-        }
-        // The terminal `assistant.message` event carries the full reply text.
-        // Earlier `assistant.message_delta` events stream incremental tokens —
-        // we ignore them and rely on the final consolidated message.
-        if (evt.type === "assistant.message") {
-          const content = evt.data?.content;
-          if (typeof content === "string") assistantContent = content;
-        }
-        if (evt.type === "session.tools_updated") {
-          const m = (evt.data as { model?: string } | undefined)?.model;
-          if (typeof m === "string") modelOut = m;
-        }
-        if (evt.type === "error" || evt.type === "session.error") {
-          const msg = (evt.data as { message?: string } | undefined)?.message;
-          if (typeof msg === "string") errored = msg;
-        }
+        consumeLine(line);
       }
     });
     child.stderr.on("data", (b: Buffer) => (stderr += b.toString()));
     child.on("error", (e) =>
-      reject(
+      finish(
         new Error(
           `Could not spawn Copilot CLI at "${cliPath}": ${e.message}. Install GitHub Copilot CLI (https://docs.github.com/copilot/github-copilot-cli) or set MANGO_COPILOT_CLI to its full path.`,
         ),
       ),
     );
     child.on("close", (code) => {
-      if (errored) return reject(new Error(`Copilot CLI: ${errored}`));
-      if (code !== 0 && !assistantContent) {
-        return reject(
+      closed = true;
+      if (settled) return;
+      if (code !== 0) {
+        return finish(
           new Error(
             `Copilot CLI exited with ${code}: ${stderr.trim() || "(no stderr)"}`,
           ),
         );
       }
-      resolve({ text: assistantContent, model: modelOut });
+      consumeLine(buffered);
+      finishResponse();
     });
   });
 };
@@ -453,19 +485,16 @@ export const buildCopilotProvider = (
 ): AiProvider => {
   const model = opts.model ?? process.env.AI_MODEL ?? "auto";
   const cli = locateCli(opts.cliPath);
-  const authFound = detectCopilotAuth();
-
   const setupHint = !cli.found
     ? cli.source === "override" || cli.source === "env"
       ? `Copilot CLI path "${cli.command}" does not exist. Set the full path in AI settings or MANGO_COPILOT_CLI, for example /Users/you/.npm-global/bin/copilot.`
       : "Install the GitHub Copilot CLI (https://docs.github.com/copilot/github-copilot-cli) and log in once. Mango checks common locations including ~/.npm-global/bin/copilot, and you can set the full path in AI settings or MANGO_COPILOT_CLI."
-    : authFound
-      ? `Copilot CLI found at ${cli.command}. Mango will spawn it for each request.`
-      : `Copilot CLI found at ${cli.command}. Set GITHUB_TOKEN with Copilot access, or run the CLI once to log in.`;
+    : `Copilot CLI found at ${cli.command}. Mango uses its existing login, inherited COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN, or GitHub CLI authentication. Use Test to verify access.`;
 
   return {
     name: "copilot",
-    configured: cli.found && authFound,
+    // Only the CLI can resolve all supported login sources, including gh auth.
+    configured: cli.found,
     model,
     setupHint,
     async validate(): Promise<Record<string, string | number | boolean | null>> {

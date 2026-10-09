@@ -127,12 +127,17 @@ Each user can also set **Query timeout** (in seconds) in the Settings menu for d
 | `AI_MODEL` | e.g. `gpt-4o-mini`, `claude-sonnet-4.5`. |
 | `AI_API_KEY` | Provider key. OpenAI / GitHub Models / Azure / Ollama. |
 | `AI_BASE_URL` | OpenAI provider only — point at GitHub Models, Azure, Ollama, etc. |
-| `GITHUB_TOKEN` | Copilot provider — falls back to logged-in Copilot CLI session if unset. |
+| `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN` | Copilot provider — inherits these from the server environment, or uses the existing Copilot CLI login / `gh auth login`. |
+| `COPILOT_HOME` | Optional Copilot configuration directory. Mango preserves this setting (or the CLI's default home) so saved authentication remains available. |
 | `MANGO_COPILOT_CLI` | Optional full path to the Copilot CLI when it is not on `PATH` (for example `~/.npm-global/bin/copilot`). You can also set this in the UI. |
 | `MANGO_CLAUDE_CLI` | Optional full path to the Claude Code CLI when it is not on `PATH` (for example `~/.claude/local/claude`). You can also set this in the UI. |
 | `MANGO_CODEX_CLI` | Optional full path to the Codex CLI. Needs a current build (with `codex app-server`); on macOS Mango falls back to the one bundled in the ChatGPT app. You can also set this in the UI. |
 
 You can also configure the assistant from the UI (Settings menu); it'll be persisted (encrypted) in `ai-settings.json` under `MANGO_DATA_DIR`.
+
+For GitHub Copilot, authenticate as the user running the Mango server using Copilot's `/login` command or `gh auth login`, then use **Test** in AI settings to verify access. Mango uses the same authentication context for model discovery and chat; it does not create an empty Copilot configuration directory. Desktop apps inherit environment variables from their launcher, which may differ from your terminal.
+
+Copilot chat is text-only: Mango supplies the schema and conversation history, disables CLI tools and interactive questions, and leaves generated queries for you to apply in the UI. Requests time out after two minutes with an explicit error rather than waiting indefinitely.
 
 ## Development
 
