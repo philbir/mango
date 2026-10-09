@@ -1,0 +1,125 @@
+version: 2
+
+# Actions are pinned to full commit SHAs (see .github/workflows/*.yml) so a
+# force-pushed tag can't swap code into the job that holds the Apple and Tauri
+# signing keys. Pins only stay safe if something bumps them — that's this file.
+#
+# Every ecosystem is grouped into exactly two PRs: routine minor/patch bumps in
+# one, majors in another. Ungrouped, Dependabot opens one PR per dependency and
+# saturates the open-PR cap, silently withholding further updates behind it.
+# Grouping is also a correctness property: @codemirror/*, @opentelemetry/*,
+# @tauri-apps/* and actions/{upload,download}-artifact must move in lockstep
+# or the build breaks, and a single grouped PR is the only thing that
+# guarantees that.
+#
+# Majors stay in their own PR because the desktop, Docker and NuGet workflows
+# only run on tags — a broken major bump is not caught by PR CI, it is caught
+# on release day.
+#
+# Caveat: `cooldown.semver-*-days` is rejected for `github-actions` — the whole
+# file then fails validation and Dependabot silently reverts to
+# one-PR-per-dependency. Only `default-days` is accepted for every ecosystem.
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    cooldown:
+      default-days: 14
+    # tauri-action v1 renames `includeUpdaterJson` → `uploadUpdaterJson` and
+    # puts the version into the .app.tar.gz(.sig) asset names, which the
+    # hand-built latest.json in desktop-build.yml depends on. That migration
+    # needs a real tag build to verify, so it's done by hand, not in a group.
+    ignore:
+      - dependency-name: tauri-apps/tauri-action
+        update-types: ["version-update:semver-major"]
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  # pnpm workspace: Dependabot reads pnpm-workspace.yaml from the root and
+  # updates server/, ui/, docs-site/ and desktop/ against the single root
+  # lockfile, so one directory yields one PR per group. (A group does NOT span
+  # `directories` — listing each package.json would split it into one PR each.)
+  #
+  # default-days: 3 keeps Dependabot clear of pnpm's 48h `minimumReleaseAge`
+  # gate in pnpm-workspace.yaml — a fresher version would fail the lockfile
+  # update. Security pins under `overrides:` there are maintained by hand.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      npm-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: nuget
+    directory: "/aspire/Mango.Aspire.Hosting"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    cooldown:
+      semver-major-days: 14
+    groups:
+      dotnet:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      dotnet-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: cargo
+    directory: "/desktop/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    cooldown:
+      semver-major-days: 14
+    groups:
+      cargo:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      cargo-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  # node:22-alpine base image. A Node major (e.g. 24) lands in docker-major and
+  # also needs the workflows' `node-version: 22` and the root `engines` kept
+  # in step.
+  - package-ecosystem: docker
+    directory: "/docker"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    cooldown:
+      semver-major-days: 14
+    groups:
+      docker:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      docker-major:
+        patterns: ["*"]
+        update-types: ["major"]
