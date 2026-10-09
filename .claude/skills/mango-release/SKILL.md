@@ -60,7 +60,7 @@ The updater's `latest.json` embeds the notes at publish time; if they were edite
 
 ## Failure modes
 
-- **`ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` in every job** — `pnpm-lock.yaml` lost the `overrides:` block from `pnpm-workspace.yaml` (a tool regenerated it). Fix on a branch with `pnpm install`, merge, then re-tag (below).
+- **`ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` in every job** — `pnpm-lock.yaml` lost its `overrides:` block (the root `package.json` `pnpm.overrides`; a tool regenerated the lockfile). Fix on a branch with `pnpm install`, merge, then re-tag (below). The PR `CI` workflow and `server/test/lockfile.test.ts` should catch this before it reaches main.
 - **Build failed before publishing anything** (no release, updater job skipped) — fix on main, then move the tag: `git tag -d X.Y.Z && git push origin :refs/tags/X.Y.Z`, re-tag the new main commit, push. Confirm with the user first; never move a tag whose release was published.
 - **A matrix job failed after the release exists** — `gh run rerun <run-id> --failed`; don't re-tag.
 - **Workflow doesn't trigger** — tag has a `v` prefix, or was pushed as lightweight from a detached commit not on main.

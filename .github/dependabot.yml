@@ -51,7 +51,8 @@ updates:
   #
   # default-days: 3 keeps Dependabot clear of pnpm's 48h `minimumReleaseAge`
   # gate in pnpm-workspace.yaml — a fresher version would fail the lockfile
-  # update. Security pins under `overrides:` there are maintained by hand.
+  # update. Security pins (root package.json `pnpm.overrides`) are maintained
+  # by hand.
   - package-ecosystem: npm
     directory: "/"
     schedule:
