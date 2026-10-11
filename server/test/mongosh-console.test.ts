@@ -1,7 +1,14 @@
+import { EventEmitter } from "node:events";
+import { ShellInstanceState } from "@mongosh/shell-api";
 import { EJSON } from "bson";
 import { MongoClient } from "mongodb";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { type ConsoleLog, evaluateConsole } from "../src/mongosh-console.js";
+import {
+  type ConsoleLog,
+  createServiceProvider,
+  describeCursorSource,
+  evaluateConsole,
+} from "../src/mongosh-console.js";
 
 // Never connected: these scripts don't touch the server, so the evaluator is
 // exercised without a database. Port 9 (discard) fails fast if one ever does.
@@ -98,5 +105,62 @@ describe("evaluateConsole (mongosh runtime)", () => {
     await run("1");
     await run("2");
     expect(client.listenerCount("topologyDescriptionChanged")).toBe(before);
+  });
+});
+
+// Shell cursors are built lazily — the driver only connects on the first
+// batch — so the namespace / projection inspection runs without a server.
+describe("describeCursorSource", () => {
+  const shell = () => {
+    const sp = createServiceProvider(client, "acme", 1000);
+    return new ShellInstanceState(sp as never, new EventEmitter() as never);
+  };
+  const describe_ = (cursor: unknown) => describeCursorSource(cursor as never);
+
+  it("reports the namespace of a plain find()", async () => {
+    const cursor = await shell().currentDb.getCollection("users").find({ active: true });
+    expect(describe_(cursor)).toEqual({
+      source: { database: "acme", collection: "users", projected: false },
+      readOnlyReason: null,
+    });
+  });
+
+  it("follows the database the cursor ran against, not the session default", async () => {
+    const cursor = await shell().currentDb.getSiblingDB("other").getCollection("t").find();
+    expect(describe_(cursor).source).toEqual({ database: "other", collection: "t", projected: false });
+  });
+
+  it("flags projected finds so the editor loads the full document", async () => {
+    const byArg = await shell().currentDb.getCollection("users").find({}, { name: 1 });
+    expect(describe_(byArg).source?.projected).toBe(true);
+    const byChain = (await shell().currentDb.getCollection("users").find()).projection({ name: 1 });
+    expect(describe_(byChain).source?.projected).toBe(true);
+  });
+
+  it("refuses rows whose _id is projected out", async () => {
+    const cursor = await shell().currentDb.getCollection("users").find({}, { _id: 0, name: 1 });
+    const d = describe_(cursor);
+    expect(d.source).toBeNull();
+    expect(d.readOnlyReason).toMatch(/excludes _id/);
+  });
+
+  it("refuses mapped cursors", async () => {
+    const cursor = (await shell().currentDb.getCollection("users").find()).map((d) => d);
+    const d = describe_(cursor);
+    expect(d.source).toBeNull();
+    expect(d.readOnlyReason).toMatch(/map\(\)/);
+  });
+
+  it("refuses aggregations", async () => {
+    const cursor = await shell().currentDb.getCollection("users").aggregate([{ $match: {} }]);
+    const d = describe_(cursor);
+    expect(d.source).toBeNull();
+    expect(d.readOnlyReason).toMatch(/aggregation/);
+    expect(cursor.constructor.name).toBe("AggregationCursor");
+  });
+
+  it("names find cursors `Cursor` like mongosh does", async () => {
+    const cursor = await shell().currentDb.getCollection("users").find();
+    expect(cursor.constructor.name).toBe("Cursor");
   });
 });

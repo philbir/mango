@@ -76,6 +76,8 @@ consoleRoute.post("/", async (c) => {
       stringifyEJSON({
         result: evaled.result,
         type: evaled.type,
+        source: evaled.source,
+        readOnlyReason: evaled.readOnlyReason,
         logs,
         skip: evaled.skip,
         limit: evaled.limit,
@@ -91,6 +93,9 @@ consoleRoute.post("/", async (c) => {
     return c.body(
       stringifyEJSON({
         result: null,
+        type: null,
+        source: null,
+        readOnlyReason: null,
         logs,
         skip,
         limit,

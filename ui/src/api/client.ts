@@ -12,8 +12,25 @@ export interface ConsoleLogEntry {
   args: unknown[];
 }
 
+/**
+ * Namespace behind a paged console result. Present only when the rows are
+ * live documents of one collection (a plain `find()`), so edits can be
+ * written back through the document endpoints.
+ */
+export interface ConsoleSource {
+  database: string;
+  collection: string;
+  /** The find applied a projection — rows are partial documents. */
+  projected: boolean;
+}
+
 export interface ConsoleRunResult {
   result: unknown;
+  /** mongosh's result type (`Cursor`, `AggregationCursor`, `Document`, …). */
+  type: string | null;
+  source: ConsoleSource | null;
+  /** Why a paged result is read-only, when `source` is null. */
+  readOnlyReason: string | null;
   /** Output of `print(...)` / `console.*` calls, in call order. */
   logs: ConsoleLogEntry[];
   skip: number;

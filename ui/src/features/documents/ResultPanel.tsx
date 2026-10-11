@@ -6,6 +6,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconLoader2,
+  IconLock,
   IconPencil,
   IconTable,
   IconTrash,
@@ -59,6 +60,8 @@ interface Props {
   emptyHint?: string;
   /** Enables row multi-select + a batch action bar. Table view only. */
   selection?: ResultSelection;
+  /** Shown next to the status when a document result can't be edited. */
+  readOnlyHint?: string | null;
 }
 
 const formatElapsed = (ms: number): string => {
@@ -91,6 +94,7 @@ export const ResultPanel = ({
   activeRowId,
   emptyHint,
   selection,
+  readOnlyHint,
 }: Props) => {
   const { jsonFormat, formatOptions } = useSettings();
   const [runningMs, setRunningMs] = useState(0);
@@ -150,6 +154,15 @@ export const ResultPanel = ({
         {!isLoading && !errorMessage && hasResult && elapsedMs != null && (
           <span className="flex items-center gap-1 tabular-nums text-emerald-600 dark:text-emerald-400">
             <IconCheck size={13} /> {formatElapsed(elapsedMs)}
+          </span>
+        )}
+        {!isLoading && !errorMessage && canTable && readOnlyHint && (
+          <span
+            className="flex min-w-0 items-center gap-1 truncate text-slate-500 dark:text-slate-400"
+            title={readOnlyHint}
+          >
+            <IconLock size={12} className="flex-shrink-0" />
+            <span className="truncate">{readOnlyHint}</span>
           </span>
         )}
         {selection && selection.count > 0 && (

@@ -1,7 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   IconAlertTriangle,
   IconDeviceFloppy,
+  IconLoader2,
   IconPencil,
   IconTrash,
   IconX,
@@ -31,9 +32,18 @@ interface Props {
   document: Record<string, unknown>;
   onClose: () => void;
   readOnly?: boolean;
+  /** Database the collection lives in; defaults to the active database. */
+  database?: string;
+  /**
+   * `document` is a projected (partial) row: fetch the full document by `_id`
+   * before showing it, so a save never writes a partial document back.
+   */
+  loadFull?: boolean;
   /** Called after a successful save — lets the host refresh its own queries
    * (e.g. a notebook re-runs its query) on top of the built-in ["docs"] invalidation. */
   onSaved?: (document: Record<string, unknown>) => void;
+  /** Called after a successful delete, before the drawer closes. */
+  onDeleted?: () => void;
 }
 
 type Mode = "view" | "edit";
@@ -45,17 +55,39 @@ const stripId = (doc: Record<string, unknown>): Record<string, unknown> => {
 
 export const DocumentEditor = ({
   collectionName,
-  document: doc,
+  document: rowDoc,
   onClose,
   readOnly = false,
+  database: databaseProp,
+  loadFull = false,
   onSaved,
+  onDeleted,
 }: Props) => {
   const { activeId } = useActiveConnection();
-  const { database } = useActiveDatabase();
+  const { database: activeDatabase } = useActiveDatabase();
+  const database = databaseProp ?? activeDatabase;
   const { jsonFormat, formatOptions } = useSettings();
   const queryClient = useQueryClient();
 
-  const id = extractIdString(doc._id);
+  const id = extractIdString(rowDoc._id);
+  // A projected row is only a pointer: load the whole document for the
+  // drawer so view and edit both work on what's actually stored.
+  const full = useQuery({
+    queryKey: ["doc", activeId, database, collectionName, id],
+    queryFn: () => api.getDocument(activeId!, collectionName, id, database ?? undefined),
+    enabled: loadFull && !!activeId,
+    staleTime: 0,
+  });
+  const doc = loadFull && full.data ? full.data.document : rowDoc;
+  const loading = loadFull && full.isPending;
+  const loadError =
+    loadFull && full.error
+      ? full.error instanceof ApiError
+        ? full.error.message
+        : full.error instanceof Error
+          ? full.error.message
+          : String(full.error)
+      : null;
   // View and edit both render in the global format (Settings → Configure
   // formats), so what you read is what you edit. Plain JSON can't round-trip
   // BSON types, so editing falls back to the shell format for it.
@@ -103,6 +135,7 @@ export const DocumentEditor = ({
     setError(null);
     setMode("view");
     queryClient.invalidateQueries({ queryKey: ["docs", activeId] });
+    queryClient.setQueryData(["doc", activeId, database, collectionName, id], result);
     onSaved?.(result.document);
   };
 
@@ -154,6 +187,7 @@ export const DocumentEditor = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["docs", activeId] });
+      onDeleted?.();
       onClose();
     },
     onError: (e) => {
@@ -250,7 +284,7 @@ export const DocumentEditor = ({
             )}
           </div>
 
-          {isViewing && !readOnly && (
+          {isViewing && !readOnly && !loading && !loadError && (
             <>
               <button
                 type="button"
@@ -313,8 +347,19 @@ export const DocumentEditor = ({
           </div>
         )}
 
+        {loadError && (
+          <div className="flex items-center gap-1.5 border-b border-red-200 bg-red-50 px-4 py-1 text-[11px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+            <IconAlertTriangle size={13} />
+            <span>Couldn't load the full document: {loadError}</span>
+          </div>
+        )}
+
         <div className="flex-1 overflow-hidden">
-          {isViewing ? (
+          {loading ? (
+            <div className="flex items-center gap-2 p-4 text-[12px] text-slate-500 dark:text-slate-400">
+              <IconLoader2 size={14} className="animate-spin" /> Loading document…
+            </div>
+          ) : isViewing ? (
             <MonacoJsonInput
               key={`view-${id}-${jsonFormat}`}
               value={fullJson}

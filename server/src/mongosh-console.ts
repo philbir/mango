@@ -4,7 +4,7 @@ import { NodeDriverServiceProvider } from "@mongosh/service-provider-node-driver
 import { ShellInstanceState, toShellResult } from "@mongosh/shell-api";
 import { ShellEvaluator } from "@mongosh/shell-evaluator";
 import { Binary } from "bson";
-import type { MongoClient } from "mongodb";
+import { FindCursor, type MongoClient } from "mongodb";
 import { allowTopLevelAwait, splitScript } from "./console-script.js";
 import { stringifyEJSON } from "./ejson.js";
 
@@ -24,10 +24,28 @@ export interface ConsoleLog {
   args: unknown[];
 }
 
+/**
+ * Where a paged result's documents came from, so the UI can write edits
+ * back. Only a plain `find` cursor qualifies: its rows are live documents
+ * of one collection, keyed by `_id`. Aggregations, change streams, command
+ * cursors and mapped cursors return shapes that aren't documents of the
+ * namespace they ran against, so they stay read-only.
+ */
+export interface ConsoleSource {
+  database: string;
+  collection: string;
+  /** The find applied a projection — rows are partial documents. */
+  projected: boolean;
+}
+
 export interface ConsoleEvalResult {
   result: unknown;
-  /** mongosh's result type (`Cursor`, `Document`, `ShowCollectionsResult`, …). */
+  /** mongosh's result type (`Cursor`, `AggregationCursor`, `Document`, `ShowCollectionsResult`, …). */
   type: string | null;
+  /** Set when the rows are editable documents of one collection. */
+  source: ConsoleSource | null;
+  /** Why `source` is null for a paged result, for the UI to explain. */
+  readOnlyReason: string | null;
   skip: number;
   limit: number;
   hasMore: boolean;
@@ -54,6 +72,10 @@ const MAX_LOG_ENTRIES = 1000;
 interface ShellCursor {
   tryNext(): Promise<unknown>;
   close?(): Promise<void>;
+  /** The driver cursor the shell cursor wraps. */
+  _cursor?: unknown;
+  /** Set by the shell cursor's `.map()`. */
+  _transform?: unknown;
 }
 
 // Shell-API cursors (find, aggregate, watch, runCursorCommand) all expose
@@ -165,6 +187,79 @@ const LEGACY_UUID_HELPERS = {
   LUUID: legacyUuid(() => undefined),
 };
 
+// `{ _id: 0 }` / `{ _id: false }` drops the key the editor needs to address a row.
+const projectionDropsId = (projection: unknown): boolean => {
+  if (!projection || typeof projection !== "object") return false;
+  const id = (projection as Record<string, unknown>)._id;
+  return id === 0 || id === false;
+};
+
+type SourceDescription =
+  | { source: ConsoleSource; readOnlyReason: null }
+  | { source: null; readOnlyReason: string };
+
+/**
+ * Decide whether a cursor's rows can be edited in place. Looks at the driver
+ * cursor behind the shell one: the namespace it ran against, its projection
+ * and whether a `.map()` transform rewrites rows. The class check is safe
+ * here (unlike bson values) — the driver's own cursor classes are a single
+ * copy — but the constructor name is accepted too for bundled builds.
+ */
+// mongosh wraps the driver cursor for its deep-inspect output; the original
+// is kept behind this symbol.
+const ORIGINAL_CURSOR = Symbol.for("@@mongosh.originalCursor");
+
+export const describeCursorSource = (cursor: ShellCursor): SourceDescription => {
+  const wrapped = cursor._cursor as Record<symbol, unknown> | undefined;
+  const driver = (wrapped?.[ORIGINAL_CURSOR] ?? wrapped) as
+    | {
+        namespace?: { db?: string; collection?: string };
+        findOptions?: { projection?: unknown };
+        transform?: unknown;
+        constructor?: { name?: string };
+      }
+    | undefined;
+  if (!driver || typeof driver !== "object") {
+    return { source: null, readOnlyReason: "This result isn't backed by a query cursor." };
+  }
+  const isFind = driver instanceof FindCursor || driver.constructor?.name === "FindCursor";
+  if (!isFind) {
+    const name = driver.constructor?.name ?? "";
+    const what =
+      name === "AggregationCursor"
+        ? "an aggregation"
+        : name === "ChangeStream" || name === "ChangeStreamCursor"
+          ? "a change stream"
+          : "a command cursor";
+    return {
+      source: null,
+      readOnlyReason: `Rows come from ${what}, not from a find() — they can't be edited.`,
+    };
+  }
+  const { db, collection } = driver.namespace ?? {};
+  if (!db || !collection) {
+    return { source: null, readOnlyReason: "The cursor has no collection namespace." };
+  }
+  if (cursor._transform != null || driver.transform != null) {
+    return {
+      source: null,
+      readOnlyReason: "Rows were transformed with .map() — they can't be edited.",
+    };
+  }
+  const projection = driver.findOptions?.projection;
+  if (projectionDropsId(projection)) {
+    return {
+      source: null,
+      readOnlyReason: "The projection excludes _id — rows can't be addressed for editing.",
+    };
+  }
+  const projected =
+    !!projection &&
+    typeof projection === "object" &&
+    Object.keys(projection as Record<string, unknown>).length > 0;
+  return { source: { database: db, collection, projected }, readOnlyReason: null };
+};
+
 const collectPage = async (
   cursor: ShellCursor,
   skip: number,
@@ -253,14 +348,20 @@ export const evaluateConsole = async (opts: ConsoleEvalOptions): Promise<Console
     }
 
     if (isShellCursor(value)) {
+      // Inspect before paging: the driver cursor is still intact then, and
+      // the shell cursor's type name is what mongosh would print for it.
+      const described = describeCursorSource(value);
+      const type = (value as { constructor?: { name?: string } }).constructor?.name ?? "Cursor";
       const { docs, hasMore } = await collectPage(value, skip, limit);
-      return { result: docs, type: "Cursor", skip, limit, hasMore, paged: true };
+      return { result: docs, type, ...described, skip, limit, hasMore, paged: true };
     }
 
     const shellResult = await toShellResult(value);
     return {
       result: shellResult.printable ?? null,
       type: shellResult.type,
+      source: null,
+      readOnlyReason: null,
       skip,
       limit,
       hasMore: false,

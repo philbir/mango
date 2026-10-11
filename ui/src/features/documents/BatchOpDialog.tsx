@@ -15,9 +15,11 @@ interface Props {
   /** Number of documents the filter targets, for the summary line. */
   count: number | null;
   initialOp: BatchOp;
+  /** Database the collection lives in; defaults to the active database. */
+  database?: string;
   onClose: () => void;
   /** Called after a successful op — the host clears its selection. */
-  onDone: () => void;
+  onDone: (op: BatchOp) => void;
 }
 
 const DEFAULT_UPDATE = '{\n  "$set": {\n    \n  }\n}';
@@ -27,11 +29,13 @@ export const BatchOpDialog = ({
   filterEJSON: filterProp,
   count: countProp,
   initialOp,
+  database: databaseProp,
   onClose,
   onDone,
 }: Props) => {
   const { activeId } = useActiveConnection();
-  const { database } = useActiveDatabase();
+  const { database: activeDatabase } = useActiveDatabase();
+  const database = databaseProp ?? activeDatabase;
   const queryClient = useQueryClient();
 
   // Snapshot the target at open time. The op runs against exactly the rows
@@ -81,7 +85,7 @@ export const BatchOpDialog = ({
         );
       }
       setError(null);
-      onDone();
+      onDone(op);
     },
     onError: (e) => {
       setError(
