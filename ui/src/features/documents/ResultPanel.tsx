@@ -133,7 +133,7 @@ export const ResultPanel = ({
   const hasResult = rawValue !== null && rawValue !== undefined;
 
   return (
-    <section className="flex flex-1 flex-col overflow-hidden">
+    <section className="flex flex-1 flex-col overflow-hidden" data-testid="result-panel">
       <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 text-[11.5px] dark:border-slate-800 dark:bg-slate-900/40">
         <span className="eyebrow">Result</span>
         {isLoading && (
@@ -160,6 +160,7 @@ export const ResultPanel = ({
           <span
             className="flex min-w-0 items-center gap-1 truncate text-slate-500 dark:text-slate-400"
             title={readOnlyHint}
+            data-testid="result-readonly-hint"
           >
             <IconLock size={12} className="flex-shrink-0" />
             <span className="truncate">{readOnlyHint}</span>

@@ -16,6 +16,8 @@ pnpm test                              # vitest run (server only)
 pnpm --filter @mango/server test:watch
 pnpm --filter @mango/server test ejson    # single test file
 pnpm --filter @mango/ui typecheck     # tsc -b --noEmit (UI has no test runner)
+pnpm e2e:install                       # once: Chromium for Playwright
+pnpm e2e                               # Playwright e2e (e2e/): starts Mongo + server + UI itself
 pnpm aspire                            # what Aspire's WithMango() invokes: install + UI build + server dev
 
 # Local TypeScript Aspire AppHost (apphost.ts) — orchestrates server + UI under
@@ -30,7 +32,7 @@ pnpm tauri:dev                         # native shell + Vite HMR (sidecar NOT us
 pnpm tauri:build                       # full bundle (.dmg / .msi / .deb / .AppImage)
 ```
 
-The UI has no separate test runner — all tests live in `server/test/` and run under vitest. There's no repo-wide linter; rely on `tsc` strict-mode (the server has `noUncheckedIndexedAccess`).
+The UI has no unit test runner — unit tests live in `server/test/` and run under vitest. Browser coverage is the Playwright suite in `e2e/` (see `e2e/README.md`): `scripts/stack.ts` starts MongoDB (`MANGO_E2E_MONGO_URL`, else mongodb-memory-server), the server and Vite, and the tests seed `mango_e2e` before each case and assert through the driver. Monaco editors are filled via clipboard paste in tests — typing triggers bracket auto-closing. There's no repo-wide linter; rely on `tsc` strict-mode (the server has `noUncheckedIndexedAccess`).
 
 ## Architecture
 

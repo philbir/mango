@@ -113,14 +113,20 @@ export const DocumentEditor = ({
     | null
   >(null);
 
-  // Reset state when the document changes (different row clicked).
+  // Reset state when a different row is opened. Keyed on the id, not the
+  // content: a host refreshing the same document after a save (the console
+  // patches its rows in place) must not wipe the "Saved" state.
   useEffect(() => {
     setMode("view");
-    setEditText(editJson);
     setError(null);
     setSavedAt(null);
     setPreview(null);
-  }, [editJson]);
+  }, [id]);
+  // Track the document while viewing so edit mode starts from what's shown —
+  // including the full document that `loadFull` swaps in after mount.
+  useEffect(() => {
+    if (mode === "view") setEditText(editJson);
+  }, [editJson, mode]);
 
   // Confirm dialogs show the command in shell syntax — `ObjectId("…")`, not
   // `{ "$oid": … }` — regardless of the editor format.
@@ -267,6 +273,7 @@ export const DocumentEditor = ({
           and keyboard-navigable while a document is open. */}
       <div
         className="fixed inset-y-0 right-0 z-30 flex w-1/2 min-w-[480px] flex-col border-l border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        data-testid="document-drawer"
         data-doc-editor-locked={!isViewing || preview ? "" : undefined}
       >
         <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
@@ -632,7 +639,10 @@ const PreviewShell = ({
       if (e.target === e.currentTarget && !busy) onCancel();
     }}
   >
-    <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+    <div
+      className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      data-testid="confirm-dialog"
+    >
       <header className="flex items-start gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
         {danger && (
           <IconAlertTriangle

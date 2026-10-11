@@ -133,7 +133,10 @@ export const BatchOpDialog = ({
         if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        data-testid="batch-dialog"
+      >
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
           {danger && (
             <IconAlertTriangle

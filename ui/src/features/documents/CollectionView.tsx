@@ -477,7 +477,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
   });
 
   return (
-    <div className="flex h-full flex-1 flex-col">
+    <div className="flex h-full flex-1 flex-col" data-testid="collection-view">
       <header className="flex h-10 flex-shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 pl-4 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
         <IconTable size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
         <div className="flex min-w-0 flex-1 items-baseline gap-2">

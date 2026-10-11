@@ -401,7 +401,7 @@ export const ConsoleView = ({
         : null);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden" data-testid="console-view">
       {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath ? (
         <WorkspaceFileHeader
           workspaceId={tab.workspaceId}

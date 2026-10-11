@@ -3,6 +3,7 @@ packages:
   - ui
   - docs-site
   - desktop
+  - e2e
 
 # Supply-chain cooldown: refuse package versions published less than 48h ago.
 # Value is in MINUTES (2880 = 48h) — carried over from Yarn's npmMinimalAgeGate.
