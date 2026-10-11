@@ -222,7 +222,10 @@ export const describeCursorSource = (cursor: ShellCursor): SourceDescription => 
   if (!driver || typeof driver !== "object") {
     return { source: null, readOnlyReason: "This result isn't backed by a query cursor." };
   }
-  const isFind = driver instanceof FindCursor || driver.constructor?.name === "FindCursor";
+  // Checked through `object` so the instanceof doesn't narrow `driver` to the
+  // driver's public type, which hides the internals read below.
+  const isFind =
+    (driver as object) instanceof FindCursor || driver.constructor?.name === "FindCursor";
   if (!isFind) {
     const name = driver.constructor?.name ?? "";
     const what =
