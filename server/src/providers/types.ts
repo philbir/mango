@@ -58,14 +58,14 @@ export const buildChatSystemPrompt = (params: {
 
   const apply = `When the user asks for something actionable, include the artifact in a fenced code block tagged with one of these languages so the UI can offer an "Apply" button:
 
-- \`\`\`mango-filter — a JSON MongoDB filter document for find() (used in collection view)
+- \`\`\`mango-filter — a MongoDB filter document for find() (used in collection view)
 - \`\`\`mango-projection — a JSON projection (used in collection view)
 - \`\`\`mango-sort — a JSON sort spec
 - \`\`\`mango-pipeline — a JSON aggregation pipeline (array of stages)
 - \`\`\`mango-shell — a JSON document for db.runCommand (used in shell view)
-- \`\`\`mango-console — a single JavaScript expression like db.users.find({…}) (used in console view)
+- \`\`\`mango-console — a mongosh script, usually one expression like db.users.find({…}) (used in console view)
 
-Use Extended JSON for special types: \`{"$oid":"…"}\`, \`{"$date":"…"}\`, \`{"$binary":{"base64":"…","subType":"04"}}\`. Prefer case-insensitive regex \`{"$regex":"…","$options":"i"}\` for free-text searches. Output one artifact per response unless the user clearly asks for several.`;
+Write special BSON types as mongo shell literals — never Extended JSON wrappers like \`{"$oid":"…"}\`: \`ObjectId("…")\`, \`UUID("…")\`, \`ISODate("…")\`, \`NumberLong("…")\`, \`Decimal128("…")\`. Mango parses these in every artifact (e.g. \`{ "_id": ObjectId("6acb7ef0a48ad4bb01c821eb") }\`). Pick the literal from the field's type in the schema: \`objectId\` → \`ObjectId("…")\`, \`uuid\` / \`binary\` holding UUIDs → \`UUID("…")\`, \`date\` → \`ISODate("…")\`; a \`string\` or \`number\` id stays a plain value even if it looks like hex. For a lookup by id, match \`_id\` directly instead of using \`$in\` or \`$eq\`. Prefer case-insensitive regex \`{"$regex":"…","$options":"i"}\` for free-text searches. Output one artifact per response unless the user clearly asks for several.`;
 
   const writeStyle = `
 Write like an IDE assistant: be concise, use markdown with headings, lists, and short code spans. Explain *why* the artifact looks the way it does in 1-2 sentences. Reference fields that actually exist in the schema; if the user asks about a field that doesn't appear, say so and propose the closest match.`;
@@ -94,7 +94,7 @@ ${schemaText || "(no schema available)"}
 
 ${apply}
 
-When suggesting console commands, prefer \`mango-console\` blocks that contain a single expression of the form \`db.<collection>.<method>(args)\`. Available collection methods: find, findOne, aggregate, countDocuments, estimatedDocumentCount, distinct, indexes, listIndexes, insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne, deleteMany. You may chain .sort(), .skip(), .limit(). Helpers: ObjectId("…"), UUID("…"), ISODate("…"), NumberDecimal("…"). Be conservative with destructive operations.
+When suggesting console commands, use \`mango-console\` blocks. The console runs the real mongosh shell API, so write exactly what you would type in mongosh: any database / collection / cursor method (\`db.<collection>.find(…).sort(…).limit(…)\`, \`aggregate\`, \`getIndexes()\`, \`stats()\`, \`bulkWrite\`, \`explain()\`, \`db.adminCommand(…)\`, …), \`use <db>\` / \`show collections\` lines, \`rs.*\` / \`sh.*\` helpers, \`print\` / \`printjson\`, and all BSON constructors (ObjectId, UUID, ISODate, NumberLong, NumberInt, Decimal128, Timestamp, BinData, HexData, MinKey, MaxKey, …). Database calls are awaited automatically — don't add \`await\`. The value of the last expression is shown as the result; a cursor is paged. Be conservative with destructive operations.
 ${writeStyle}`;
   }
 
@@ -124,7 +124,7 @@ ${schemaText ? `Schema of the current database:\n\n${schemaText}\n` : ""}
 
 ${apply}
 
-When suggesting commands, prefer \`mango-shell\` blocks containing a single JSON document suitable for \`db.runCommand\` (e.g. \`{"ping":1}\`, \`{"collStats":"users"}\`, \`{"aggregate":"users","pipeline":[…],"cursor":{}}\`).
+When suggesting commands, prefer \`mango-shell\` blocks containing a single document suitable for \`db.runCommand\` (e.g. \`{"ping":1}\`, \`{"collStats":"users"}\`, \`{"aggregate":"users","pipeline":[…],"cursor":{}}\`).
 ${writeStyle}`;
   }
 

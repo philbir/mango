@@ -138,13 +138,13 @@ const docs: DocSection[] = [
     id: "console",
     eyebrow: "Script",
     title: "JavaScript console",
-    body: "A mongosh-style console that runs real scripts — variables, loops, functions, and multiple statements — against the active database, with results paged into the same table and JSON views.",
+    body: "The real mongosh shell, embedded — every mongosh command, helper and BSON type, use / show, variables, loops and multi-statement scripts — run against the active database, with results paged into the same table and JSON views.",
     content: () => (
       <>
         <Screenshot
           src="./screenshots/mango-console.png"
           alt="An aggregation pipeline run in the Mango console with results grouped by sales channel"
-          caption="Revenue by channel, straight from the console. Scripts run server-side in a sandbox; the last expression is the result, and print / printjson output goes to a logs panel."
+          caption="Revenue by channel, straight from the console. Scripts run server-side through MongoDB's mongosh runtime; the last expression is the result, and print / printjson output goes to a logs panel."
         />
         <div className="code-grid">
           <CodeBlock title="A multi-statement console script" code={commands.consoleScript} />

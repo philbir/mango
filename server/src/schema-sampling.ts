@@ -1,4 +1,4 @@
-import { Binary, Decimal128, ObjectId, UUID } from "bson";
+import { Binary, type ObjectId } from "bson";
 import type { Db } from "mongodb";
 
 export interface FieldInfo {
@@ -8,15 +8,38 @@ export interface FieldInfo {
   distinctValues?: unknown[];
 }
 
-const detectType = (value: unknown): string => {
+// Values come from the driver, which loads its own (CJS) copy of bson — the
+// classes imported here (ESM) are different identities, so `instanceof`
+// misses and every ObjectId used to be reported as "object". Match on
+// `_bsontype`, which both builds set.
+const bsonType = (value: unknown): string | undefined =>
+  value !== null && typeof value === "object"
+    ? (value as { _bsontype?: string })._bsontype
+    : undefined;
+
+const isUuid = (value: unknown): value is Binary =>
+  bsonType(value) === "Binary" &&
+  (value as Binary).sub_type === Binary.SUBTYPE_UUID &&
+  (value as Binary).length() === 16;
+
+export const detectType = (value: unknown): string => {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
   if (Array.isArray(value)) return "array";
   if (value instanceof Date) return "date";
-  if (value instanceof UUID) return "uuid";
-  if (value instanceof ObjectId) return "objectId";
-  if (value instanceof Decimal128) return "decimal";
-  if (value instanceof Binary) return "binary";
+  if (isUuid(value)) return "uuid";
+  switch (bsonType(value)) {
+    case "ObjectId":
+      return "objectId";
+    case "Decimal128":
+      return "decimal";
+    case "Binary":
+      return "binary";
+    case "Long":
+    case "Int32":
+    case "Double":
+      return "number";
+  }
   if (typeof value === "string") return "string";
   if (typeof value === "number") return "number";
   if (typeof value === "boolean") return "boolean";
@@ -24,12 +47,12 @@ const detectType = (value: unknown): string => {
   return typeof value;
 };
 
-const truncatedExample = (value: unknown): unknown => {
+export const truncatedExample = (value: unknown): unknown => {
   if (typeof value === "string" && value.length > 60) {
     return `${value.slice(0, 57)}…`;
   }
-  if (value instanceof UUID) return value.toString();
-  if (value instanceof ObjectId) return value.toHexString();
+  if (isUuid(value)) return value.toUUID().toString();
+  if (bsonType(value) === "ObjectId") return (value as ObjectId).toHexString();
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return `array(${value.length})`;
   if (value && typeof value === "object") {

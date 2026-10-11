@@ -57,11 +57,21 @@ The Aspire `WithMango()` extension defaults to standalone (pass `standalone: fal
 
 The wire format on every collection/shell/document endpoint is **MongoDB Extended JSON in canonical (non-relaxed) mode** — `{ "$oid": "..." }`, `{ "$date": "..." }`, `{ "$numberDecimal": "..." }`. Both server (`server/src/ejson.ts`) and UI (`ui/src/api/client.ts`) parse responses through `bson`'s `EJSON.parse` with `relaxed: false`. When adding a new endpoint that returns Mongo documents, use `stringifyEJSON` and set `content-type: application/json; charset=utf-8` manually — do **not** use `c.json(...)` for document payloads, since it would double-encode through the standard JSON serializer and lose type fidelity.
 
-The AI provider's filter output is also EJSON (see the system prompt in `server/src/providers/types.ts`).
+Editable inputs are the exception: the collection filter (Raw + Builder), the shell view and assistant artifacts take mongo-shell literals (`ObjectId("…")`, `UUID("…")`, `ISODate("…")`, bare keys) as well as (Extended) JSON; the console is full mongosh (see below). The UI parses them with `ui/src/features/documents/shellParse.ts` and sends canonical EJSON (`filterText.ts` for filters), so the server never sees shell syntax. The assistant's system prompt (`server/src/providers/types.ts`) asks for shell literals, not `{"$oid": …}` wrappers.
+
+Schema sampling (`server/src/schema-sampling.ts`) types values by `_bsontype`, not `instanceof`: the driver loads bson's CJS build while server source imports the ESM one, so the classes differ.
 
 ### AI provider abstraction
 
 Four providers behind a single `AiProvider` interface (`server/src/providers/types.ts`): `openai` (any OpenAI-compatible endpoint — OpenAI, GitHub Models, Azure, Ollama) plus three that spawn the user's installed CLI per request — `copilot`, `claude-code` and `codex`. Switched by `AI_PROVIDER` env or the saved AI settings. Each implements `chat()` and `listModels()`; the CLI providers query the live account catalog (Copilot: `copilot --acp` `session/new`; Claude Code: stream-json `initialize` control request; Codex: `codex app-server` `model/list`) and cache it for 10 minutes — don't reintroduce hardcoded model lists, they go stale. The `/api/ai/query` route samples 30 documents from the target collection (`schema-sampling.ts`) and renders a schema text into the system prompt before calling the provider.
+
+### JavaScript console (embedded mongosh)
+
+`/api/connections/:cid/console` runs scripts through MongoDB's own mongosh runtime — `@mongosh/shell-api` + `@mongosh/shell-evaluator` on a `NodeDriverServiceProvider` wrapping the connection's cached `MongoClient` (`server/src/mongosh-console.ts`). Don't re-implement shell features by hand; anything mongosh supports should just work. Per request we build a fresh service provider + `ShellInstanceState` (~3ms): its `baseCmdOptions` carry the request's AbortSignal, read methods get `maxTimeMS`, its `close()` is a no-op (so `quit()` / `db.getMongo().close()` can't close the shared client) and the topology listener its constructor adds to the shared client is removed again. Cursor results are paged with `tryNext()`; everything else goes through mongosh's `toShellResult().printable`. `server/src/console-script.ts` adds what mongosh's line-by-line REPL gives interactively but a pasted script lacks: `use` / `show` lines anywhere in a script, and top-level `await`. The VM context is not a security boundary (host-realm functions are reachable) — see `docs/SECURITY_REVIEW.md`.
+
+The console editor (`ui/src/components/MonacoShellInput.tsx`) completes through `POST /api/connections/:cid/console/complete` → `server/src/mongosh-autocomplete.ts`, mongosh's own autocompleter (`initNewAutocompleter`: a TypeScript language service over the shell API types plus sampled documents — collections, every method, fields, stages/operators, `use`/`show` args). Completers stay warm per shared client + database (first call ~0.5s, then ~30–80ms); lookups that fail degrade to type-only completions. The editor falls back to its static list only when the endpoint can't answer. Monaco's built-in JavaScript language features are switched off there (their TypeScript worker isn't bundled).
+
+mongosh's packages assume npm hoisting: undeclared runtime deps are added via `pnpm.packageExtensions` in the root `package.json`, and optional native modules its connection stack references are `--external` in `desktop/scripts/compile-server.mjs`.
 
 ### Desktop sidecar
 

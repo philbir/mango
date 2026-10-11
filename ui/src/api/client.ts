@@ -939,6 +939,28 @@ export const api = {
     }>;
   },
 
+  /**
+   * mongosh autocompletion for console scripts. `code` is the script up to
+   * the cursor; each item replaces the last `replaceLength` characters.
+   */
+  async completeConsole(params: {
+    cid: string;
+    code: string;
+    database?: string;
+    signal?: AbortSignal;
+  }): Promise<{ replaceLength: number; items: string[] }> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await apiFetch(`${cidPath(params.cid)}/console/complete${qs}`, {
+      method: "POST",
+      signal: params.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: params.code }),
+    });
+    return handlePlainJson(res) as Promise<{ replaceLength: number; items: string[] }>;
+  },
+
   async runConsole(params: {
     cid: string;
     command: string;

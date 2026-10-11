@@ -54,6 +54,19 @@
       "tar": "^7.5.22",
       "brace-expansion": "^5.0.12",
       "shell-quote": "^1.10.0"
+    },
+    "packageExtensions": {
+      "@mongosh/shell-api": {
+        "dependencies": {
+          "@mongosh/types": "^5.4.0",
+          "semver": "^7.7.0"
+        }
+      },
+      "@mongosh/shell-evaluator": {
+        "dependencies": {
+          "@mongosh/types": "^5.4.0"
+        }
+      }
     }
   },
   "engines": {

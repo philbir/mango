@@ -1,10 +1,10 @@
-import { IconSparkles, IconX } from "@tabler/icons-react";
+import { IconMessagePlus, IconSparkles, IconX } from "@tabler/icons-react";
 import { useCallback, useRef } from "react";
 import { useAssistant } from "./AssistantContext";
 import { ChatBox } from "./ChatBox";
 
 export const AssistantPanel = () => {
-  const { open, setOpen, width, setWidth } = useAssistant();
+  const { open, setOpen, width, setWidth, messages, newSession } = useAssistant();
   const dragRef = useRef<{ start: number; base: number } | null>(null);
 
   const onMouseDown = useCallback(
@@ -44,6 +44,16 @@ export const AssistantPanel = () => {
         <div className="flex-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
           Assistant
         </div>
+        <button
+          type="button"
+          onClick={newSession}
+          disabled={messages.length === 0}
+          className="btn btn-sm btn-ghost"
+          title="Start a new chat — also happens automatically when you switch connection, database, collection, tab or view"
+        >
+          <IconMessagePlus size={14} />
+          New chat
+        </button>
         <button
           type="button"
           onClick={() => setOpen(false)}

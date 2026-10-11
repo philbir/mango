@@ -94,7 +94,21 @@ console.log(`         output : ${outFile}`);
 // of importing the JS SDKs — that keeps the desktop sidecar binary lean and
 // avoids the SDKs' platform-native addons that crash bun-compile on Windows.
 // As a result, we no longer need to mark them as external.
-const externals = [];
+//
+// The console embeds mongosh (server/src/mongosh-console.ts). Its connection
+// stack references optional native / environment-specific modules that bun
+// can't bundle and that the console never loads on our code paths: electron
+// (OIDC plugin, Electron only), @babel/preset-typescript (babel's config
+// loader, TS configs only), macos-export-certificate-and-key + bindings (OS
+// cert store for new `Mongo()` connections; resolved lazily, falls back to
+// Node's CA list) and cpu-features (ssh2 tunnels). Keep them external.
+const externals = [
+  "electron",
+  "@babel/preset-typescript",
+  "macos-export-certificate-and-key",
+  "bindings",
+  "cpu-features",
+];
 
 const r = spawnSync(
   "bun",

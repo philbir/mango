@@ -213,7 +213,9 @@ export const ConsoleView = ({
   useAssistantBinding({
     key: tabId ? `tab:${tabId}` : "console",
     mode: "console",
-    collection: null,
+    // Same context as the enclosing CollectionView binding, so mounting the
+    // console doesn't count as a second context switch.
+    collection: collectionProp ?? null,
     handlers: {
       supports: handlerSupports,
       apply: (kind, payload) => {
