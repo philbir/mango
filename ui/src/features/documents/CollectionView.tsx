@@ -14,6 +14,7 @@ import {
   type MonacoJsonInputHandle,
 } from "../../components/MonacoJsonInput";
 import { useResize } from "../../components/useResize";
+import { MONGO_SHELL_LANGUAGE } from "../../monaco-mongo";
 import { type PageSize, useSettings } from "../../settings";
 import {
   type ApplyKind,
@@ -31,6 +32,7 @@ import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
 import { WorkspaceFileHeader } from "../workspaces/WorkspaceFileHeader";
 import { ConsoleView } from "./ConsoleView";
 import { FieldPicker, buildProjectionJson } from "./FieldPicker";
+import { filterTextToEJSON } from "./filterText";
 import { QueryBuilder } from "./QueryBuilder";
 import { ResultPanel, type ResultFormat } from "./ResultPanel";
 
@@ -43,7 +45,8 @@ interface CollectionViewProps {
 }
 
 export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
-  const { pageSize, setPageSize, defaultCollectionMode, queryTimeoutSeconds } = useSettings();
+  const { pageSize, setPageSize, defaultCollectionMode, queryTimeoutSeconds, formatOptions } =
+    useSettings();
   const { activeId, active } = useActiveConnection();
   const { database } = useActiveDatabase();
   const { tabs, closeTab } = useTabs();
@@ -305,6 +308,17 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
 
   const filterEditorRef = useRef<MonacoJsonInputHandle | null>(null);
 
+  // The filter editor takes shell literals (`ObjectId("…")`, `UUID("…")`,
+  // bare keys) as well as (Extended) JSON; the server only speaks canonical
+  // EJSON. A syntax error is shown in the result bar instead of querying.
+  const wireFilter = useMemo(() => {
+    try {
+      return { ejson: filterTextToEJSON(filter, formatOptions.uuidRepresentation), error: null };
+    } catch (e) {
+      return { ejson: "", error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [filter, formatOptions.uuidRepresentation]);
+
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: docsQueryKey,
     queryFn: ({ signal }) =>
@@ -312,14 +326,14 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         cid: activeId!,
         database: database ?? undefined,
         name,
-        filter,
+        filter: wireFilter.ejson,
         projection: projection || undefined,
         skip,
         limit: pageSize,
         signal,
         timeoutMS: queryTimeoutSeconds * 1000,
       }),
-    enabled: !!name && !!activeId,
+    enabled: !!name && !!activeId && !wireFilter.error,
     placeholderData: keepPreviousData,
   });
 
@@ -403,6 +417,21 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
     [schema],
   );
 
+  // An open console picks the command up via its `mango:console:set`
+  // listener. A closed one isn't listening yet, so the command becomes its
+  // initial content when it mounts.
+  const [consoleSeed, setConsoleSeed] = useState<string | null>(null);
+  const sendToConsole = (command: string) => {
+    if (pageMode === "console") {
+      window.dispatchEvent(
+        new CustomEvent("mango:console:set", { detail: { key: "*", command } }),
+      );
+      return;
+    }
+    setConsoleSeed(command);
+    setPageMode("console");
+  };
+
   // The assistant's mode follows the active sub-tab inside the collection view:
   //  - Query mode → it can edit the filter / projection / sort BSON
   //  - Console mode → it can write a full db.<collection>.<method>(…) command
@@ -438,31 +467,17 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
           // No first-class slot for these on the query view yet — drop the user
           // into console mode and pre-fill an aggregation skeleton so they can
           // tweak it. (The pipeline payload is itself the most useful here.)
-          setPageMode("console");
-          if (kind === "pipeline") {
-            window.dispatchEvent(
-              new CustomEvent("mango:console:set", {
-                detail: {
-                  key: "*",
-                  command: `db.${name}.aggregate(${payload})`,
-                },
-              }),
-            );
-          }
+          if (kind === "pipeline") sendToConsole(`db.${name}.aggregate(${payload})`);
+          else setPageMode("console");
         } else if (kind === "console") {
-          setPageMode("console");
-          window.dispatchEvent(
-            new CustomEvent("mango:console:set", {
-              detail: { key: "*", command: payload },
-            }),
-          );
+          sendToConsole(payload);
         }
       },
     },
   });
 
   return (
-    <div className="flex h-full flex-1 flex-col">
+    <div className="flex h-full flex-1 flex-col" data-testid="collection-view">
       <header className="flex h-10 flex-shrink-0 items-center gap-3 border-b border-slate-200 bg-slate-50 pl-4 pr-12 dark:border-slate-800 dark:bg-slate-900/40">
         <IconTable size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -514,7 +529,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
       {pageMode === "console" && (
         <ConsoleView
           tabId={tabId}
-          initialCommand={`db.${name}.find(\n{\n  \n})\n`}
+          initialCommand={consoleSeed ?? `db.${name}.find(\n{\n  \n})\n`}
           collection={name}
         />
       )}
@@ -578,7 +593,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
               type="button"
               onClick={() => filterEditorRef.current?.format()}
               className="btn btn-sm btn-ghost"
-              title="Format JSON (⇧⌥F)"
+              title="Format filter (⇧⌥F)"
             >
               <IconBraces size={13} />
               Format
@@ -602,6 +617,7 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
               <div className="flex-1 overflow-hidden rounded border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
                 <MonacoJsonInput
                   ref={filterEditorRef}
+                  language={MONGO_SHELL_LANGUAGE}
                   value={filterDraft}
                   onChange={setFilterDraft}
                   minHeight="64px"
@@ -611,10 +627,12 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
               </div>
             )}
             {queryMode === "builder" && (
-              <div className="flex-1 overflow-y-auto pr-1">
+              // p-[3px] leaves room for the focus ring (2px outline + 1px
+              // offset), which the scroll container would otherwise clip.
+              <div className="flex-1 overflow-y-auto p-[3px] pr-1">
                 <QueryBuilder
                   collectionName={name}
-                  filterJson={filterDraft}
+                  filterText={filterDraft}
                   onChange={setFilterDraft}
                   onRun={(json) => onApplyFilter(json)}
                 />
@@ -642,7 +660,13 @@ export const CollectionView = ({ name, tabId }: CollectionViewProps) => {
         onFormatChange={setView}
         rawValue={data?.documents ?? null}
         isLoading={isLoading || isFetching}
-        errorMessage={isError ? (error as Error).message : null}
+        errorMessage={
+          wireFilter.error
+            ? `Invalid filter: ${wireFilter.error}`
+            : isError
+              ? (error as Error).message
+              : null
+        }
         elapsedMs={elapsedMs}
         paging={
           data

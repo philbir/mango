@@ -1,58 +1,59 @@
 import { type Node, parse } from "acorn";
 
 /**
- * Rewrites a console script so it runs as the body of an async function with
- * mongosh-like ergonomics:
- *
- *  - the value of the last top-level expression statement is returned, so
- *    `const n = 5; db.users.find({ age: { $gt: n } })` yields the cursor;
- *  - every call chain is implicitly awaited (`const n =
- *    db.users.countDocuments()`, `posts.find().toArray()` on an aliased
- *    collection), so scripts pasted from mongosh work without sprinkling
- *    `await` everywhere.
- *
- * Implicit awaits are only inserted where `await` is legal: at the top level
- * of the script or inside async functions — callbacks passed to e.g.
- * `Array.prototype.map` still need to be `async` and awaited explicitly.
- * Awaiting a non-promise (e.g. a FindCursor) is a no-op, so wrapping is safe.
+ * Preprocessing for console scripts before they reach the mongosh evaluator.
+ * mongosh's REPL feeds input one line at a time, so a pasted multi-line
+ * script loses two things that work interactively; this module restores them.
  */
-export const prepareConsoleScript = (code: string): string => {
-  let ast: Node;
+
+// mongosh's line-level shell commands: `use <db>`, `show dbs`, `show log global`.
+const SHELL_COMMAND = /^\s*(?:use|show)\s+[^\s;]+(?:\s+[^\s;]+)?\s*;?\s*$/;
+
+const parses = (code: string): boolean => {
   try {
-    ast = parse(code, {
+    parse(code, {
       ecmaVersion: "latest",
       sourceType: "script",
       allowAwaitOutsideFunction: true,
       allowReturnOutsideFunction: true,
     });
-  } catch (e) {
-    throw new SyntaxError(e instanceof Error ? e.message : String(e));
+    return true;
+  } catch {
+    return false;
   }
+};
 
-  const wraps: Wrap[] = [];
+export interface ScriptStep {
+  code: string;
+  /** A `use` / `show` line — its result is printed when it isn't the last step. */
+  shellCommand: boolean;
+}
 
-  const body = (ast as unknown as { body: AnyNode[] }).body;
-  const last = body[body.length - 1];
-  if (last?.type === "ExpressionStatement") {
-    // Wrap the whole statement (not just the expression) so a parenthesized
-    // statement like `({ a: 1 })` keeps balanced parens; drop the trailing `;`.
-    const end = code[last.end - 1] === ";" ? last.end - 1 : last.end;
-    wraps.push({ start: last.start, end, open: "return (", close: ")", rank: 1 });
+/**
+ * Split a script at `use` / `show` lines so they run as their own steps, the
+ * way the REPL would see them. A line only counts when it isn't valid
+ * JavaScript by itself (`use + 1` is an expression, `use admin` isn't) and the
+ * code before it is a complete program — `show` inside a template string or
+ * an unfinished expression stays put.
+ */
+export const splitScript = (code: string): ScriptStep[] => {
+  const steps: ScriptStep[] = [];
+  let chunk: string[] = [];
+  const flush = () => {
+    const text = chunk.join("\n");
+    if (text.trim()) steps.push({ code: text, shellCommand: false });
+    chunk = [];
+  };
+  for (const line of code.split("\n")) {
+    if (SHELL_COMMAND.test(line) && !parses(line) && parses(chunk.join("\n"))) {
+      flush();
+      steps.push({ code: line.trim().replace(/;$/, "").trim(), shellCommand: true });
+    } else {
+      chunk.push(line);
+    }
   }
-
-  walk(ast as unknown as AnyNode, null, [], (node, parent, asyncStack) => {
-    if (node.type !== "CallExpression") return;
-    const canAwait = asyncStack.length === 0 || asyncStack[asyncStack.length - 1];
-    if (!canAwait) return;
-    if (parent?.type === "AwaitExpression") return;
-    // Only wrap the outermost call of a chain: `db.x.find().limit(5)` is
-    // awaited as a whole, not at `db.x.find()`.
-    if (parent?.type === "MemberExpression" && parent.object === node) return;
-    if (parent?.type === "CallExpression" && parent.callee === node) return;
-    wraps.push({ start: node.start, end: node.end, open: "(await ", close: ")", rank: 0 });
-  });
-
-  return applyWraps(code, wraps);
+  flush();
+  return steps;
 };
 
 interface AnyNode {
@@ -60,15 +61,6 @@ interface AnyNode {
   start: number;
   end: number;
   [key: string]: unknown;
-}
-
-interface Wrap {
-  start: number;
-  end: number;
-  open: string;
-  close: string;
-  /** Tie-breaker for identical ranges — higher rank ends up outermost. */
-  rank: number;
 }
 
 const isNode = (v: unknown): v is AnyNode =>
@@ -80,48 +72,47 @@ const FUNCTION_TYPES = new Set([
   "ArrowFunctionExpression",
 ]);
 
-const walk = (
-  node: AnyNode,
-  parent: AnyNode | null,
-  asyncStack: boolean[],
-  visit: (node: AnyNode, parent: AnyNode | null, asyncStack: boolean[]) => void,
-): void => {
-  visit(node, parent, asyncStack);
-  const stack = FUNCTION_TYPES.has(node.type)
-    ? [...asyncStack, node.async === true]
-    : asyncStack;
+const hasTopLevelAwait = (node: AnyNode): boolean => {
+  if (FUNCTION_TYPES.has(node.type)) return false;
+  if (node.type === "AwaitExpression") return true;
+  if (node.type === "ForOfStatement" && node.await === true) return true;
   for (const key of Object.keys(node)) {
     const child = node[key];
     if (Array.isArray(child)) {
-      for (const c of child) if (isNode(c)) walk(c, node, stack, visit);
-    } else if (isNode(child)) {
-      walk(child, node, stack, visit);
+      if (child.some((c) => isNode(c) && hasTopLevelAwait(c))) return true;
+    } else if (isNode(child) && hasTopLevelAwait(child)) {
+      return true;
     }
   }
+  return false;
 };
 
-// Wraps are properly nested or disjoint (they come from AST ranges), so we
-// can emit them as open/close events sorted by position.
-const applyWraps = (code: string, wraps: Wrap[]): string => {
-  type Ev = { pos: number; open: boolean; text: string; len: number; rank: number };
-  const events: Ev[] = [];
-  for (const w of wraps) {
-    const len = w.end - w.start;
-    events.push({ pos: w.start, open: true, text: w.open, len, rank: w.rank });
-    events.push({ pos: w.end, open: false, text: w.close, len, rank: w.rank });
+/**
+ * mongosh awaits database calls on its own, so its async rewriter rejects a
+ * top-level `await`. Scripts written for Node or the old console use it
+ * anyway: wrap those in an async function whose last expression statement is
+ * returned, which the rewriter accepts. Code without top-level await, or that
+ * doesn't parse (mongosh reports the error), is returned unchanged.
+ */
+export const allowTopLevelAwait = (code: string): string => {
+  let ast: Node;
+  try {
+    ast = parse(code, {
+      ecmaVersion: "latest",
+      sourceType: "script",
+      allowAwaitOutsideFunction: true,
+    });
+  } catch {
+    return code;
   }
-  events.sort((a, b) => {
-    if (a.pos !== b.pos) return a.pos - b.pos;
-    if (a.open !== b.open) return a.open ? 1 : -1; // closes first
-    // Opens: outermost first. Closes: innermost first.
-    const outer = b.len - a.len || b.rank - a.rank;
-    return a.open ? outer : -outer;
-  });
-  let out = "";
-  let cursor = 0;
-  for (const ev of events) {
-    out += code.slice(cursor, ev.pos) + ev.text;
-    cursor = ev.pos;
+  if (!hasTopLevelAwait(ast as unknown as AnyNode)) return code;
+
+  const body = (ast as unknown as { body: AnyNode[] }).body;
+  const last = body[body.length - 1];
+  let wrapped = code;
+  if (last?.type === "ExpressionStatement") {
+    const end = code[last.end - 1] === ";" ? last.end - 1 : last.end;
+    wrapped = `${code.slice(0, last.start)}return (${code.slice(last.start, end)});${code.slice(last.end)}`;
   }
-  return out + code.slice(cursor);
+  return `(async () => {\n${wrapped}\n})()`;
 };

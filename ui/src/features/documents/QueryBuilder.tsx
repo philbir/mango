@@ -4,16 +4,26 @@ import {
   IconPlus,
   IconX,
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
+import { useSettings } from "../../settings";
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
+import type { FormatOptions } from "./docFormats";
+import {
+  coerceBuilderValue,
+  formatShellValue,
+  isBsonValue,
+  parseFilterText,
+  stringifyFilter,
+} from "./filterText";
 
 interface Props {
   collectionName: string;
-  filterJson: string;
-  onChange: (json: string) => void;
-  onRun?: (json: string) => void;
+  /** Filter text — JSON, Extended JSON or shell literals. */
+  filterText: string;
+  onChange: (text: string) => void;
+  onRun?: (text: string) => void;
 }
 
 type Operator =
@@ -160,26 +170,44 @@ const newCondition = (): Condition => ({
   value: "",
 });
 
-const coerceValue = (raw: string): unknown => {
-  const trimmed = raw.trim();
-  if (trimmed === "") return "";
-  if (trimmed === "true") return true;
-  if (trimmed === "false") return false;
-  if (trimmed === "null") return null;
-  if (/^-?\d+$/.test(trimmed)) return Number(trimmed);
-  if (/^-?\d+\.\d+$/.test(trimmed)) return Number(trimmed);
-  return trimmed;
+/** Sampled BSON types per field path, used to type bare values. */
+type FieldTypes = Record<string, readonly string[]>;
+
+interface Ctx {
+  opts: FormatOptions;
+  fieldTypes: FieldTypes;
+}
+
+/**
+ * Hint for the value slot from the field's sampled types — bare ids, UUIDs and
+ * ISO dates are typed automatically, so tell the user they can just paste one.
+ */
+const valuePlaceholder = (
+  field: string,
+  types: readonly string[] | undefined,
+  list: boolean,
+): string => {
+  const t = types ?? [];
+  const suffix = list ? ", comma-separated" : "";
+  if (t.includes("uuid") || t.includes("binary")) return `UUID${suffix}`;
+  if (t.includes("objectId") || (field === "_id" && !t.includes("string"))) {
+    return `ObjectId hex${suffix}`;
+  }
+  if (t.includes("date")) return `ISO date, e.g. 2024-01-31${suffix}`;
+  return list ? "a, b, c" : "value";
 };
 
-const formatValue = (raw: unknown): string => {
-  if (raw === null) return "null";
-  if (typeof raw === "string") return raw;
-  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
-  return JSON.stringify(raw);
-};
+/** Builder value-slot text: strings unquoted, everything else as a shell literal. */
+const formatValue = (raw: unknown, opts: FormatOptions): string =>
+  typeof raw === "string" ? raw : formatShellValue(raw, opts);
 
-const conditionToFilter = (c: Condition): Record<string, unknown> | null => {
+const conditionToFilter = (
+  c: Condition,
+  ctx: Ctx,
+): Record<string, unknown> | null => {
   if (!c.field) return null;
+  const coerceValue = (raw: string) =>
+    coerceBuilderValue(raw, c.field, ctx.fieldTypes[c.field], ctx.opts.uuidRepresentation);
   switch (c.operator) {
     case "eq":
       return { [c.field]: coerceValue(c.value) };
@@ -230,24 +258,21 @@ const conditionToFilter = (c: Condition): Record<string, unknown> | null => {
 const buildFilter = (
   conditions: Condition[],
   combinator: "and" | "or",
+  ctx: Ctx,
 ): Record<string, unknown> => {
   const parts = conditions
-    .map(conditionToFilter)
+    .map((c) => conditionToFilter(c, ctx))
     .filter((p): p is Record<string, unknown> => p !== null);
   if (parts.length === 0) return {};
   if (parts.length === 1) return parts[0]!;
   return combinator === "and" ? { $and: parts } : { $or: parts };
 };
 
-const filterToJson = (
+const filterToText = (
   conditions: Condition[],
   combinator: "and" | "or",
-): string => {
-  const filter = buildFilter(conditions, combinator);
-  return Object.keys(filter).length === 0
-    ? ""
-    : JSON.stringify(filter, null, 2);
-};
+  ctx: Ctx,
+): string => stringifyFilter(buildFilter(conditions, combinator, ctx), ctx.opts);
 
 interface ParseResult {
   conditions: Condition[];
@@ -261,83 +286,86 @@ const fallback = (): ParseResult => ({
   supported: true,
 });
 
+const regexLeaf = (
+  field: string,
+  pattern: string,
+  flags: string,
+): Omit<Condition, "id"> => {
+  // Detect friendly shapes that we emit, so the round-trip preserves
+  // the operator the user picked.
+  const inner = unescapeFriendly(pattern);
+  if (inner !== null && flags === "i") {
+    return { field, operator: inner.kind, value: inner.value };
+  }
+  const value = flags ? `/${pattern}/${flags}` : pattern;
+  return { field, operator: "regex", value };
+};
+
+const isScalar = (value: unknown): boolean =>
+  value === null ||
+  typeof value === "string" ||
+  typeof value === "number" ||
+  typeof value === "boolean" ||
+  isBsonValue(value);
+
 const parseLeaf = (
   field: string,
   value: unknown,
+  opts: FormatOptions,
 ): Omit<Condition, "id"> | null => {
+  const fmt = (v: unknown) => formatValue(v, opts);
+  // `{ name: /abc/i }` — also what `{ $regex, $options }` becomes after the
+  // EJSON round-trip in parseFilterText.
   if (
     value !== null &&
     typeof value === "object" &&
-    !Array.isArray(value)
+    (value as { _bsontype?: string })._bsontype === "BSONRegExp"
   ) {
-    const keys = Object.keys(value as Record<string, unknown>);
-    const v = value as Record<string, unknown>;
-    if (keys.length === 1) {
-      const k = keys[0]!;
-      if (k === "$ne") return { field, operator: "ne", value: formatValue(v.$ne) };
-      if (k === "$gt") return { field, operator: "gt", value: formatValue(v.$gt) };
-      if (k === "$gte") return { field, operator: "gte", value: formatValue(v.$gte) };
-      if (k === "$lt") return { field, operator: "lt", value: formatValue(v.$lt) };
-      if (k === "$lte") return { field, operator: "lte", value: formatValue(v.$lte) };
-      if (k === "$exists") return { field, operator: "exists", value: "" };
-      if (k === "$in" && Array.isArray(v.$in)) {
-        return { field, operator: "in", value: v.$in.map(formatValue).join(", ") };
-      }
+    const r = value as { pattern: string; options: string };
+    return regexLeaf(field, r.pattern, r.options);
+  }
+  if (isScalar(value)) {
+    return { field, operator: "eq", value: fmt(value) };
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const v = value as Record<string, unknown>;
+  const keys = Object.keys(v);
+  if (keys.length === 1) {
+    const k = keys[0]!;
+    const arg = v[k];
+    const simple: Record<string, Operator> = {
+      $eq: "eq",
+      $ne: "ne",
+      $gt: "gt",
+      $gte: "gte",
+      $lt: "lt",
+      $lte: "lte",
+    };
+    const op = simple[k];
+    if (op && isScalar(arg)) return { field, operator: op, value: fmt(arg) };
+    if (k === "$exists" && arg === true) return { field, operator: "exists", value: "" };
+    if (k === "$in" && Array.isArray(arg) && arg.every(isScalar)) {
+      return { field, operator: "in", value: arg.map(fmt).join(", ") };
     }
-    if (
-      typeof v.$regex === "string" &&
-      (keys.length === 1 || (keys.length === 2 && "$options" in v))
-    ) {
-      const pattern = v.$regex;
-      const flags =
-        typeof v.$options === "string" ? v.$options : "";
-      // Detect friendly shapes that we emit, so the round-trip preserves
-      // the operator the user picked.
-      const inner = unescapeFriendly(pattern);
-      if (inner !== null && flags === "i") {
-        if (inner.kind === "contains") {
-          return { field, operator: "contains", value: inner.value };
-        }
-        if (inner.kind === "startsWith") {
-          return { field, operator: "startsWith", value: inner.value };
-        }
-        if (inner.kind === "endsWith") {
-          return { field, operator: "endsWith", value: inner.value };
-        }
-      }
-      const value = flags ? `/${pattern}/${flags}` : pattern;
-      return { field, operator: "regex", value };
-    }
-    return null; // unsupported operator shape
   }
   if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    value === null
+    typeof v.$regex === "string" &&
+    (keys.length === 1 || (keys.length === 2 && typeof v.$options === "string"))
   ) {
-    return { field, operator: "eq", value: formatValue(value) };
+    return regexLeaf(field, v.$regex, typeof v.$options === "string" ? v.$options : "");
   }
-  return null;
+  return null; // unsupported operator shape
 };
 
-const parseFilter = (json: string): ParseResult => {
-  const trimmed = json.trim();
-  if (!trimmed) return fallback();
-  let parsed: unknown;
+const parseFilter = (text: string, opts: FormatOptions): ParseResult => {
+  let obj: Record<string, unknown>;
   try {
-    parsed = JSON.parse(trimmed);
+    obj = parseFilterText(text, opts.uuidRepresentation);
   } catch {
     return { ...fallback(), supported: false };
   }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed)
-  ) {
-    return { ...fallback(), supported: false };
-  }
-  const obj = parsed as Record<string, unknown>;
   const keys = Object.keys(obj);
   if (keys.length === 0) return fallback();
 
@@ -367,7 +395,7 @@ const parseFilter = (json: string): ParseResult => {
       if (field.startsWith("$")) {
         return { ...fallback(), supported: false };
       }
-      const leaf = parseLeaf(field, pObj[field]);
+      const leaf = parseLeaf(field, pObj[field], opts);
       if (!leaf) return { ...fallback(), supported: false };
       conditions.push({ id: nextId++, ...leaf });
     }
@@ -384,7 +412,7 @@ const parseFilter = (json: string): ParseResult => {
     if (field.startsWith("$")) {
       return { ...fallback(), supported: false };
     }
-    const leaf = parseLeaf(field, obj[field]);
+    const leaf = parseLeaf(field, obj[field], opts);
     if (!leaf) return { ...fallback(), supported: false };
     conditions.push({ id: nextId++, ...leaf });
   }
@@ -397,38 +425,31 @@ const parseFilter = (json: string): ParseResult => {
 
 export const QueryBuilder = ({
   collectionName,
-  filterJson,
+  filterText,
   onChange,
 }: Props) => {
   const { activeId } = useActiveConnection();
   const { database } = useActiveDatabase();
+  const { formatOptions } = useSettings();
 
-  const initial = parseFilter(filterJson);
+  const [initial] = useState(() => parseFilter(filterText, formatOptions));
   const [conditions, setConditions] = useState<Condition[]>(initial.conditions);
   const [combinator, setCombinator] = useState<"and" | "or">(initial.combinator);
   const [supported, setSupported] = useState(initial.supported);
 
-  // Track the JSON we last emitted so external updates round-trip cleanly.
-  const lastEmittedRef = useRef<string>(filterJson);
+  // Track the text we last emitted so external updates round-trip cleanly.
+  const lastEmittedRef = useRef<string>(filterText);
 
   // Re-seed Builder when Raw changes externally (not from our own emit).
   useEffect(() => {
-    if (filterJson === lastEmittedRef.current) return;
-    const parsed = parseFilter(filterJson);
+    if (filterText === lastEmittedRef.current) return;
+    const parsed = parseFilter(filterText, formatOptions);
     setConditions(parsed.conditions);
     setCombinator(parsed.combinator);
     setSupported(parsed.supported);
-    lastEmittedRef.current = filterJson;
-  }, [filterJson]);
-
-  // Push Builder edits up to Raw (only when supported).
-  useEffect(() => {
-    if (!supported) return;
-    const next = filterToJson(conditions, combinator);
-    if (next === lastEmittedRef.current) return;
-    lastEmittedRef.current = next;
-    onChange(next);
-  }, [conditions, combinator, supported, onChange]);
+    lastEmittedRef.current = filterText;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterText]);
 
   const { data: schema } = useQuery({
     queryKey: ["schema", activeId, database, collectionName],
@@ -437,6 +458,24 @@ export const QueryBuilder = ({
     enabled: !!collectionName && !!activeId,
     staleTime: 60_000,
   });
+
+  const fieldTypes = useMemo<FieldTypes>(
+    () => Object.fromEntries((schema?.fields ?? []).map((f) => [f.path, f.types])),
+    [schema],
+  );
+
+  // Push Builder edits up to Raw (only when supported). Re-runs when the
+  // schema lands so bare values pick up their field's type (hex → ObjectId).
+  useEffect(() => {
+    if (!supported) return;
+    const next = filterToText(conditions, combinator, {
+      opts: formatOptions,
+      fieldTypes,
+    });
+    if (next === lastEmittedRef.current) return;
+    lastEmittedRef.current = next;
+    onChange(next);
+  }, [conditions, combinator, supported, onChange, formatOptions, fieldTypes]);
 
   const fieldNames = schema?.fields.map((f) => f.path) ?? [];
 
@@ -533,7 +572,10 @@ export const QueryBuilder = ({
                 <input
                   value={c.value}
                   onChange={(e) => updateCondition(c.id, { value: e.target.value })}
-                  placeholder={op.placeholder ?? "value"}
+                  placeholder={
+                    op.placeholder ??
+                    valuePlaceholder(c.field, fieldTypes[c.field], c.operator === "in")
+                  }
                   className="h-[26px] flex-1 rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               )}

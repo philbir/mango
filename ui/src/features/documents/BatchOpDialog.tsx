@@ -15,9 +15,11 @@ interface Props {
   /** Number of documents the filter targets, for the summary line. */
   count: number | null;
   initialOp: BatchOp;
+  /** Database the collection lives in; defaults to the active database. */
+  database?: string;
   onClose: () => void;
   /** Called after a successful op — the host clears its selection. */
-  onDone: () => void;
+  onDone: (op: BatchOp) => void;
 }
 
 const DEFAULT_UPDATE = '{\n  "$set": {\n    \n  }\n}';
@@ -27,11 +29,13 @@ export const BatchOpDialog = ({
   filterEJSON: filterProp,
   count: countProp,
   initialOp,
+  database: databaseProp,
   onClose,
   onDone,
 }: Props) => {
   const { activeId } = useActiveConnection();
-  const { database } = useActiveDatabase();
+  const { database: activeDatabase } = useActiveDatabase();
+  const database = databaseProp ?? activeDatabase;
   const queryClient = useQueryClient();
 
   // Snapshot the target at open time. The op runs against exactly the rows
@@ -81,7 +85,7 @@ export const BatchOpDialog = ({
         );
       }
       setError(null);
-      onDone();
+      onDone(op);
     },
     onError: (e) => {
       setError(
@@ -129,7 +133,10 @@ export const BatchOpDialog = ({
         if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        data-testid="batch-dialog"
+      >
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
           {danger && (
             <IconAlertTriangle

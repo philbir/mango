@@ -3,8 +3,15 @@ import {
   IconBraces,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api, extractIdString } from "../../api/client";
+import {
+  ApiError,
+  type ConsoleRunResult,
+  api,
+  extractIdString,
+  stringifyEJSON,
+} from "../../api/client";
 import { ExecuteButton } from "../../components/ExecuteButton";
+import { showToast } from "../../components/toasts";
 import { SaveToWorkspaceDialog } from "../workspaces/SaveToWorkspaceDialog";
 import { UnboundSaveHeader } from "../workspaces/UnboundSaveHeader";
 import { useWorkspaceFileBinding } from "../workspaces/useWorkspaceFileBinding";
@@ -25,6 +32,7 @@ import {
 import { useActiveConnection } from "../connections/useActiveConnection";
 import { useActiveDatabase } from "../connections/useActiveDatabase";
 import { DocumentEditor } from "../editor/DocumentEditor";
+import { BatchOpDialog, type BatchOp } from "./BatchOpDialog";
 import { ConsoleLogs } from "./ConsoleLogs";
 import { ResultPanel, type ResultFormat } from "./ResultPanel";
 
@@ -47,6 +55,17 @@ const inferCollection = (script: string): string | null => {
   return m?.[1] ?? null;
 };
 
+type Doc = Record<string, unknown>;
+
+// A projected row keeps its shape after an edit: take the fresh values for
+// the keys it already shows instead of widening the table with every field.
+const keepShape = (row: Doc, fresh: Doc, projected: boolean): Doc =>
+  projected
+    ? Object.fromEntries(Object.keys(row).filter((k) => k in fresh).map((k) => [k, fresh[k]]))
+    : fresh;
+
+const FIND_CHUNK = 500;
+
 export const ConsoleView = ({
   initialCommand = "db.\n",
   tabId,
@@ -67,6 +86,9 @@ export const ConsoleView = ({
   const editorRef = useRef<MonacoShellInputHandle | null>(null);
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Checked rows → raw `_id`s, for the batch update / delete filter.
+  const [selectedRows, setSelectedRows] = useState<Map<string, unknown>>(new Map());
+  const [batchOp, setBatchOp] = useState<BatchOp | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -206,14 +228,64 @@ export const ConsoleView = ({
     const unchanged = cmd === pinned && page === 0;
     setPage(0);
     setPinned(cmd);
+    // A new result set invalidates the previous selection's row ids.
+    setSelectedRows(new Map());
     if (unchanged) void run.refetch();
+  };
+
+  const clearSelection = () => setSelectedRows(new Map());
+  const toggleRow = (id: string, rawId: unknown, selected: boolean) => {
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      if (selected) next.set(id, rawId);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllRows = (rows: Array<{ id: string; rawId: unknown }>, selected: boolean) => {
+    setSelectedRows((prev) => {
+      const next = new Map(prev);
+      for (const r of rows) {
+        if (selected) next.set(r.id, r.rawId);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  };
+  const selectedIdSet = useMemo(() => new Set(selectedRows.keys()), [selectedRows]);
+  const selectionFilterEJSON = useMemo(
+    () => stringifyEJSON({ _id: { $in: [...selectedRows.values()] } }),
+    [selectedRows],
+  );
+
+  // Edits never re-run the script — it may have side effects beyond the
+  // query — so the cached pages of this command are patched in place.
+  const patchCachedRows = (update: (docs: Doc[]) => Doc[]) => {
+    queryClient.setQueriesData<ConsoleRunResult | null>(
+      { queryKey: ["console", activeId, database, pinned] },
+      (prev) =>
+        prev && Array.isArray(prev.result)
+          ? { ...prev, result: update(prev.result as Doc[]) }
+          : prev,
+    );
+  };
+  const replaceCachedRow = (fresh: Doc, projected: boolean) => {
+    const id = extractIdString(fresh._id);
+    patchCachedRows((docs) =>
+      docs.map((d) => (extractIdString(d._id) === id ? keepShape(d, fresh, projected) : d)),
+    );
+  };
+  const dropCachedRows = (ids: Set<string>) => {
+    patchCachedRows((docs) => docs.filter((d) => !ids.has(extractIdString(d._id))));
   };
 
   const handlerSupports: ApplyKind[] = useMemo(() => ["console"], []);
   useAssistantBinding({
     key: tabId ? `tab:${tabId}` : "console",
     mode: "console",
-    collection: null,
+    // Same context as the enclosing CollectionView binding, so mounting the
+    // console doesn't count as a second context switch.
+    collection: collectionProp ?? null,
     handlers: {
       supports: handlerSupports,
       apply: (kind, payload) => {
@@ -267,9 +339,58 @@ export const ConsoleView = ({
     selectedId && resultDocs
       ? resultDocs.find((d) => extractIdString(d._id) === selectedId) ?? null
       : null;
-  // Best-effort: pull the collection name out of the pinned command for header display.
+  // The server names the collection behind a find() cursor; for anything
+  // else the drawer header falls back to the first `db.<name>` in the script.
+  const source = run.data?.source ?? null;
   const inferredCollection =
-    pinned?.match(/\bdb\.([\w$]+)/)?.[1] ?? "(console)";
+    source?.collection ?? pinned?.match(/\bdb\.([\w$]+)/)?.[1] ?? "(console)";
+  const isDocArray = !!resultDocs && resultDocs.length > 0;
+  const readOnlyHint = source
+    ? null
+    : run.data?.paged
+      ? run.data.readOnlyReason
+      : isDocArray
+        ? "Read-only — return the find() cursor itself (without .toArray()) to edit rows."
+        : null;
+
+  // After a batch update the rows are re-read by _id (no script re-run).
+  const onBatchDone = async (op: BatchOp) => {
+    const ids = new Set(selectedRows.keys());
+    const rawIds = [...selectedRows.values()];
+    clearSelection();
+    if (op === "delete") {
+      dropCachedRows(ids);
+      return;
+    }
+    if (!activeId || !source) return;
+    try {
+      const fresh: Doc[] = [];
+      for (let i = 0; i < rawIds.length; i += FIND_CHUNK) {
+        const chunk = rawIds.slice(i, i + FIND_CHUNK);
+        const page = await api.findDocuments({
+          cid: activeId,
+          database: source.database,
+          name: source.collection,
+          filter: stringifyEJSON({ _id: { $in: chunk } }),
+          limit: FIND_CHUNK,
+        });
+        fresh.push(...page.documents);
+      }
+      const byId = new Map(fresh.map((d) => [extractIdString(d._id), d]));
+      patchCachedRows((docs) =>
+        docs.map((d) => {
+          const next = byId.get(extractIdString(d._id));
+          return next ? keepShape(d, next, source.projected) : d;
+        }),
+      );
+    } catch (e) {
+      showToast({
+        kind: "error",
+        title: "Updated, but the result couldn't be refreshed — run the script again.",
+        detail: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
 
   const errorMessage =
     run.data?.error ??
@@ -280,7 +401,7 @@ export const ConsoleView = ({
         : null);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden" data-testid="console-view">
       {fileBinding.bound && tab?.workspaceId && tab?.workspaceFilePath ? (
         <WorkspaceFileHeader
           workspaceId={tab.workspaceId}
@@ -405,14 +526,52 @@ export const ConsoleView = ({
         }
         onRowClick={(id) => setSelectedId(id)}
         activeRowId={selectedDoc ? selectedId : null}
+        readOnlyHint={readOnlyHint}
+        selection={
+          source
+            ? {
+                selectedIds: selectedIdSet,
+                onToggle: toggleRow,
+                onToggleAll: toggleAllRows,
+                count: selectedRows.size,
+                onDelete: () => setBatchOp("delete"),
+                onUpdate: () => setBatchOp("update"),
+                onClear: clearSelection,
+              }
+            : undefined
+        }
       />
 
       {selectedDoc && (
         <DocumentEditor
           collectionName={inferredCollection}
+          database={source?.database}
           document={selectedDoc}
           onClose={() => setSelectedId(null)}
-          readOnly
+          readOnly={!source}
+          loadFull={!!source?.projected}
+          onSaved={(fresh) => replaceCachedRow(fresh, !!source?.projected)}
+          onDeleted={() => {
+            if (selectedId) dropCachedRows(new Set([selectedId]));
+            setSelectedRows((prev) => {
+              if (!selectedId || !prev.has(selectedId)) return prev;
+              const next = new Map(prev);
+              next.delete(selectedId);
+              return next;
+            });
+          }}
+        />
+      )}
+
+      {batchOp && source && (
+        <BatchOpDialog
+          collectionName={source.collection}
+          database={source.database}
+          filterEJSON={selectionFilterEJSON}
+          count={selectedRows.size}
+          initialOp={batchOp}
+          onClose={() => setBatchOp(null)}
+          onDone={(op) => void onBatchDone(op)}
         />
       )}
 

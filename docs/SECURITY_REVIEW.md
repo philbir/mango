@@ -11,7 +11,7 @@ This document began as a review report. The first hardening pass has now address
 - README warning added; Docker examples publish only to host loopback.
 - Server bind host now defaults to `127.0.0.1`, with `HOST` / `MANGO_HOST` as explicit overrides.
 - Open CORS was replaced with an origin allowlist and cross-site fetch rejection.
-- The JavaScript console no longer uses `new Function(...)`; it runs in a restricted VM context and can be disabled with `MANGO_DISABLE_JS_CONSOLE=true`.
+- The JavaScript console no longer uses `new Function(...)`; it runs MongoDB's mongosh runtime in a separate VM context (no `process` / `require` globals) and can be disabled with `MANGO_DISABLE_JS_CONSOLE=true`. The VM context is not an isolation boundary: shell-API and BSON functions come from the host realm, so `ObjectId.constructor("…")` reaches Node's `Function`. Treat console access as code execution on the server — the loopback binding and origin allowlist are what keep it local.
 - MongoDB operations now apply timeouts where the driver supports them.
 - MongoDB URI and AI base URL validation were added.
 - User-facing connection/provider/command errors are redacted.

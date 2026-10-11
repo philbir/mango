@@ -6,6 +6,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconLoader2,
+  IconLock,
   IconPencil,
   IconTable,
   IconTrash,
@@ -59,6 +60,8 @@ interface Props {
   emptyHint?: string;
   /** Enables row multi-select + a batch action bar. Table view only. */
   selection?: ResultSelection;
+  /** Shown next to the status when a document result can't be edited. */
+  readOnlyHint?: string | null;
 }
 
 const formatElapsed = (ms: number): string => {
@@ -91,6 +94,7 @@ export const ResultPanel = ({
   activeRowId,
   emptyHint,
   selection,
+  readOnlyHint,
 }: Props) => {
   const { jsonFormat, formatOptions } = useSettings();
   const [runningMs, setRunningMs] = useState(0);
@@ -129,7 +133,7 @@ export const ResultPanel = ({
   const hasResult = rawValue !== null && rawValue !== undefined;
 
   return (
-    <section className="flex flex-1 flex-col overflow-hidden">
+    <section className="flex flex-1 flex-col overflow-hidden" data-testid="result-panel">
       <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 text-[11.5px] dark:border-slate-800 dark:bg-slate-900/40">
         <span className="eyebrow">Result</span>
         {isLoading && (
@@ -150,6 +154,16 @@ export const ResultPanel = ({
         {!isLoading && !errorMessage && hasResult && elapsedMs != null && (
           <span className="flex items-center gap-1 tabular-nums text-emerald-600 dark:text-emerald-400">
             <IconCheck size={13} /> {formatElapsed(elapsedMs)}
+          </span>
+        )}
+        {!isLoading && !errorMessage && canTable && readOnlyHint && (
+          <span
+            className="flex min-w-0 items-center gap-1 truncate text-slate-500 dark:text-slate-400"
+            title={readOnlyHint}
+            data-testid="result-readonly-hint"
+          >
+            <IconLock size={12} className="flex-shrink-0" />
+            <span className="truncate">{readOnlyHint}</span>
           </span>
         )}
         {selection && selection.count > 0 && (

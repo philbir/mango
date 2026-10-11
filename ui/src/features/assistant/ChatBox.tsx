@@ -5,7 +5,6 @@ import {
   IconSend,
   IconSettings,
   IconSparkles,
-  IconTrash,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -56,7 +55,7 @@ const SUGGESTIONS_BY_MODE: Record<AssistantMode, string[]> = {
 const modeBadge = (mode: AssistantMode, collection: string | null): string => {
   if (mode === "collection")
     return collection ? `Collection · ${collection}` : "Collection";
-  if (mode === "console") return "Console";
+  if (mode === "console") return collection ? `Console · ${collection}` : "Console";
   if (mode === "shell") return "Shell";
   if (mode === "indexes")
     return collection ? `Indexes · ${collection}` : "Indexes";
@@ -70,14 +69,17 @@ export const ChatBox = () => {
     mode,
     collection,
     extraContext,
+    sessionId,
     messages,
     appendMessage,
     patchMessage,
-    resetThread,
   } = useAssistant();
 
   const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
+  // Session whose request is in flight. A reply for an abandoned session
+  // must not keep the new one's composer busy.
+  const [inFlight, setInFlight] = useState<string | null>(null);
+  const pending = inFlight === sessionId;
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -141,7 +143,8 @@ export const ChatBox = () => {
     };
     appendMessage(placeholder);
     setDraft("");
-    setPending(true);
+    const sid = sessionId;
+    setInFlight(sid);
     try {
       const history = [...messages, userMsg]
         .filter(
@@ -185,7 +188,7 @@ export const ChatBox = () => {
         error: msg,
       });
     } finally {
-      setPending(false);
+      setInFlight((cur) => (cur === sid ? null : cur));
       // Refocus composer for fast follow-up
       composerRef.current?.focus();
     }
@@ -207,16 +210,6 @@ export const ChatBox = () => {
             {database}
           </span>
         )}
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={resetThread}
-          disabled={messages.length === 0}
-          className="flex items-center gap-1 rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-          title="Clear chat"
-        >
-          <IconTrash size={12} />
-        </button>
       </div>
 
       {notConfigured && (

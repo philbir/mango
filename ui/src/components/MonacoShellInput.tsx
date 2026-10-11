@@ -6,6 +6,9 @@ import {
   useImperativeHandle,
   useRef,
 } from "react";
+import { api } from "../api/client";
+import { useActiveConnection } from "../features/connections/useActiveConnection";
+import { useActiveDatabase } from "../features/connections/useActiveDatabase";
 import { formatLikeJs } from "./MonacoJsonInput";
 import { useSettings } from "../settings";
 
@@ -136,133 +139,237 @@ const findEnclosingDbMethodCall = (
   return { collection: m[1], method: m[2] };
 };
 
+/**
+ * Offline suggestions from a fixed method list plus the sampled schema. Only
+ * used when the server's mongosh autocompleter can't answer (console disabled,
+ * API unreachable).
+ */
+const staticCompletions = (
+  model: monaco.editor.ITextModel,
+  position: monaco.Position,
+): monaco.languages.CompletionList => {
+  const lineUpToCursor = model
+    .getValueInRange({
+      startLineNumber: position.lineNumber,
+      startColumn: 1,
+      endLineNumber: position.lineNumber,
+      endColumn: position.column,
+    })
+    .trimStart();
+
+  const word = model.getWordUntilPosition(position);
+  const range: monaco.IRange = {
+    startLineNumber: position.lineNumber,
+    endLineNumber: position.lineNumber,
+    startColumn: word.startColumn,
+    endColumn: word.endColumn,
+  };
+
+  // db.<col>.<method> — suggest methods on collection
+  const dbColDotMatch = lineUpToCursor.match(/\bdb\.([\w$]+)\.([\w$]*)$/);
+  if (dbColDotMatch) {
+    const partial = dbColDotMatch[2] ?? "";
+    const items: monaco.languages.CompletionItem[] = [];
+    for (const m of COLLECTION_METHODS) {
+      if (partial && !m.name.startsWith(partial)) continue;
+      items.push({
+        label: m.name,
+        kind: monaco.languages.CompletionItemKind.Method,
+        insertText: m.snippet,
+        insertTextRules:
+          monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        detail: m.detail,
+        range,
+      });
+    }
+    for (const m of CURSOR_METHODS) {
+      if (partial && !m.startsWith(partial)) continue;
+      items.push({
+        label: m,
+        kind: monaco.languages.CompletionItemKind.Method,
+        insertText: `${m}(\${1:{}})`,
+        insertTextRules:
+          monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        detail: "Cursor method",
+        range,
+      });
+    }
+    return { suggestions: items };
+  }
+
+  // db.<partial> — suggest collection names
+  const dbDotMatch = lineUpToCursor.match(/\bdb\.([\w$]*)$/);
+  if (dbDotMatch) {
+    const partial = dbDotMatch[1] ?? "";
+    const items: monaco.languages.CompletionItem[] = collectionsRef
+      .filter((c) => !partial || c.startsWith(partial))
+      .map((c) => ({
+        label: c,
+        kind: monaco.languages.CompletionItemKind.Class,
+        insertText: c,
+        detail: "collection",
+        range,
+      }));
+    return { suggestions: items };
+  }
+
+  // Cursor inside db.<col>.<method>(…) — suggest fields from the
+  // collection's schema plus filter operators.
+  const fullPrefix = model.getValueInRange({
+    startLineNumber: 1,
+    startColumn: 1,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column,
+  });
+  const enclosing = findEnclosingDbMethodCall(fullPrefix);
+  if (enclosing) {
+    const fields = schemasRef[enclosing.collection] ?? [];
+    const items: monaco.languages.CompletionItem[] = [];
+    for (const f of fields) {
+      items.push({
+        label: f,
+        kind: monaco.languages.CompletionItemKind.Field,
+        insertText: f,
+        detail: "field",
+        range,
+      });
+    }
+    for (const op of SHELL_FILTER_OPERATORS) {
+      items.push({
+        label: op.label,
+        kind: monaco.languages.CompletionItemKind.Function,
+        detail: op.detail,
+        insertText: op.insertText,
+        insertTextRules:
+          monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        range,
+      });
+    }
+    if (items.length > 0) return { suggestions: items };
+  }
+
+  // Top-level helpers
+  const topLevel = [
+    { label: "db", insertText: "db" },
+    { label: "ObjectId", insertText: 'ObjectId("$1")' },
+    { label: "UUID", insertText: 'UUID("$1")' },
+    { label: "ISODate", insertText: 'ISODate("$1")' },
+    { label: "NumberDecimal", insertText: 'NumberDecimal("$1")' },
+  ];
+  const items = topLevel
+    .filter((t) => !word.word || t.label.startsWith(word.word))
+    .map<monaco.languages.CompletionItem>((t) => ({
+      label: t.label,
+      kind: monaco.languages.CompletionItemKind.Variable,
+      insertText: t.insertText,
+      insertTextRules: t.insertText.includes("$1")
+        ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+        : monaco.languages.CompletionItemInsertTextRule.KeepWhitespace,
+      range,
+    }));
+  return { suggestions: items };
+};
+
+// Connection + database each console editor completes against, by model uri.
+const contextByUri = new Map<string, { cid: string; database: string | null }>();
+
+// mongosh's autocompleter returns bare strings; pick an icon from where the
+// word sits so the list stays scannable.
+const kindFor = (
+  item: string,
+  before: string,
+): monaco.languages.CompletionItemKind => {
+  const K = monaco.languages.CompletionItemKind;
+  if (item.startsWith("$")) return K.Operator;
+  if (/^\s*(use|show)\s+$/.test(before.slice(before.lastIndexOf("\n") + 1))) return K.Value;
+  if (/\bdb\.$/.test(before) && collectionsRef.includes(item)) return K.Module;
+  if (before.endsWith(".")) return K.Method;
+  if (/[{,]\s*$/.test(before)) return K.Field;
+  return K.Variable;
+};
+
 const ensureMongoShellCompletionRegistered = () => {
   if (registered) return;
   registered = true;
 
+  // Monaco's built-in JavaScript features call a TypeScript worker that isn't
+  // bundled (see monaco-setup.ts) and fail with "Missing requestHandler".
+  // Completions come from mongosh below; keep only the syntax highlighting.
+  monaco.typescript.javascriptDefaults.setModeConfiguration({
+    completionItems: false,
+    hovers: false,
+    documentSymbols: false,
+    definitions: false,
+    references: false,
+    documentHighlights: false,
+    rename: false,
+    diagnostics: false,
+    documentRangeFormattingEdits: false,
+    signatureHelp: false,
+    onTypeFormattingEdits: false,
+    codeActions: false,
+    inlayHints: false,
+  });
+
   monaco.languages.registerCompletionItemProvider("javascript", {
-    triggerCharacters: [".", '"', "'", " "],
-    provideCompletionItems(model, position) {
-      const lineUpToCursor = model
-        .getValueInRange({
-          startLineNumber: position.lineNumber,
-          startColumn: 1,
-          endLineNumber: position.lineNumber,
-          endColumn: position.column,
-        })
-        .trimStart();
-
-      const word = model.getWordUntilPosition(position);
-      const range: monaco.IRange = {
-        startLineNumber: position.lineNumber,
-        endLineNumber: position.lineNumber,
-        startColumn: word.startColumn,
-        endColumn: word.endColumn,
-      };
-
-      // db.<col>.<method> — suggest methods on collection
-      const dbColDotMatch = lineUpToCursor.match(/\bdb\.([\w$]+)\.([\w$]*)$/);
-      if (dbColDotMatch) {
-        const partial = dbColDotMatch[2] ?? "";
-        const items: monaco.languages.CompletionItem[] = [];
-        for (const m of COLLECTION_METHODS) {
-          if (partial && !m.name.startsWith(partial)) continue;
-          items.push({
-            label: m.name,
-            kind: monaco.languages.CompletionItemKind.Method,
-            insertText: m.snippet,
-            insertTextRules:
-              monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            detail: m.detail,
-            range,
-          });
-        }
-        for (const m of CURSOR_METHODS) {
-          if (partial && !m.startsWith(partial)) continue;
-          items.push({
-            label: m,
-            kind: monaco.languages.CompletionItemKind.Method,
-            insertText: `${m}(\${1:{}})`,
-            insertTextRules:
-              monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            detail: "Cursor method",
-            range,
-          });
-        }
-        return { suggestions: items };
-      }
-
-      // db.<partial> — suggest collection names
-      const dbDotMatch = lineUpToCursor.match(/\bdb\.([\w$]*)$/);
-      if (dbDotMatch) {
-        const partial = dbDotMatch[1] ?? "";
-        const items: monaco.languages.CompletionItem[] = collectionsRef
-          .filter((c) => !partial || c.startsWith(partial))
-          .map((c) => ({
-            label: c,
-            kind: monaco.languages.CompletionItemKind.Class,
-            insertText: c,
-            detail: "collection",
-            range,
-          }));
-        return { suggestions: items };
-      }
-
-      // Cursor inside db.<col>.<method>(…) — suggest fields from the
-      // collection's schema plus filter operators.
-      const fullPrefix = model.getValueInRange({
+    triggerCharacters: [".", "$", " "],
+    async provideCompletionItems(model, position, context, token) {
+      const code = model.getValueInRange({
         startLineNumber: 1,
         startColumn: 1,
         endLineNumber: position.lineNumber,
         endColumn: position.column,
       });
-      const enclosing = findEnclosingDbMethodCall(fullPrefix);
-      if (enclosing) {
-        const fields = schemasRef[enclosing.collection] ?? [];
-        const items: monaco.languages.CompletionItem[] = [];
-        for (const f of fields) {
-          items.push({
-            label: f,
-            kind: monaco.languages.CompletionItemKind.Field,
-            insertText: f,
-            detail: "field",
-            range,
-          });
-        }
-        for (const op of SHELL_FILTER_OPERATORS) {
-          items.push({
-            label: op.label,
-            kind: monaco.languages.CompletionItemKind.Function,
-            detail: op.detail,
-            insertText: op.insertText,
-            insertTextRules:
-              monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            range,
-          });
-        }
-        if (items.length > 0) return { suggestions: items };
+      const line = code.slice(code.lastIndexOf("\n") + 1);
+      // A space only opens the list for `use <db>` / `show <what>`.
+      if (
+        context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter &&
+        context.triggerCharacter === " " &&
+        !/^\s*(use|show)\s+$/.test(line)
+      ) {
+        return { suggestions: [] };
       }
 
-      // Top-level helpers
-      const topLevel = [
-        { label: "db", insertText: "db" },
-        { label: "ObjectId", insertText: 'ObjectId("$1")' },
-        { label: "UUID", insertText: 'UUID("$1")' },
-        { label: "ISODate", insertText: 'ISODate("$1")' },
-        { label: "NumberDecimal", insertText: 'NumberDecimal("$1")' },
-      ];
-      const items = topLevel
-        .filter((t) => !word.word || t.label.startsWith(word.word))
-        .map<monaco.languages.CompletionItem>((t) => ({
-          label: t.label,
-          kind: monaco.languages.CompletionItemKind.Variable,
-          insertText: t.insertText,
-          insertTextRules: t.insertText.includes("$1")
-            ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-            : monaco.languages.CompletionItemInsertTextRule.KeepWhitespace,
-          range,
-        }));
-      return { suggestions: items };
+      const target = contextByUri.get(model.uri.toString());
+      if (!target) return staticCompletions(model, position);
+
+      const controller = new AbortController();
+      const sub = token.onCancellationRequested(() => controller.abort());
+      try {
+        const { replaceLength, items } = await api.completeConsole({
+          cid: target.cid,
+          database: target.database ?? undefined,
+          code,
+          signal: controller.signal,
+        });
+        const range: monaco.IRange = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: position.column - replaceLength,
+          endColumn: position.column,
+        };
+        const before = code.slice(0, code.length - replaceLength);
+        return {
+          suggestions: items.map((item, i) => {
+            const kind = kindFor(item, before);
+            // Keep mongosh's ranking, but list collections before the
+            // ~70 database methods after `db.`.
+            const group = kind === monaco.languages.CompletionItemKind.Module ? "0" : "1";
+            return {
+              label: item,
+              kind,
+              insertText: item,
+              sortText: `${group}${String(i).padStart(5, "0")}`,
+              range,
+            };
+          }),
+        };
+      } catch {
+        if (token.isCancellationRequested) return { suggestions: [] };
+        return staticCompletions(model, position);
+      } finally {
+        sub.dispose();
+      }
     },
   });
 };
@@ -304,7 +411,11 @@ export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
     const onSubmitRef = useRef(onSubmit);
     onSubmitRef.current = onSubmit;
     const { resolvedTheme: theme } = useSettings();
+    const { activeId } = useActiveConnection();
+    const { database } = useActiveDatabase();
     const idHint = useId();
+    const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
+    const uri = monaco.Uri.parse(`inmemory://mango-shell/${safeId}.js`);
 
     // Keep collections list current for the global completion provider.
     setMongoShellCollections(collections);
@@ -334,8 +445,6 @@ export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
       if (!hostRef.current) return;
       ensureMongoShellCompletionRegistered();
 
-      const safeId = idHint.replace(/[^a-zA-Z0-9]/g, "-");
-      const uri = monaco.Uri.parse(`inmemory://mango-shell/${safeId}.js`);
       const existing = monaco.editor.getModel(uri);
       const model =
         existing ?? monaco.editor.createModel(value, "javascript", uri);
@@ -384,6 +493,17 @@ export const MonacoShellInput = forwardRef<MonacoShellInputHandle, Props>(
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Completions run against the active connection + database.
+    useEffect(() => {
+      const key = uri.toString();
+      if (activeId) contextByUri.set(key, { cid: activeId, database });
+      else contextByUri.delete(key);
+      return () => {
+        contextByUri.delete(key);
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeId, database, safeId]);
 
     // Theme + value sync.
     useEffect(() => {

@@ -100,6 +100,17 @@ desktop/bin/mango-server-x86_64-unknown-linux-gnu
 
 `pnpm compile-server` produces the file named for **your** host triple. It auto-detects from `rustc -vV` when Rust is installed, then falls back to Node's platform/architecture info for the supported host targets. To build for a non-host triple, pass it explicitly: `pnpm compile-server x86_64-pc-windows-msvc`.
 
+## Local Network permission (macOS 15+)
+
+macOS gates connections to LAN addresses (`192.168.x.x`, `10.x.x.x`, `.local`
+hosts) behind the **Local Network** privacy permission. The sidecar inherits
+the app's grant: without it, remote connections fail with `ECONNREFUSED`
+while `localhost` keeps working. `src-tauri/Info.plist` declares
+`NSLocalNetworkUsageDescription` so macOS prompts on first use. If the prompt
+was dismissed, or you are running a locally built (ad-hoc signed) bundle — each
+rebuild is a new identity to macOS — enable Mango under *System Settings →
+Privacy & Security → Local Network*.
+
 ## Auth mode
 
 Desktop runs with `AUTH_MODE=none` — single-user on a personal machine. The server-mode (Docker / Aspire) variant runs `AUTH_MODE=oidc`.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Merged into the bundle's Info.plist by Tauri. macOS 15+ gates connections
+    to LAN addresses behind the Local Network privacy permission; the sidecar
+    inherits the app's grant, and without it every mongodb://192.168.x.x
+    connection fails with ECONNREFUSED while localhost keeps working. This
+    string is what the permission prompt shows.
+  -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Mango connects to MongoDB servers on your local network.</string>
+</dict>
+</plist>

@@ -12,8 +12,25 @@ export interface ConsoleLogEntry {
   args: unknown[];
 }
 
+/**
+ * Namespace behind a paged console result. Present only when the rows are
+ * live documents of one collection (a plain `find()`), so edits can be
+ * written back through the document endpoints.
+ */
+export interface ConsoleSource {
+  database: string;
+  collection: string;
+  /** The find applied a projection — rows are partial documents. */
+  projected: boolean;
+}
+
 export interface ConsoleRunResult {
   result: unknown;
+  /** mongosh's result type (`Cursor`, `AggregationCursor`, `Document`, …). */
+  type: string | null;
+  source: ConsoleSource | null;
+  /** Why a paged result is read-only, when `source` is null. */
+  readOnlyReason: string | null;
   /** Output of `print(...)` / `console.*` calls, in call order. */
   logs: ConsoleLogEntry[];
   skip: number;
@@ -937,6 +954,28 @@ export const api = {
       sampleSize: number;
       fields: Array<{ path: string; types: string[]; examples: unknown[] }>;
     }>;
+  },
+
+  /**
+   * mongosh autocompletion for console scripts. `code` is the script up to
+   * the cursor; each item replaces the last `replaceLength` characters.
+   */
+  async completeConsole(params: {
+    cid: string;
+    code: string;
+    database?: string;
+    signal?: AbortSignal;
+  }): Promise<{ replaceLength: number; items: string[] }> {
+    const qs = params.database
+      ? `?database=${encodeURIComponent(params.database)}`
+      : "";
+    const res = await apiFetch(`${cidPath(params.cid)}/console/complete${qs}`, {
+      method: "POST",
+      signal: params.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: params.code }),
+    });
+    return handlePlainJson(res) as Promise<{ replaceLength: number; items: string[] }>;
   },
 
   async runConsole(params: {

@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useActiveConnection } from "../connections/useActiveConnection";
+import { useActiveDatabase } from "../connections/useActiveDatabase";
 
 export type AssistantMode =
   | "collection"
@@ -62,16 +64,18 @@ interface AssistantContextValue {
   // attach to inform the assistant's reasoning.
   extraContext: AssistantExtraContext;
   setExtraContext: (next: AssistantExtraContext) => void;
-  // Threads per tab id; "global" if no tab.
+  // The current chat session. One session per context — see `contextSig`.
+  sessionId: string;
   messages: ChatMessage[];
   appendMessage: (m: ChatMessage) => void;
   patchMessage: (id: string, patch: Partial<ChatMessage>) => void;
-  resetThread: () => void;
+  /** Drop the conversation and start over in the current context. */
+  newSession: () => void;
   // Apply handlers: the active tab registers these.
   bindHandlers: (h: ApplyHandlers | null) => void;
   applyArtifact: (kind: ApplyKind, payload: string) => boolean;
   supports: (kind: ApplyKind) => boolean;
-  // The tab id we're tracking — used as the message thread key.
+  // The bound view's key (usually `tab:<id>`) — part of the session context.
   activeKey: string;
   setActiveKey: (key: string) => void;
 }
@@ -83,6 +87,18 @@ const OPEN_KEY = "mango:assistant:open";
 const DEFAULT_WIDTH = 420;
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 800;
+
+/**
+ * After an Apply, the target view may switch mode (a pipeline opens the
+ * console). Context changes inside this window keep the conversation instead
+ * of starting a new session — the user is still following up on it.
+ */
+const APPLY_CARRY_MS = 1000;
+
+interface Session {
+  id: string;
+  messages: ChatMessage[];
+}
 
 const genId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -145,7 +161,7 @@ export const AssistantProvider = ({
   const [mode, setMode] = useState<AssistantMode>("general");
   const [collection, setCollection] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string>("__none__");
-  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({});
+  const [session, setSession] = useState<Session>(() => ({ id: genId(), messages: [] }));
   const [extraContext, setExtraContextState] = useState<AssistantExtraContext>({});
 
   const setExtraContext = useCallback((next: AssistantExtraContext) => {
@@ -161,32 +177,43 @@ export const AssistantProvider = ({
 
   const handlersRef = useRef<ApplyHandlers | null>(null);
 
-  const messages = threads[activeKey] ?? [];
+  const messages = session.messages;
 
-  const appendMessage = useCallback(
-    (m: ChatMessage) => {
-      setThreads((prev) => ({
-        ...prev,
-        [activeKey]: [...(prev[activeKey] ?? []), m],
-      }));
-    },
-    [activeKey],
-  );
+  const appendMessage = useCallback((m: ChatMessage) => {
+    setSession((prev) => ({ ...prev, messages: [...prev.messages, m] }));
+  }, []);
 
-  const patchMessage = useCallback(
-    (id: string, patch: Partial<ChatMessage>) => {
-      setThreads((prev) => {
-        const list = prev[activeKey] ?? [];
-        const next = list.map((m) => (m.id === id ? { ...m, ...patch } : m));
-        return { ...prev, [activeKey]: next };
-      });
-    },
-    [activeKey],
-  );
+  // Ids are unique, so a reply landing after the session changed finds
+  // nothing to patch and is dropped.
+  const patchMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
+    setSession((prev) =>
+      prev.messages.some((m) => m.id === id)
+        ? {
+            ...prev,
+            messages: prev.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+          }
+        : prev,
+    );
+  }, []);
 
-  const resetThread = useCallback(() => {
-    setThreads((prev) => ({ ...prev, [activeKey]: [] }));
-  }, [activeKey]);
+  const newSession = useCallback(() => {
+    setSession({ id: genId(), messages: [] });
+  }, []);
+
+  // A conversation belongs to one context: connection, database, tab, view
+  // mode (query / console / info / shell) and collection. Moving to another
+  // starts a fresh session so answers never mix schemas or apply targets.
+  const { activeId } = useActiveConnection();
+  const { database } = useActiveDatabase();
+  const contextSig = [activeId ?? "", database ?? "", activeKey, mode, collection ?? ""].join("|");
+  const contextSigRef = useRef(contextSig);
+  const carryUntilRef = useRef(0);
+  useEffect(() => {
+    if (contextSigRef.current === contextSig) return;
+    contextSigRef.current = contextSig;
+    if (Date.now() < carryUntilRef.current) return;
+    setSession((prev) => (prev.messages.length === 0 ? prev : { id: genId(), messages: [] }));
+  }, [contextSig]);
 
   const bindHandlers = useCallback((h: ApplyHandlers | null) => {
     handlersRef.current = h;
@@ -197,6 +224,7 @@ export const AssistantProvider = ({
       const h = handlersRef.current;
       if (!h) return false;
       if (!h.supports.includes(kind)) return false;
+      carryUntilRef.current = Date.now() + APPLY_CARRY_MS;
       h.apply(kind, payload);
       return true;
     },
@@ -237,10 +265,11 @@ export const AssistantProvider = ({
       collection,
       extraContext,
       setExtraContext,
+      sessionId: session.id,
       messages,
       appendMessage,
       patchMessage,
-      resetThread,
+      newSession,
       bindHandlers,
       applyArtifact,
       supports,
@@ -257,10 +286,11 @@ export const AssistantProvider = ({
       collection,
       extraContext,
       setExtraContext,
+      session.id,
       messages,
       appendMessage,
       patchMessage,
-      resetThread,
+      newSession,
       bindHandlers,
       applyArtifact,
       supports,

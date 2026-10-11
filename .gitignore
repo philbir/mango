@@ -58,3 +58,7 @@ Thumbs.db
 
 # Yarn leftovers (repo uses pnpm)
 .yarn/
+
+# Playwright e2e output
+e2e/test-results/
+e2e/playwright-report/
